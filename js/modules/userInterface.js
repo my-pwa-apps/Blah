@@ -118,7 +118,7 @@ const UserInterface = {
                             <div class="avatar-preview">
                                 <img src="${userProfile.avatar_url || 'images/default-avatar.png'}" 
                                      alt="Profile Avatar" 
-                                     onerror="this.src='images/default-avatar.png'">
+                                     onerror="this.src='images/default-avatar.png'; this.onerror=null;">
                             </div>
                             <input type="file" id="avatarUpload" accept="image/*">
                             <button id="uploadAvatarBtn">Upload New Avatar</button>
@@ -163,8 +163,17 @@ const UserInterface = {
             `;
 
             document.body.appendChild(modal);
+
+            // Set up event handlers including close button
+            const closeBtn = modal.querySelector('.close-modal');
+            if (closeBtn) {
+                closeBtn.addEventListener('click', () => {
+                    modal.remove();
+                });
+            }
+
             this.setupProfileModalEvents(modal, userProfile);
-            this.loadFriendsList();
+            await this.loadFriendsList();
         } catch (error) {
             console.error('Error showing profile modal:', error);
             // Show error message to user

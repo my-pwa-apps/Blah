@@ -88,20 +88,7 @@ function displayDiscussions(discussions, type) {
     
     discussions.forEach(discussion => {
         if (type === 'all' || (type === 'friends' && discussion.isFriend)) {
-            const discussionElement = document.createElement('div');
-            discussionElement.classList.add('discussion');
-            
-            const mediaHtml = createMediaHtml(discussion.media_url, discussion.media_type);
-            const repliesHtml = createRepliesHtml(discussion.replies);
-            
-            discussionElement.innerHTML = `
-                <h2>${escapeHtml(discussion.title)}</h2>
-                <div class="discussion-content">${escapeHtml(discussion.content)}</div>
-                ${mediaHtml}
-                ${repliesHtml}
-                <button class="reply-btn" data-discussion-id="${discussion.id}">Reply</button>
-            `;
-            
+            const discussionElement = window.discussionHandler.renderDiscussion(discussion);
             discussionsContainer.appendChild(discussionElement);
         }
     });
@@ -149,18 +136,41 @@ function createMediaHtml(mediaUrl, mediaType) {
  * @param {Array} replies - Array of reply objects
  * @returns {string} HTML string for replies display
  */
-function createRepliesHtml(replies) {
+function createRepliesHtml(replies, parentId = null, depth = 0) {
     if (!replies || replies.length === 0) return '';
-    
+
+    const repliesAtThisLevel = replies.filter(r => r.parent_id === parentId);
+    if (repliesAtThisLevel.length === 0) return '';
+
     return `
-        <div class="replies-container">
-            <h4>${replies.length} ${replies.length === 1 ? 'Reply' : 'Replies'}</h4>
-            ${replies.map(reply => `
-                <div class="reply">
-                    <p>${escapeHtml(reply.content)}</p>
-                    ${createMediaHtml(reply.media_url, reply.media_type)}
-                </div>
-            `).join('')}
+        <div class="replies-container ${depth > 0 ? 'nested-replies' : ''}" data-depth="${depth}">
+            <div class="replies-header">
+                <h4>${repliesAtThisLevel.length} ${repliesAtThisLevel.length === 1 ? 'Reply' : 'Replies'}</h4>
+                <button class="collapse-btn" aria-label="Toggle replies">
+                    <span class="material-icons">expand_less</span>
+                </button>
+            </div>
+            <div class="replies-content">
+                ${repliesAtThisLevel.map(reply => `
+                    <div class="reply" data-reply-id="${reply.id}">
+                        <div class="reply-content">
+                            <p>${escapeHtml(reply.content)}</p>
+                            ${createMediaHtml(reply.media_url, reply.media_type)}
+                        </div>
+                        <div class="reply-actions">
+                            <button class="reply-btn" data-parent-id="${reply.id}">
+                                <span class="material-icons">reply</span> Reply
+                            </button>
+                            ${reply.user_id === window.projectSupabase.auth.user()?.id ? `
+                                <button class="delete-btn" data-id="${reply.id}">
+                                    <span class="material-icons">delete</span>
+                                </button>
+                            ` : ''}
+                        </div>
+                        ${createRepliesHtml(replies, reply.id, depth + 1)}
+                    </div>
+                `).join('')}
+            </div>
         </div>
     `;
 }
@@ -412,3 +422,68 @@ async function addReplyToDiscussion(parentId, content, mediaFile) {
         throw error;
     }
 }
+
+window.discussionHandler.renderDiscussion = async function(discussion) {
+    const { session } = await window.projectSupabase.auth.getSession();
+    const isOwner = session?.user?.id === discussion.user_id;
+    
+    const discussionEl = document.createElement('div');
+    discussionEl.className = 'discussion';
+    discussionEl.innerHTML = `
+        <div class="discussion-header">
+            <h2>${escapeHtml(discussion.title)}</h2>
+            ${isOwner ? `
+                <button class="delete-btn" data-id="${discussion.id}">
+                    <span class="material-icons">delete</span>
+                </button>
+            ` : ''}
+        </div>
+        <div class="discussion-content">
+            ${escapeHtml(discussion.content)}
+        </div>
+        <!-- ...rest of discussion content... -->
+    `;
+
+    // Add delete handler if owner
+    if (isOwner) {
+        const deleteBtn = discussionEl.querySelector('.delete-btn');
+        deleteBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            if (confirm('Are you sure you want to delete this discussion?')) {
+                try {
+                    await window.UserProfile.deleteDiscussion(discussion.id);
+                    discussionEl.remove();
+                } catch (error) {
+                    alert('Failed to delete discussion');
+                }
+            }
+        });
+    }
+
+    // Add event handlers for collapse buttons
+    discussionEl.querySelectorAll('.collapse-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const container = btn.closest('.replies-container');
+            const content = container.querySelector('.replies-content');
+            const icon = btn.querySelector('.material-icons');
+            
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.textContent = 'expand_less';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = 'expand_more';
+            }
+        });
+    });
+
+    // Add event handlers for reply buttons
+    discussionEl.querySelectorAll('.reply-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const parentId = btn.getAttribute('data-parent-id');
+            openReplyModal(parentId);
+        });
+    });
+
+    return discussionEl;
+};

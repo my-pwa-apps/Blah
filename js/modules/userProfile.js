@@ -190,6 +190,26 @@ const UserProfile = {
             console.error('Error responding to friend request:', error);
             return false;
         }
+    },
+
+    /**
+     * Delete a discussion or reply
+     * @param {string} discussionId - ID of the discussion/reply to delete
+     * @returns {Promise<boolean>} - Success status
+     */
+    async deleteDiscussion(discussionId) {
+        try {
+            const { error } = await window.projectSupabase
+                .from('discussions')
+                .delete()
+                .eq('id', discussionId);
+
+            if (error) throw error;
+            return true;
+        } catch (error) {
+            console.error('Error deleting discussion:', error);
+            throw error;
+        }
     }
 };
 

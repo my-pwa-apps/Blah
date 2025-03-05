@@ -517,3 +517,93 @@ button.dark-mode:hover {
         margin: 20% auto;
     }
 }
+
+.discussion-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.delete-btn {
+    background: none;
+    border: none;
+    color: #f44336;
+    padding: 4px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+.delete-btn:hover {
+    opacity: 1;
+    background: none;
+}
+
+.delete-btn .material-icons {
+    font-size: 20px;
+}
+
+/* Threaded Conversation Styles */
+.nested-replies {
+    margin-left: 1rem;
+    margin-top: 0.5rem;
+}
+
+.replies-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.5rem;
+}
+
+.collapse-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    color: #666;
+}
+
+.collapse-btn:hover {
+    color: #333;
+    background: none;
+}
+
+.reply-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+}
+
+.reply-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.9rem;
+    background: none;
+    border: 1px solid #ddd;
+    color: #666;
+}
+
+.reply-btn:hover {
+    background: #eee;
+    color: #333;
+}
+
+/* Depth-based indentation */
+.replies-container[data-depth="1"] { margin-left: 1rem; }
+.replies-container[data-depth="2"] { margin-left: 0.75rem; }
+.replies-container[data-depth="3"] { margin-left: 0.5rem; }
+.replies-container[data-depth="4"] { margin-left: 0.25rem; }
+.replies-container[data-depth="5"] { margin-left: 0.25rem; }
+
+/* Depth-based colors */
+.replies-container[data-depth="0"] { border-left-color: #C8E6C9; }
+.replies-container[data-depth="1"] { border-left-color: #B3E5FC; }
+.replies-container[data-depth="2"] { border-left-color: #FFE0B2; }
+.replies-container[data-depth="3"] { border-left-color: #F8BBD0; }
+.replies-container[data-depth="4"] { border-left-color: #D1C4E9; }
+.replies-container[data-depth="5"] { border-left-color: #B2DFDB; }
