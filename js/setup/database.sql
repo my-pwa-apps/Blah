@@ -19,6 +19,23 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create discussions table if it doesn't exist
+CREATE TABLE IF NOT EXISTS public.discussions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    media_url TEXT,
+    media_type TEXT,
+    user_id UUID REFERENCES auth.users(id) NOT NULL,
+    parent_id UUID REFERENCES discussions(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create index for discussions
+CREATE INDEX IF NOT EXISTS idx_discussions_user_id ON discussions(user_id);
+CREATE INDEX IF NOT EXISTS idx_discussions_parent_id ON discussions(parent_id);
+
 -- Enable RLS
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
@@ -55,13 +72,18 @@ CREATE POLICY "Users can update own preferences"
     USING (auth.uid() = user_id);
 
 -- Discussion policies
+DROP POLICY IF EXISTS "Discussions are viewable by everyone" ON public.discussions;
+DROP POLICY IF EXISTS "Authenticated users can create discussions" ON public.discussions;
+DROP POLICY IF EXISTS "Users can update own discussions" ON public.discussions;
+DROP POLICY IF EXISTS "Users can delete own discussions" ON public.discussions;
+
 CREATE POLICY "Discussions are viewable by everyone"
     ON public.discussions FOR SELECT
     USING (true);
 
 CREATE POLICY "Authenticated users can create discussions"
     ON public.discussions FOR INSERT
-    WITH CHECK (auth.uid() = user_id);
+    WITH CHECK (auth.uid() IS NOT NULL);
 
 CREATE POLICY "Users can update own discussions"
     ON public.discussions FOR UPDATE

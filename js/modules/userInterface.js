@@ -267,6 +267,9 @@ const UserInterface = {
                 // Get user profile to use avatar if available
                 const { profile } = await window.UserAuth.getCurrentSession();
                 
+                // Add logged-in class first
+                profileIcon.classList.add('logged-in');
+                
                 if (profile && profile.avatar_url) {
                     // Replace icon with avatar image
                     profileIcon.innerHTML = '';
@@ -276,6 +279,10 @@ const UserInterface = {
                     avatar.src = profile.avatar_url;
                     avatar.alt = 'Profile Avatar';
                     avatar.className = 'avatar-image';
+                    avatar.onerror = () => {
+                        profileIcon.innerHTML = 'account_circle';
+                        profileIcon.classList.add('material-icons');
+                    };
                     
                     profileIcon.appendChild(avatar);
                 } else {
@@ -283,9 +290,6 @@ const UserInterface = {
                     profileIcon.innerHTML = 'account_circle';
                     profileIcon.classList.add('material-icons');
                 }
-                
-                // Add logged-in class for styling
-                profileIcon.classList.add('logged-in');
             } catch (error) {
                 console.error('Error updating profile icon:', error);
                 profileIcon.innerHTML = 'account_circle';
