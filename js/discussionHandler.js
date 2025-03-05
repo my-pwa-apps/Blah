@@ -126,7 +126,6 @@ const DiscussionHandler = (function() {
             const fragment = document.createDocumentFragment();
             container.innerHTML = '';
             
-            // Check if discussions exist and is an array
             if (!discussions || !Array.isArray(discussions) || !discussions.length) {
                 const empty = document.createElement('div');
                 empty.className = 'discussion-empty';
@@ -136,41 +135,59 @@ const DiscussionHandler = (function() {
                 return;
             }
 
-            // Create discussion elements with additional error handling
+            // Debug the discussions data
+            console.log('Processing discussions:', JSON.stringify(discussions).substring(0, 200) + '...');
+            
             try {
-                const validDiscussions = discussions
-                    .map(discussion => {
-                        try {
-                            // Skip any discussion that's null or undefined
-                            if (!discussion) return null;
-                            
-                            // Create a properly formatted discussion object
-                            const discussionObj = {
-                                id: discussion.id || `temp-${Date.now()}`,
-                                title: discussion.title || '',
-                                content: discussion.content || '',
-                                type: discussion.type || 'discussion'
-                            };
-                            
-                            // Only create element if title exists
-                            if (!discussionObj.title) return null;
-                            
-                            return createDiscussionElement(discussionObj);
-                        } catch (err) {
-                            console.warn('Error creating discussion element:', err);
-                            return null;
+                // First create all valid elements
+                const validElements = [];
+                
+                for (let i = 0; i < discussions.length; i++) {
+                    try {
+                        const discussion = discussions[i];
+                        
+                        // Skip invalid discussions
+                        if (!discussion) {
+                            console.warn('Skipping null discussion at index', i);
+                            continue;
                         }
-                    })
-                    .filter(element => element instanceof Node); // Only keep valid DOM nodes
-
-                // Add discussions or display empty message if none are valid
-                if (!validDiscussions.length) {
+                        
+                        // Create a safe discussion object with defaults
+                        const safeDiscussion = {
+                            id: (discussion.id || `temp-${Date.now()}-${i}`).toString(),
+                            title: (discussion.title || '').toString(),
+                            content: (discussion.content || '').toString(),
+                            type: (discussion.type || 'discussion').toString()
+                        };
+                        
+                        // Skip discussions without titles
+                        if (!safeDiscussion.title) {
+                            console.warn('Skipping discussion without title at index', i);
+                            continue;
+                        }
+                        
+                        // Create the element
+                        const element = createDiscussionElement(safeDiscussion);
+                        
+                        // Only add valid DOM nodes
+                        if (element && element.nodeType === Node.ELEMENT_NODE) {
+                            validElements.push(element);
+                        } else {
+                            console.warn('Invalid element created for discussion at index', i);
+                        }
+                    } catch (err) {
+                        console.error('Error processing discussion at index', i, err);
+                    }
+                }
+                
+                // Now append all valid elements to the fragment
+                if (validElements.length === 0) {
                     const empty = document.createElement('div');
                     empty.className = 'discussion-empty';
                     empty.textContent = 'No valid discussions found';
                     fragment.appendChild(empty);
                 } else {
-                    validDiscussions.forEach(element => {
+                    validElements.forEach(element => {
                         fragment.appendChild(element);
                     });
                 }
@@ -217,26 +234,41 @@ const DiscussionHandler = (function() {
         
         try {
             // Check if WebSocketManager exists
-            if (wsManager) {
+            if (typeof WebSocketManager !== 'undefined' && wsManager) {
                 wsManager.connect();
             } else {
                 console.warn('WebSocketManager not initialized');
             }
             
-            // Safe access to discussions variable
+            // Get discussions data with more robust error handling
             let discussionsData = [];
-            
-            // Check if discussions is defined in the global scope
-            if (typeof window.discussions !== 'undefined') {
-                discussionsData = window.discussions;
-            } else if (typeof discussions !== 'undefined') {
-                discussionsData = discussions;
-            } else {
-                // If discussions isn't available, fetch from API or use empty array
-                console.warn('No discussions data found, using empty array');
+            try {
+                // Try to get discussions from window or global scope
+                if (typeof window.discussions === 'object' && Array.isArray(window.discussions)) {
+                    discussionsData = window.discussions;
+                } else if (typeof discussions === 'object' && Array.isArray(discussions)) {
+                    discussionsData = discussions;
+                } else {
+                    // Try to get from data attribute
+                    const dataAttr = container.getAttribute('data-discussions');
+                    if (dataAttr) {
+                        try {
+                            discussionsData = JSON.parse(dataAttr);
+                        } catch (e) {
+                            console.error('Failed to parse discussions data attribute:', e);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error('Error accessing discussions data:', e);
             }
             
-            // Call displayDiscussions with the safely accessed data
+            // Ensure we have an array
+            if (!Array.isArray(discussionsData)) {
+                console.warn('Discussions not found or not an array, using empty array');
+                discussionsData = [];
+            }
+            
             displayDiscussions(discussionsData);
         } catch (error) {
             console.error('Error loading discussions:', error);
