@@ -1,4 +1,5 @@
-import { supabase } from './scripts.js';
+// Get Supabase client from global scope
+const supabase = window.projectSupabase;
 
 /**
  * Loads discussions based on the specified type
@@ -6,6 +7,8 @@ import { supabase } from './scripts.js';
  */
 export async function loadDiscussions(type) {
     try {
+        console.log('Loading discussions in handler');
+        
         // Fetch discussions with their replies
         let { data: discussions, error } = await supabase
             .from('discussions')
@@ -17,7 +20,8 @@ export async function loadDiscussions(type) {
             throw error;
         }
 
-        displayDiscussions(discussions, type);
+        console.log('Discussions loaded:', discussions);
+        displayDiscussions(discussions || [], type);
     } catch (error) {
         console.error('Error fetching discussions:', error);
         document.getElementById('discussions').innerHTML = 
@@ -139,6 +143,7 @@ function escapeHtml(str) {
  * @returns {Promise} Promise resolving when discussion is created
  */
 export async function createNewDiscussion(title, content, mediaFile) {
+    console.log('Creating new discussion:', { title, content });
     try {
         let mediaUrl = null;
         let mediaType = null;

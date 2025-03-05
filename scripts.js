@@ -1,19 +1,26 @@
-import { createClient } from '@supabase/supabase-js';
-import { loadDiscussions, createNewDiscussion } from './discussionHandler.js';
+// Use Supabase from CDN instead of ES module import
+// const { createClient } = supabase;
 
 // Supabase configuration
 const supabaseUrl = 'https://eawoqpkwyunkmpyuijuq.supabase.co';
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd29xcGt3eXVua21weXVpanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExNzM4MTYsImV4cCI6MjA1Njc0OTgxNn0.TCrAX91vjEwc_S7eYLE9RwzrNXSh1D_NKZ9XV6VfBRM';
 
 // Create a single Supabase client for the entire application
-export const supabase = createClient(supabaseUrl, supabaseKey);
+const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+
+// Export for other modules to use
+window.projectSupabase = supabase;
 
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM fully loaded');
+    
     // Load initial discussions
     loadDiscussions('all');
     
     // Set up event listeners
     setupEventListeners();
+    
+    console.log('Event listeners set up');
 });
 
 function setupEventListeners() {
@@ -58,7 +65,10 @@ function setupModalListeners() {
     const newDiscussionBtn = document.getElementById('newDiscussionBtn');
     const closeModalBtn = document.querySelector('.close-modal');
     
+    console.log('Modal elements:', { modal, newDiscussionBtn, closeModalBtn });
+    
     newDiscussionBtn.addEventListener('click', () => {
+        console.log('New discussion button clicked');
         modal.style.display = 'block';
     });
     
@@ -142,4 +152,16 @@ if (localStorage.getItem('darkMode') === 'true') {
     document.addEventListener('DOMContentLoaded', () => {
         toggleDarkMode();
     });
+}
+
+// Simple function to load discussions directly
+function loadDiscussions(type) {
+    console.log(`Loading discussions: ${type}`);
+    import('./discussionHandler.js')
+        .then(module => {
+            module.loadDiscussions(type, supabase);
+        })
+        .catch(error => {
+            console.error('Error importing discussion handler:', error);
+        });
 }
