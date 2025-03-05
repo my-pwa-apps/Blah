@@ -1,4 +1,23 @@
 const UserInterface = {
+    /**
+     * Initialize the user interface components
+     */
+    init() {
+        // Set up profile icon click handler
+        const profileIcon = document.getElementById('profileIcon');
+        if (profileIcon) {
+            profileIcon.addEventListener('click', () => this.handleProfileClick());
+        }
+        
+        // Listen for auth state changes
+        window.UserAuth.onAuthStateChange((event, session) => {
+            this.updateUIForAuthState(event, session);
+        });
+        
+        // Check initial auth state
+        this.checkInitialAuthState();
+    },
+
     // ...existing code...
 
     /**

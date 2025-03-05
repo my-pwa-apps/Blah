@@ -35,6 +35,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('discussions').innerHTML = 
             '<p class="error-message">Failed to initialize application. Please refresh the page.</p>';
     }
+
+    // Initialize user interface
+    window.UserInterface.init();
 });
 
 function setupEventListeners() {

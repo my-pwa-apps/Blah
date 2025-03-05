@@ -322,7 +322,7 @@ const UserAuth = {
                         <button id="loginTabBtn" class="auth-tab active">Login</button>
                         <button id="registerTabBtn" class="auth-tab">Register</button>
                     </div>
-                    
+
                     <form id="loginForm" class="auth-form">
                         <div class="form-group">
                             <label for="loginEmail">Email</label>
@@ -437,17 +437,6 @@ const UserAuth = {
                 document.getElementById('registerError').textContent = error.message;
             }
         };
-    },
-    
-    /**
-     * Setup auth state change listener
-     * @param {Function} callback - Callback to execute on auth state change
-     * @returns {Function} - Unsubscribe function
-     */
-    onAuthStateChange(callback) {
-        return window.projectSupabase.auth.onAuthStateChange((event, session) => {
-            callback(event, session);
-        });
     }
 };
 

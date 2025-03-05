@@ -33,9 +33,45 @@ CREATE TABLE IF NOT EXISTS discussions (
 -- Create index for faster parent_id lookups
 CREATE INDEX IF NOT EXISTS idx_discussions_parent_id ON discussions(parent_id);
 
+-- Create user profiles table
+CREATE TABLE IF NOT EXISTS profiles (
+    id UUID PRIMARY KEY REFERENCES auth.users(id),
+    username TEXT UNIQUE NOT NULL,
+    display_name TEXT,
+    avatar_url TEXT,
+    bio TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create user preferences table
+CREATE TABLE IF NOT EXISTS user_preferences (
+    user_id UUID PRIMARY KEY REFERENCES auth.users(id),
+    dark_mode BOOLEAN DEFAULT FALSE,
+    email_notifications BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create friendships table for friend connections
+CREATE TABLE IF NOT EXISTS friendships (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES auth.users(id),
+    friend_id UUID NOT NULL REFERENCES auth.users(id),
+    status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'rejected')),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(user_id, friend_id)
+);
+
 -- Create storage bucket for media
 INSERT INTO storage.buckets (id, name, public) 
 VALUES ('discussion-media', 'discussion-media', true)
+ON CONFLICT DO NOTHING;
+
+-- Create storage bucket for avatars
+INSERT INTO storage.buckets (id, name, public) 
+VALUES ('avatars', 'avatars', true)
 ON CONFLICT DO NOTHING;
 
 -- Set up storage policy to allow public reading
@@ -47,6 +83,66 @@ VALUES
   'discussion-media'
 )
 ON CONFLICT DO NOTHING;
+
+-- Set up storage policy for avatar images
+INSERT INTO storage.policies (name, definition, bucket_id)
+VALUES 
+(
+  'Avatar Public Read Access',
+  '{ "statement": "SELECT", "effect": "ALLOW", "actions": ["SELECT"], "principal": "*" }',
+  'avatars'
+)
+ON CONFLICT DO NOTHING;
+
+-- Set up storage policy for users to upload their own avatars
+INSERT INTO storage.policies (name, definition, bucket_id)
+VALUES 
+(
+  'Avatar Upload Access',
+  '{ "statement": "INSERT", "effect": "ALLOW", "actions": ["INSERT"], "principal": { "id": "authenticated" }, "condition": "bucket_id = ''avatars'' AND (storage.foldername(name))[1] = auth.uid()::text" }',
+  'avatars'
+)
+ON CONFLICT DO NOTHING;
+
+-- Setup RLS (Row Level Security) policies
+
+-- Enable RLS on tables
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
+ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
+
+-- Profiles policies
+CREATE POLICY "Public profiles are viewable by everyone"
+ON profiles FOR SELECT
+USING (true);
+
+CREATE POLICY "Users can insert their own profile"
+ON profiles FOR INSERT
+WITH CHECK (auth.uid() = id);
+
+CREATE POLICY "Users can update their own profile"
+ON profiles FOR UPDATE
+USING (auth.uid() = id);
+
+-- User preferences policies
+CREATE POLICY "User preferences are viewable by owners"
+ON user_preferences FOR SELECT
+USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own preferences"
+ON user_preferences FOR INSERT
+WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own preferences"
+ON user_preferences FOR UPDATE
+USING (auth.uid() = user_id);
+
+-- Update discussions table to enforce user relationship
+ALTER TABLE discussions 
+ADD CONSTRAINT fk_user_id 
+FOREIGN KEY (user_id) 
+REFERENCES auth.users(id) 
+ON DELETE CASCADE;
 `;
 
         alert('Please execute the provided SQL commands in your Supabase SQL editor to set up the database tables.');
