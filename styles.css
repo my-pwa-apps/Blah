@@ -7,16 +7,17 @@ body {
 }
 
 header {
-    background-color: #2E7D32; /* sage */
+    background-color: #808000; /* olive */
     color: white;
     padding: 1rem;
-    text-align: center;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .title-container {
     display: flex;
     align-items: center;
-    justify-content: center;
 }
 
 #titleImage {
@@ -53,10 +54,39 @@ button:hover {
     background-color: #81C784; /* darker lightgreen */
 }
 
+.profile-container {
+    display: flex;
+    align-items: center;
+}
+
+#profileIcon {
+    font-size: 2rem;
+    margin-right: 1rem;
+    cursor: pointer;
+}
+
 main {
     padding: 1rem;
 }
 
 #discussions {
     margin-top: 1rem;
+}
+
+body.dark-mode {
+    background-color: #2E2E2E;
+    color: #E8E8E8;
+}
+
+header.dark-mode {
+    background-color: #4B4B4B;
+}
+
+button.dark-mode {
+    background-color: #4B4B4B;
+    color: #E8E8E8;
+}
+
+button.dark-mode:hover {
+    background-color: #6B6B6B;
 }
