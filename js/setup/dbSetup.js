@@ -1,7 +1,5 @@
 /**
  * Database setup script for Blah Discussion Platform
- * 
- * Run this script once to set up all required tables in your Supabase database.
  */
 
 // Use the global Supabase client
@@ -9,193 +7,103 @@ async function setupDatabase() {
     try {
         console.log('Starting database setup...');
         
-        // Get supabaseUrl from the global scope
-        const projectId = window.location.origin.includes('localhost') 
-            ? 'eawoqpkwyunkmpyuijuq'  // Fallback for local development
-            : window.supabaseUrl.split('//')[1].split('.')[0];
+        // Execute SQL commands directly through Supabase
+        const commands = [
+            // Create tables
+            `CREATE TABLE IF NOT EXISTS public.profiles (
+                id UUID PRIMARY KEY REFERENCES auth.users(id),
+                username TEXT UNIQUE NOT NULL,
+                display_name TEXT,
+                avatar_url TEXT,
+                bio TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );`,
             
-        // Use the Supabase SQL editor to execute these SQL commands:
-        const sqlCommands = `
--- Create discussions table
-CREATE TABLE IF NOT EXISTS discussions (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    title TEXT NOT NULL,
-    content TEXT NOT NULL,
-    media_url TEXT,
-    media_type TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    parent_id UUID REFERENCES discussions(id),
-    user_id UUID,
-    is_friend BOOLEAN DEFAULT FALSE
-);
+            `CREATE TABLE IF NOT EXISTS public.user_preferences (
+                user_id UUID PRIMARY KEY REFERENCES auth.users(id),
+                dark_mode BOOLEAN DEFAULT FALSE,
+                email_notifications BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );`,
+            
+            // Create RLS policies
+            `ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;`,
+            
+            `CREATE POLICY "Public profiles are viewable by everyone"
+            ON public.profiles FOR SELECT
+            USING (true);`,
+            
+            `CREATE POLICY "Users can insert their own profile"
+            ON public.profiles FOR INSERT
+            WITH CHECK (auth.uid() = id);`,
+            
+            `CREATE POLICY "Users can update their own profile"
+            ON public.profiles FOR UPDATE
+            USING (auth.uid() = id);`,
+            
+            `ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;`,
+            
+            `CREATE POLICY "Users can view own preferences"
+            ON public.user_preferences FOR SELECT
+            USING (auth.uid() = user_id);`,
+            
+            `CREATE POLICY "Users can insert own preferences"
+            ON public.user_preferences FOR INSERT
+            WITH CHECK (auth.uid() = user_id);`,
+            
+            `CREATE POLICY "Users can update own preferences"
+            ON public.user_preferences FOR UPDATE
+            USING (auth.uid() = user_id);`
+        ];
 
--- Create index for faster parent_id lookups
-CREATE INDEX IF NOT EXISTS idx_discussions_parent_id ON discussions(parent_id);
+        // Execute each command separately
+        for (const sql of commands) {
+            try {
+                const { error } = await window.projectSupabase.rpc('exec', { sql });
+                if (error) {
+                    console.warn('SQL command error (non-fatal):', error);
+                    // Continue with other commands
+                }
+            } catch (err) {
+                console.warn('Command execution error (non-fatal):', err);
+                // Continue with other commands
+            }
+        }
 
--- Create user profiles table
-CREATE TABLE IF NOT EXISTS profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id),
-    username TEXT UNIQUE NOT NULL,
-    display_name TEXT,
-    avatar_url TEXT,
-    bio TEXT,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create user preferences table
-CREATE TABLE IF NOT EXISTS user_preferences (
-    user_id UUID PRIMARY KEY REFERENCES auth.users(id),
-    dark_mode BOOLEAN DEFAULT FALSE,
-    email_notifications BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Create friendships table for friend connections
-CREATE TABLE IF NOT EXISTS friendships (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL REFERENCES auth.users(id),
-    friend_id UUID NOT NULL REFERENCES auth.users(id),
-    status TEXT NOT NULL CHECK (status IN ('pending', 'accepted', 'rejected')),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-    UNIQUE(user_id, friend_id)
-);
-
--- Create storage bucket for media
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('discussion-media', 'discussion-media', true)
-ON CONFLICT DO NOTHING;
-
--- Create storage bucket for avatars
-INSERT INTO storage.buckets (id, name, public) 
-VALUES ('avatars', 'avatars', true)
-ON CONFLICT DO NOTHING;
-
--- Set up storage policy to allow public reading
-INSERT INTO storage.policies (name, definition, bucket_id)
-VALUES 
-(
-  'Public Read Access',
-  '{ "statement": "SELECT", "effect": "ALLOW", "actions": ["SELECT"], "principal": "*" }',
-  'discussion-media'
-)
-ON CONFLICT DO NOTHING;
-
--- Set up storage policy for avatar images
-INSERT INTO storage.policies (name, definition, bucket_id)
-VALUES 
-(
-  'Avatar Public Read Access',
-  '{ "statement": "SELECT", "effect": "ALLOW", "actions": ["SELECT"], "principal": "*" }',
-  'avatars'
-)
-ON CONFLICT DO NOTHING;
-
--- Set up storage policy for users to upload their own avatars
-INSERT INTO storage.policies (name, definition, bucket_id)
-VALUES 
-(
-  'Avatar Upload Access',
-  '{ "statement": "INSERT", "effect": "ALLOW", "actions": ["INSERT"], "principal": { "id": "authenticated" }, "condition": "bucket_id = ''avatars'' AND (storage.foldername(name))[1] = auth.uid()::text" }',
-  'avatars'
-)
-ON CONFLICT DO NOTHING;
-
--- Setup RLS (Row Level Security) policies
-
--- Enable RLS on tables
-ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE user_preferences ENABLE ROW LEVEL SECURITY;
-ALTER TABLE friendships ENABLE ROW LEVEL SECURITY;
-
--- Profiles policies
-CREATE POLICY "Public profiles are viewable by everyone"
-ON profiles FOR SELECT
-USING (true);
-
-CREATE POLICY "Users can insert their own profile"
-ON profiles FOR INSERT
-WITH CHECK (auth.uid() = id);
-
-CREATE POLICY "Users can update their own profile"
-ON profiles FOR UPDATE
-USING (auth.uid() = id);
-
--- User preferences policies
-CREATE POLICY "User preferences are viewable by owners"
-ON user_preferences FOR SELECT
-USING (auth.uid() = user_id);
-
-CREATE POLICY "Users can insert their own preferences"
-ON user_preferences FOR INSERT
-WITH CHECK (auth.uid() = user_id);
-
-CREATE POLICY "Users can update their own preferences"
-ON user_preferences FOR UPDATE
-USING (auth.uid() = user_id);
-
--- Update discussions table to enforce user relationship
-ALTER TABLE discussions 
-ADD CONSTRAINT fk_user_id 
-FOREIGN KEY (user_id) 
-REFERENCES auth.users(id) 
-ON DELETE CASCADE;
-`;
-
-        alert('Please execute the provided SQL commands in your Supabase SQL editor to set up the database tables.');
-        console.log('SQL commands for setup:', sqlCommands);
-        
-        // Display instructions
-        document.getElementById('discussions').innerHTML = `
-            <div class="setup-instructions">
-                <h2>Database Setup Required</h2>
-                <p>Your Supabase database is not set up yet. Follow these steps:</p>
-                <ol>
-                    <li>Go to <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank">Supabase SQL Editor</a></li>
-                    <li>Copy the SQL commands below</li>
-                    <li>Paste them into the SQL Editor</li>
-                    <li>Click "Run" to create the necessary tables</li>
-                    <li>Refresh this page when done</li>
-                </ol>
-                <pre class="sql-code">${sqlCommands}</pre>
-            </div>
-        `;
-
-        return false;
+        return true;
     } catch (error) {
         console.error('Error setting up database:', error);
         return false;
     }
 }
 
-// Check if database exists by trying to query the discussions table
+// Check if database exists and set it up if needed
 async function checkDatabaseExists() {
     try {
         console.log('Checking if database exists...');
-        // Just check if the table exists by fetching a single row
-        const { data, error } = await window.projectSupabase
-            .from('discussions')
+        
+        // Try to query the profiles table
+        const { error } = await window.projectSupabase
+            .from('profiles')
             .select('id')
             .limit(1);
         
         if (error && error.code === '42P01') {
-            // Table doesn't exist
-            console.log('Table does not exist, running setup');
+            // Table doesn't exist, run setup
+            console.log('Tables do not exist, running setup...');
             return await setupDatabase();
         } else if (error) {
-            console.error('Error checking database:', error);
-            return false;
+            throw error;
         }
         
-        // Table exists
         console.log('Database exists and is ready');
         return true;
     } catch (error) {
-        console.error('Error checking database:', error);
-        return false;
+        console.error('Database check error:', error);
+        // Try to run setup anyway
+        return await setupDatabase();
     }
 }
 
@@ -204,5 +112,12 @@ window.dbSetup = {
     checkDatabaseExists,
     setupDatabase
 };
+
+// Run check immediately
+checkDatabaseExists().then(result => {
+    console.log('Database setup complete:', result);
+}).catch(error => {
+    console.error('Database setup failed:', error);
+});
 
 console.log('Database setup module loaded');

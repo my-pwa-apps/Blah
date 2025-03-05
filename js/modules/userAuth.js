@@ -14,55 +14,72 @@ const UserAuth = {
      */
     async register(email, password, username, displayName = null) {
         try {
+            // Check if database is ready
+            await window.dbSetup.checkDatabaseExists();
+            
             // Register user with Supabase Auth
             const { data: authData, error: authError } = await window.projectSupabase.auth.signUp({
                 email,
-                password
+                password,
+                options: {
+                    data: {
+                        username,
+                        display_name: displayName || username
+                    }
+                }
             });
             
             if (authError) throw authError;
             
             // If registration successful, create user profile
             if (authData.user) {
-                // Create user profile
-                const { error: profileError } = await window.projectSupabase
-                    .from('profiles')
-                    .insert({
-                        id: authData.user.id,
-                        username,
-                        display_name: displayName || username,
-                        created_at: new Date().toISOString(),
-                        updated_at: new Date().toISOString()
-                    });
-                
-                if (profileError) {
-                    console.error('Error creating user profile:', profileError);
-                    // Delete the auth user if profile creation fails
-                    // This would need admin rights so we'll handle this differently
-                    throw profileError;
+                try {
+                    // Create user profile
+                    const { error: profileError } = await window.projectSupabase
+                        .from('profiles')
+                        .insert({
+                            id: authData.user.id,
+                            username,
+                            display_name: displayName || username,
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        });
+                    
+                    if (profileError) {
+                        console.error('Error creating user profile:', profileError);
+                        throw new Error('Failed to create user profile. Please try again.');
+                    }
+                    
+                    // Create default user preferences
+                    const { error: prefError } = await window.projectSupabase
+                        .from('user_preferences')
+                        .insert({
+                            user_id: authData.user.id,
+                            dark_mode: false,
+                            email_notifications: true
+                        });
+                    
+                    if (prefError) {
+                        console.error('Error creating user preferences:', prefError);
+                        throw new Error('Failed to create user preferences. Please try again.');
+                    }
+                    
+                    return { user: authData.user, profile: { username, display_name: displayName || username }};
+                } catch (error) {
+                    // Try to delete the auth user if profile creation fails
+                    try {
+                        await window.projectSupabase.auth.api.deleteUser(authData.user.id);
+                    } catch (deleteError) {
+                        console.error('Failed to cleanup auth user:', deleteError);
+                    }
+                    throw error;
                 }
-                
-                // Create default user preferences
-                const { error: prefError } = await window.projectSupabase
-                    .from('user_preferences')
-                    .insert({
-                        user_id: authData.user.id,
-                        dark_mode: false,
-                        email_notifications: true
-                    });
-                
-                if (prefError) {
-                    console.error('Error creating user preferences:', prefError);
-                    throw prefError;
-                }
-                
-                return { user: authData.user, profile: { username, display_name: displayName || username }};
             }
             
-            throw new Error('Registration failed with unknown error');
+            throw new Error('Registration failed. Please try again.');
         } catch (error) {
             console.error('Registration error:', error);
-            throw error;
+            throw error.message || 'Registration failed. Please try again.';
         }
     },
     
