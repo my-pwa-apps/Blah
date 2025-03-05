@@ -248,44 +248,56 @@ function openReplyModal(parentId) {
                 <span class="close-reply-modal">&times;</span>
                 <h3>Reply to Discussion</h3>
                 <form id="replyForm" data-parent-id="${parentId}">
-                    <div class="form-group">
-                        <label for="replyContent">Your Reply</label>
-                        <textarea id="replyContent" rows="4" required></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label for="replyMedia">Add Media (optional)</label>
-                        <input type="file" id="replyMedia" accept="image/*,video/*">
-                        <div id="replyMediaPreview" class="media-preview"></div>
-                    </div>
-                    <button type="submit" class="submit-btn">Post Reply</button>
+                <div class="form-group">
+                    <label for="replyContent">Your Reply</label>
+                    <textarea id="replyContent" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="replyMedia">Add Media (optional)</label>
+                    <input type="file" id="replyMedia" accept="image/*,video/*">
+                    <div id="replyMediaPreview" class="media-preview"></div>
+                </div>
+                <button type="submit" class="submit-btn">Post Reply</button>
                 </form>
             </div>
         </div>
     `;
     
-    // Append modal to body
+    // Create a container element and set its innerHTML
     const modalContainer = document.createElement('div');
     modalContainer.innerHTML = modalHtml;
-    document.body.appendChild(modalContainer.firstChild);
     
-    // Get modal elements
+    // Append the first child (the modal) to the body
+    const modalElement = modalContainer.firstChild;
+    document.body.appendChild(modalElement);
+    
+    // Now get a reference to the appended element in the DOM
     const modal = document.getElementById('replyModal');
-    const closeModalBtn = document.querySelector('.close-reply-modal');
-    const mediaInput = document.getElementById('replyMedia');
-    const mediaPreview = document.getElementById('replyMediaPreview');
+    
+    // Check if modal exists before proceeding
+    if (!modal) {
+        console.error('Failed to create reply modal');
+        return;
+    }
     
     // Show modal
     modal.style.display = 'block';
     
+    // Get other elements
+    const closeModalBtn = modal.querySelector('.close-reply-modal');
+    const mediaInput = modal.querySelector('#replyMedia');
+    const mediaPreview = modal.querySelector('#replyMediaPreview');
+    
     // Handle close button
     closeModalBtn.addEventListener('click', () => {
-        modal.remove();
+        document.body.removeChild(modal);
     });
     
     // Handle clicking outside modal
-    window.addEventListener('click', (event) => {
+    window.addEventListener('click', function modalOutsideClickHandler(event) {
         if (event.target === modal) {
-            modal.remove();
+            document.body.removeChild(modal);
+            window.removeEventListener('click', modalOutsideClickHandler);
         }
     });
     
@@ -315,7 +327,7 @@ function openReplyModal(parentId) {
     });
     
     // Handle form submission
-    document.getElementById('replyForm').addEventListener('submit', async (event) => {
+    modal.querySelector('#replyForm').addEventListener('submit', async (event) => {
         event.preventDefault();
         
         const content = document.getElementById('replyContent').value;
@@ -331,17 +343,19 @@ function openReplyModal(parentId) {
         try {
             await addReplyToDiscussion(parentId, content, mediaFile);
             
-            // Remove modal
-            modal.remove();
+            // Remove modal safely
+            if (document.body.contains(modal)) {
+                document.body.removeChild(modal);
+            }
             
             // Reload discussions
-            loadDiscussions('all');
+            window.discussionHandler.loadDiscussions('all');
         } catch (error) {
             console.error('Failed to post reply:', error);
             alert('Failed to post reply. Please try again.');
         } finally {
             // If modal still exists, restore button state
-            if (document.getElementById('replyForm')) {
+            if (document.body.contains(modal)) {
                 submitBtn.textContent = originalBtnText;
                 submitBtn.disabled = false;
             }
