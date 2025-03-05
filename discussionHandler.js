@@ -1,24 +1,21 @@
-import { firebaseConfig } from './firebaseConfig.js';
+export async function loadDiscussions(type, supabase) {
+    let { data: discussions, error } = await supabase
+        .from('discussions')
+        .select('*');
 
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
+    if (error) {
+        console.error('Error fetching discussions:', error);
+        return;
+    }
 
-const db = firebase.database();
-
-export function loadDiscussions(type) {
-    const discussionsRef = db.ref('discussions');
-    discussionsRef.once('value', (snapshot) => {
-        const discussions = snapshot.val();
-        displayDiscussions(discussions, type);
-    });
+    displayDiscussions(discussions, type);
 }
 
 function displayDiscussions(discussions, type) {
     const discussionsContainer = document.getElementById('discussions');
     discussionsContainer.innerHTML = '';
-    for (let id in discussions) {
-        if (type === 'all' || (type === 'friends' && discussions[id].isFriend)) {
-            const discussion = discussions[id];
+    discussions.forEach(discussion => {
+        if (type === 'all' || (type === 'friends' && discussion.isFriend)) {
             const discussionElement = document.createElement('div');
             discussionElement.classList.add('discussion');
             discussionElement.innerHTML = `
@@ -27,5 +24,5 @@ function displayDiscussions(discussions, type) {
             `;
             discussionsContainer.appendChild(discussionElement);
         }
-    }
+    });
 }

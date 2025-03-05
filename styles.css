@@ -1,18 +1,19 @@
 body {
     font-family: 'Roboto', sans-serif;
-    background-color: #E8F5E9; /* lightgreen */
-    color: #2E7D32; /* sage */
+    background-color: #F0F4F8; /* light grey */
+    color: #333; /* dark grey */
     margin: 0;
     padding: 0;
 }
 
 header {
-    background-color: #808000; /* olive */
+    background-color: #4CAF50; /* modern green */
     color: white;
     padding: 1rem;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .title-container {
@@ -28,12 +29,13 @@ header {
 
 h1 {
     margin: 0;
+    font-size: 1.5rem;
 }
 
 h2 {
     margin: 0;
     font-size: 1rem;
-    color: #A5D6A7; /* lightgreen */
+    color: #C8E6C9; /* light green */
 }
 
 nav {
@@ -41,17 +43,18 @@ nav {
 }
 
 button {
-    background-color: #A5D6A7; /* lightgreen */
+    background-color: #66BB6A; /* modern green */
     border: none;
-    color: #2E7D32; /* sage */
+    color: white;
     padding: 0.5rem 1rem;
     margin: 0.5rem;
     cursor: pointer;
     border-radius: 4px;
+    transition: background-color 0.3s ease;
 }
 
 button:hover {
-    background-color: #81C784; /* darker lightgreen */
+    background-color: #388E3C; /* darker green */
 }
 
 .profile-container {
