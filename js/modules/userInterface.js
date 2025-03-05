@@ -91,9 +91,24 @@ const UserInterface = {
                 return;
             }
 
+            // Create default profile data if none exists
+            const defaultProfile = {
+                display_name: session.user?.email?.split('@')[0] || 'User',
+                avatar_url: null,
+                bio: '',
+                preferences: {
+                    dark_mode: false,
+                    email_notifications: true
+                }
+            };
+
+            // Use existing profile data or default
+            const userProfile = profile || defaultProfile;
+
             const modal = document.createElement('div');
             modal.id = 'profileModal';
             modal.className = 'modal';
+            modal.style.display = 'block'; // Make sure modal is visible
             modal.innerHTML = `
                 <div class="modal-content">
                     <span class="close-modal">&times;</span>
@@ -101,7 +116,9 @@ const UserInterface = {
                     <div class="profile-container">
                         <div class="avatar-section">
                             <div class="avatar-preview">
-                                <img src="${profile.avatar_url || 'images/default-avatar.png'}" alt="Profile Avatar">
+                                <img src="${userProfile.avatar_url || 'images/default-avatar.png'}" 
+                                     alt="Profile Avatar" 
+                                     onerror="this.src='images/default-avatar.png'">
                             </div>
                             <input type="file" id="avatarUpload" accept="image/*">
                             <button id="uploadAvatarBtn">Upload New Avatar</button>
@@ -109,19 +126,19 @@ const UserInterface = {
                         <form id="profileForm" class="profile-form">
                             <div class="form-group">
                                 <label for="displayName">Display Name</label>
-                                <input type="text" id="displayName" value="${profile.display_name || ''}" required>
+                                <input type="text" id="displayName" value="${userProfile.display_name || ''}" required>
                             </div>
                             <div class="form-group">
                                 <label for="bio">Bio</label>
-                                <textarea id="bio" rows="3">${profile.bio || ''}</textarea>
+                                <textarea id="bio" rows="3">${userProfile.bio || ''}</textarea>
                             </div>
                             <div class="form-group preferences">
                                 <label>
-                                    <input type="checkbox" id="darkMode" ${profile.preferences?.dark_mode ? 'checked' : ''}>
+                                    <input type="checkbox" id="darkMode" ${userProfile.preferences?.dark_mode ? 'checked' : ''}>
                                     Dark Mode
                                 </label>
                                 <label>
-                                    <input type="checkbox" id="emailNotifications" ${profile.preferences?.email_notifications ? 'checked' : ''}>
+                                    <input type="checkbox" id="emailNotifications" ${userProfile.preferences?.email_notifications ? 'checked' : ''}>
                                     Email Notifications
                                 </label>
                             </div>
@@ -136,9 +153,16 @@ const UserInterface = {
             `;
 
             document.body.appendChild(modal);
-            this.setupProfileModalEvents(modal, profile);
+            this.setupProfileModalEvents(modal, userProfile);
         } catch (error) {
             console.error('Error showing profile modal:', error);
+            // Show error message to user
+            const errorMsg = document.createElement('div');
+            errorMsg.className = 'error-message';
+            errorMsg.style.padding = '1rem';
+            errorMsg.textContent = 'Failed to load profile. Please try again.';
+            document.body.appendChild(errorMsg);
+            setTimeout(() => errorMsg.remove(), 3000);
         }
     },
 
