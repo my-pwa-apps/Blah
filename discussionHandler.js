@@ -241,13 +241,23 @@ window.discussionHandler.createNewDiscussion = async function(title, content, me
  * @param {string} parentId - ID of the parent discussion
  */
 function openReplyModal(parentId) {
-    // Create a reply modal dynamically
-    const modalHtml = `
-        <div id="replyModal" class="modal">
-            <div class="modal-content">
-                <span class="close-reply-modal">&times;</span>
-                <h3>Reply to Discussion</h3>
-                <form id="replyForm" data-parent-id="${parentId}">
+    console.log('Opening reply modal for discussion:', parentId);
+    
+    // First check if there's already a reply modal open
+    const existingModal = document.getElementById('replyModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Create a reply modal directly in the DOM
+    const modal = document.createElement('div');
+    modal.id = 'replyModal';
+    modal.className = 'modal';
+    modal.innerHTML = `
+        <div class="modal-content">
+            <span class="close-reply-modal">&times;</span>
+            <h3>Reply to Discussion</h3>
+            <form id="replyForm" data-parent-id="${parentId}">
                 <div class="form-group">
                     <label for="replyContent">Your Reply</label>
                     <textarea id="replyContent" rows="4" required></textarea>
@@ -258,27 +268,12 @@ function openReplyModal(parentId) {
                     <div id="replyMediaPreview" class="media-preview"></div>
                 </div>
                 <button type="submit" class="submit-btn">Post Reply</button>
-                </form>
-            </div>
+            </form>
         </div>
     `;
     
-    // Create a container element and set its innerHTML
-    const modalContainer = document.createElement('div');
-    modalContainer.innerHTML = modalHtml;
-    
-    // Append the first child (the modal) to the body
-    const modalElement = modalContainer.firstChild;
-    document.body.appendChild(modalElement);
-    
-    // Now get a reference to the appended element in the DOM
-    const modal = document.getElementById('replyModal');
-    
-    // Check if modal exists before proceeding
-    if (!modal) {
-        console.error('Failed to create reply modal');
-        return;
-    }
+    // Append directly to body
+    document.body.appendChild(modal);
     
     // Show modal
     modal.style.display = 'block';
@@ -287,16 +282,17 @@ function openReplyModal(parentId) {
     const closeModalBtn = modal.querySelector('.close-reply-modal');
     const mediaInput = modal.querySelector('#replyMedia');
     const mediaPreview = modal.querySelector('#replyMediaPreview');
+    const replyForm = modal.querySelector('#replyForm');
     
     // Handle close button
     closeModalBtn.addEventListener('click', () => {
-        document.body.removeChild(modal);
+        modal.remove();
     });
     
     // Handle clicking outside modal
     window.addEventListener('click', function modalOutsideClickHandler(event) {
         if (event.target === modal) {
-            document.body.removeChild(modal);
+            modal.remove();
             window.removeEventListener('click', modalOutsideClickHandler);
         }
     });
@@ -327,11 +323,11 @@ function openReplyModal(parentId) {
     });
     
     // Handle form submission
-    modal.querySelector('#replyForm').addEventListener('submit', async (event) => {
+    replyForm.addEventListener('submit', async (event) => {
         event.preventDefault();
         
-        const content = document.getElementById('replyContent').value;
-        const mediaFile = document.getElementById('replyMedia').files[0];
+        const content = modal.querySelector('#replyContent').value;
+        const mediaFile = modal.querySelector('#replyMedia').files[0];
         const parentId = event.target.getAttribute('data-parent-id');
         
         // Show loading state
@@ -345,7 +341,7 @@ function openReplyModal(parentId) {
             
             // Remove modal safely
             if (document.body.contains(modal)) {
-                document.body.removeChild(modal);
+                modal.remove();
             }
             
             // Reload discussions
