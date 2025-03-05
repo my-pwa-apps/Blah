@@ -126,7 +126,8 @@ const DiscussionHandler = (function() {
             const fragment = document.createDocumentFragment();
             container.innerHTML = '';
             
-            if (!Array.isArray(discussions) || !discussions.length) {
+            // Check if discussions exist and is an array
+            if (!discussions || !Array.isArray(discussions) || !discussions.length) {
                 const empty = document.createElement('div');
                 empty.className = 'discussion-empty';
                 empty.textContent = 'No discussions found';
@@ -135,24 +136,50 @@ const DiscussionHandler = (function() {
                 return;
             }
 
-            const validDiscussions = discussions
-                .map(discussion => {
-                    const element = createDiscussionElement(discussion);
-                    return element;
-                })
-                .filter(Boolean); // Remove null/undefined elements
+            // Create discussion elements with additional error handling
+            try {
+                const validDiscussions = discussions
+                    .map(discussion => {
+                        try {
+                            // Skip any discussion that's null or undefined
+                            if (!discussion) return null;
+                            
+                            // Create a properly formatted discussion object
+                            const discussionObj = {
+                                id: discussion.id || `temp-${Date.now()}`,
+                                title: discussion.title || '',
+                                content: discussion.content || '',
+                                type: discussion.type || 'discussion'
+                            };
+                            
+                            // Only create element if title exists
+                            if (!discussionObj.title) return null;
+                            
+                            return createDiscussionElement(discussionObj);
+                        } catch (err) {
+                            console.warn('Error creating discussion element:', err);
+                            return null;
+                        }
+                    })
+                    .filter(element => element instanceof Node); // Only keep valid DOM nodes
 
-            if (!validDiscussions.length) {
-                const empty = document.createElement('div');
-                empty.className = 'discussion-empty';
-                empty.textContent = 'No valid discussions found';
-                fragment.appendChild(empty);
-            } else {
-                validDiscussions.forEach(element => {
-                    if (element instanceof Node) {
+                // Add discussions or display empty message if none are valid
+                if (!validDiscussions.length) {
+                    const empty = document.createElement('div');
+                    empty.className = 'discussion-empty';
+                    empty.textContent = 'No valid discussions found';
+                    fragment.appendChild(empty);
+                } else {
+                    validDiscussions.forEach(element => {
                         fragment.appendChild(element);
-                    }
-                });
+                    });
+                }
+            } catch (err) {
+                console.error('Error processing discussions:', err);
+                const error = document.createElement('div');
+                error.className = 'discussion-error';
+                error.textContent = 'Error processing discussions';
+                fragment.appendChild(error);
             }
 
             container.appendChild(fragment);
@@ -189,8 +216,28 @@ const DiscussionHandler = (function() {
         container.classList.add('loading');
         
         try {
-            wsManager.connect();
-            displayDiscussions(discussions);
+            // Check if WebSocketManager exists
+            if (wsManager) {
+                wsManager.connect();
+            } else {
+                console.warn('WebSocketManager not initialized');
+            }
+            
+            // Safe access to discussions variable
+            let discussionsData = [];
+            
+            // Check if discussions is defined in the global scope
+            if (typeof window.discussions !== 'undefined') {
+                discussionsData = window.discussions;
+            } else if (typeof discussions !== 'undefined') {
+                discussionsData = discussions;
+            } else {
+                // If discussions isn't available, fetch from API or use empty array
+                console.warn('No discussions data found, using empty array');
+            }
+            
+            // Call displayDiscussions with the safely accessed data
+            displayDiscussions(discussionsData);
         } catch (error) {
             console.error('Error loading discussions:', error);
             showErrorMessage('Failed to load discussions');
