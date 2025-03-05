@@ -9,6 +9,11 @@ async function setupDatabase() {
     try {
         console.log('Starting database setup...');
         
+        // Get supabaseUrl from the global scope
+        const projectId = window.location.origin.includes('localhost') 
+            ? 'eawoqpkwyunkmpyuijuq'  // Fallback for local development
+            : window.supabaseUrl.split('//')[1].split('.')[0];
+            
         // Use the Supabase SQL editor to execute these SQL commands:
         const sqlCommands = `
 -- Create discussions table
@@ -53,7 +58,7 @@ ON CONFLICT DO NOTHING;
                 <h2>Database Setup Required</h2>
                 <p>Your Supabase database is not set up yet. Follow these steps:</p>
                 <ol>
-                    <li>Go to <a href="https://app.supabase.com/project/${supabaseUrl.split('//')[1].split('.')[0]}/sql" target="_blank">Supabase SQL Editor</a></li>
+                    <li>Go to <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank">Supabase SQL Editor</a></li>
                     <li>Copy the SQL commands below</li>
                     <li>Paste them into the SQL Editor</li>
                     <li>Click "Run" to create the necessary tables</li>
