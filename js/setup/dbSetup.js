@@ -4,9 +4,7 @@
  * Run this script once to set up all required tables in your Supabase database.
  */
 
-// Get the Supabase client
-const supabase = window.projectSupabase;
-
+// Use the global Supabase client
 async function setupDatabase() {
     try {
         console.log('Starting database setup...');
@@ -75,14 +73,16 @@ ON CONFLICT DO NOTHING;
 // Check if database exists by trying to query the discussions table
 async function checkDatabaseExists() {
     try {
+        console.log('Checking if database exists...');
         // Just check if the table exists by fetching a single row
-        const { data, error } = await supabase
+        const { data, error } = await window.projectSupabase
             .from('discussions')
             .select('id')
             .limit(1);
         
         if (error && error.code === '42P01') {
             // Table doesn't exist
+            console.log('Table does not exist, running setup');
             return await setupDatabase();
         } else if (error) {
             console.error('Error checking database:', error);
@@ -90,6 +90,7 @@ async function checkDatabaseExists() {
         }
         
         // Table exists
+        console.log('Database exists and is ready');
         return true;
     } catch (error) {
         console.error('Error checking database:', error);
@@ -97,7 +98,10 @@ async function checkDatabaseExists() {
     }
 }
 
+// Make sure we initialize dbSetup before it's used
 window.dbSetup = {
     checkDatabaseExists,
     setupDatabase
 };
+
+console.log('Database setup module loaded');

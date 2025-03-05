@@ -11,26 +11,42 @@ const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 // Export for other modules to use
 window.projectSupabase = supabase;
 
+// Use the global Supabase client instead of creating a new one
+
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM fully loaded');
     
-    // Check if database exists before proceeding
-    const dbExists = await window.dbSetup.checkDatabaseExists();
+    // Ensure dbSetup is available
+    if (typeof window.dbSetup === 'undefined') {
+        console.error('Database setup module not loaded!');
+        document.getElementById('discussions').innerHTML = 
+            '<p class="error-message">Failed to load application. Please refresh the page.</p>';
+        return;
+    }
     
-    if (dbExists) {
-        // Load initial discussions
-        loadDiscussions('all');
+    // Check if database exists before proceeding
+    try {
+        const dbExists = await window.dbSetup.checkDatabaseExists();
         
-        // Set up event listeners
-        setupEventListeners();
-        
-        console.log('Event listeners set up');
-    } else {
-        console.log('Database setup required');
-        // The setup UI is already rendered by checkDatabaseExists
-        
-        // Disable the new discussion button until database is set up
-        document.getElementById('newDiscussionBtn').disabled = true;
+        if (dbExists) {
+            // Load initial discussions
+            loadDiscussions('all');
+            
+            // Set up event listeners
+            setupEventListeners();
+            
+            console.log('Event listeners set up');
+        } else {
+            console.log('Database setup required');
+            // The setup UI is already rendered by checkDatabaseExists
+            
+            // Disable the new discussion button until database is set up
+            document.getElementById('newDiscussionBtn').disabled = true;
+        }
+    } catch (error) {
+        console.error('Error during initialization:', error);
+        document.getElementById('discussions').innerHTML = 
+            '<p class="error-message">Failed to initialize application. Please refresh the page.</p>';
     }
 });
 

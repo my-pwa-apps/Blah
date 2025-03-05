@@ -10,7 +10,7 @@ const SupabaseClient = {
     // Discussion methods
     async getDiscussions() {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await window.projectSupabase
                 .from('discussions')
                 .select('*')
                 .is('parent_id', null)
@@ -26,7 +26,7 @@ const SupabaseClient = {
     
     async getRepliesForDiscussions(discussionIds) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await window.projectSupabase
                 .from('discussions')
                 .select('*')
                 .in('parent_id', discussionIds);
@@ -41,7 +41,7 @@ const SupabaseClient = {
     
     async createDiscussion(discussionData) {
         try {
-            const { data, error } = await supabase
+            const { data, error } = await window.projectSupabase
                 .from('discussions')
                 .insert([discussionData])
                 .select();
@@ -58,13 +58,13 @@ const SupabaseClient = {
     async uploadMedia(file, folder = '') {
         try {
             const path = `${folder}${folder ? '/' : ''}${Date.now()}_${file.name}`;
-            const { data, error } = await supabase.storage
+            const { data, error } = await window.projectSupabase.storage
                 .from('discussion-media')
                 .upload(path, file);
                 
             if (error) throw error;
             
-            const { data: { publicUrl } } = supabase.storage
+            const { data: { publicUrl } } = window.projectSupabase.storage
                 .from('discussion-media')
                 .getPublicUrl(data.path);
                 
@@ -80,3 +80,4 @@ const SupabaseClient = {
 };
 
 window.SupabaseClient = SupabaseClient;
+console.log('Supabase client module loaded');

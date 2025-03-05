@@ -64,10 +64,18 @@
         </div>
     </div>
     
-    <!-- Load scripts in proper order -->
-    <script src="scripts.js"></script>
+    <!-- Load scripts in correct order to prevent conflicts -->
+    <script>
+        // Initialize Supabase globally first
+        const supabaseUrl = 'https://eawoqpkwyunkmpyuijuq.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd29xcGt3eXVua21weXVpanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExNzM4MTYsImV4cCI6MjA1Njc0OTgxNn0.TCrAX91vjEwc_S7eYLE9RwzrNXSh1D_NKZ9XV6VfBRM';
+        
+        // Create a single Supabase client for the entire application
+        window.projectSupabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+    </script>
     <script src="js/setup/dbSetup.js"></script>
     <script src="js/modules/supabaseClient.js"></script>
     <script src="discussionHandler.js"></script>
+    <script src="scripts.js"></script>
 </body>
 </html>
