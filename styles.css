@@ -375,6 +375,30 @@ button.dark-mode:hover {
     display: none;
 }
 
+/* Confirmation message styles */
+.confirmation-message {
+    text-align: center;
+    padding: 2rem 1rem;
+}
+
+.confirmation-message h3 {
+    color: #33691E;
+    margin-bottom: 1rem;
+}
+
+.confirmation-message p {
+    margin-bottom: 1rem;
+    line-height: 1.5;
+}
+
+.confirmation-message strong {
+    color: #33691E;
+}
+
+.close-auth-btn {
+    margin-top: 1rem;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
     header {

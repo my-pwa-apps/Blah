@@ -25,58 +25,42 @@ const UserAuth = {
                     data: {
                         username,
                         display_name: displayName || username
-                    }
+                    },
+                    emailRedirectTo: window.location.origin // Use current site URL
                 }
             });
             
             if (authError) throw authError;
             
-            // If registration successful, create user profile
-            if (authData.user) {
-                try {
-                    // Create user profile
-                    const { error: profileError } = await window.projectSupabase
-                        .from('profiles')
-                        .insert({
-                            id: authData.user.id,
-                            username,
-                            display_name: displayName || username,
-                            created_at: new Date().toISOString(),
-                            updated_at: new Date().toISOString()
-                        });
-                    
-                    if (profileError) {
-                        console.error('Error creating user profile:', profileError);
-                        throw new Error('Failed to create user profile. Please try again.');
-                    }
-                    
-                    // Create default user preferences
-                    const { error: prefError } = await window.projectSupabase
-                        .from('user_preferences')
-                        .insert({
-                            user_id: authData.user.id,
-                            dark_mode: false,
-                            email_notifications: true
-                        });
-                    
-                    if (prefError) {
-                        console.error('Error creating user preferences:', prefError);
-                        throw new Error('Failed to create user preferences. Please try again.');
-                    }
-                    
-                    return { user: authData.user, profile: { username, display_name: displayName || username }};
-                } catch (error) {
-                    // Try to delete the auth user if profile creation fails
-                    try {
-                        await window.projectSupabase.auth.api.deleteUser(authData.user.id);
-                    } catch (deleteError) {
-                        console.error('Failed to cleanup auth user:', deleteError);
-                    }
-                    throw error;
+            // Show confirmation message
+            const modal = document.getElementById('authModal');
+            if (modal) {
+                const registerForm = modal.querySelector('#registerForm');
+                const registerError = modal.querySelector('#registerError');
+                
+                registerForm.innerHTML = `
+                    <div class="confirmation-message">
+                        <h3>Verify Your Email</h3>
+                        <p>A confirmation link has been sent to <strong>${email}</strong></p>
+                        <p>Please check your email and click the link to activate your account.</p>
+                        <button type="button" class="submit-btn close-auth-btn">Close</button>
+                    </div>
+                `;
+
+                // Add close button handler
+                const closeBtn = registerForm.querySelector('.close-auth-btn');
+                if (closeBtn) {
+                    closeBtn.onclick = () => {
+                        modal.style.display = 'none';
+                        // Reset form after closing
+                        setTimeout(() => {
+                            this.createAuthModal();
+                        }, 300);
+                    };
                 }
             }
-            
-            throw new Error('Registration failed. Please try again.');
+
+            return { user: authData.user, confirmation: 'email_confirmation_sent' };
         } catch (error) {
             console.error('Registration error:', error);
             throw error.message || 'Registration failed. Please try again.';
