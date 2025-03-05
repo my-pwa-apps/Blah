@@ -91,8 +91,16 @@ window.discussionHandler = (function() {
         showStatus('Loading discussions...');
         
         try {
+            // Debug: Log call stack to help troubleshoot
+            console.log('Loading discussions - Call stack:', new Error().stack);
+            
             // Find discussions data source
             let discussionsData = findDiscussionsData();
+            
+            // Debug: Log found data
+            console.log('Found discussions data type:', 
+                Array.isArray(discussionsData) ? 'Array' : typeof discussionsData,
+                'length:', discussionsData?.length || 0);
             
             // Clear existing discussions
             clearDiscussions();
@@ -103,8 +111,8 @@ window.discussionHandler = (function() {
                 return true;
             }
             
-            // Render discussions
-            renderDiscussions(discussionsData);
+            // Render discussions with safer approach
+            renderDiscussionsSafe(discussionsData);
             return true;
         } catch (error) {
             console.error('Failed to load discussions:', error);
@@ -116,30 +124,179 @@ window.discussionHandler = (function() {
     }
     
     /**
+     * A safer version of renderDiscussions with extra precautions
+     */
+    function renderDiscussionsSafe(discussions) {
+        if (!discussionsContainer || !discussions) return;
+        
+        try {
+            // Ensure we're working with an array
+            if (!Array.isArray(discussions)) {
+                console.warn('Discussions is not an array, converting:', discussions);
+                
+                // Try to convert to array if possible
+                if (discussions && typeof discussions === 'object') {
+                    if (discussions.discussions && Array.isArray(discussions.discussions)) {
+                        discussions = discussions.discussions;
+                    } else {
+                        try {
+                            discussions = [discussions]; // Try to treat as single item
+                        } catch (e) {
+                            discussions = []; // Last resort
+                        }
+                    }
+                } else {
+                    discussions = [];
+                }
+            }
+            
+            // Use document fragment for better performance
+            const fragment = document.createDocumentFragment();
+            let validCount = 0;
+            
+            // Process each discussion one by one to isolate errors
+            for (let i = 0; i < discussions.length; i++) {
+                try {
+                    const discussion = discussions[i];
+                    
+                    // Skip if not an object
+                    if (!discussion || typeof discussion !== 'object') {
+                        console.warn(`Invalid discussion at index ${i}:`, discussion);
+                        continue;
+                    }
+                    
+                    // Try to create an element, with extensive error checking
+                    const element = createSafeDiscussionElement(discussion);
+                    
+                    // Only append valid DOM nodes
+                    if (element && element.nodeType === Node.ELEMENT_NODE) {
+                        fragment.appendChild(element);
+                        validCount++;
+                    } else {
+                        console.warn(`Element created at index ${i} is not a valid DOM node:`, element);
+                    }
+                } catch (error) {
+                    console.error(`Error processing discussion at index ${i}:`, error);
+                }
+            }
+            
+            // Show empty message if no valid discussions
+            if (validCount === 0) {
+                showEmpty('No valid discussions found');
+                return;
+            }
+            
+            // Append all discussions at once
+            discussionsContainer.appendChild(fragment);
+            console.log(`Successfully rendered ${validCount} discussions`);
+        } catch (error) {
+            console.error('Failed to render discussions:', error);
+            showError('Failed to render discussions');
+        }
+    }
+    
+    /**
+     * A safer version of createDiscussionElement with more error handling
+     */
+    function createSafeDiscussionElement(discussion) {
+        try {
+            // Create safe discussion object with defaults and explicit string conversions
+            const id = discussion.id !== undefined ? String(discussion.id) : `temp-${Date.now()}`;
+            const title = discussion.title !== undefined ? String(discussion.title) : '';
+            const content = discussion.content !== undefined ? String(discussion.content) : '';
+            const type = discussion.type !== undefined ? String(discussion.type) : 'discussion';
+            
+            // Skip if no title after sanitization
+            if (!title.trim()) {
+                console.warn('Skipping discussion with empty title:', discussion);
+                return null;
+            }
+            
+            // Create main element
+            const element = document.createElement('div');
+            element.className = 'discussion-item';
+            element.setAttribute('role', 'article');
+            element.dataset.discussionId = id;
+            
+            // Create title
+            const titleElement = document.createElement('h3');
+            titleElement.className = 'discussion-title';
+            titleElement.textContent = title;
+            
+            // Create content
+            const contentElement = document.createElement('p');
+            contentElement.className = 'discussion-content';
+            contentElement.textContent = content;
+            
+            // Create replies container
+            const repliesElement = document.createElement('div');
+            repliesElement.className = 'discussion-replies';
+            
+            // Explicitly append each child
+            element.appendChild(titleElement);
+            element.appendChild(contentElement);
+            element.appendChild(repliesElement);
+            
+            return element;
+        } catch (error) {
+            console.error('Failed to create discussion element:', error);
+            return null;
+        }
+    }
+    
+    /**
      * Try to find discussions data from various sources
      */
     function findDiscussionsData() {
-        // Try window property first
-        if (window.discussions && Array.isArray(window.discussions)) {
-            return window.discussions;
-        }
-        
-        // Try global variable
-        if (typeof discussions !== 'undefined' && Array.isArray(discussions)) {
-            return discussions;
-        }
-        
-        // Try data attribute
-        if (discussionsContainer) {
-            const dataAttr = discussionsContainer.getAttribute('data-discussions');
-            if (dataAttr) {
-                try {
-                    const parsed = JSON.parse(dataAttr);
-                    if (Array.isArray(parsed)) return parsed;
-                } catch (e) {
-                    console.warn('Failed to parse discussions data attribute');
+        try {
+            // Try window property first
+            if (window.discussions) {
+                if (Array.isArray(window.discussions)) {
+                    return window.discussions;
+                } else if (typeof window.discussions === 'object') {
+                    // Maybe it has a discussions property?
+                    if (window.discussions.discussions && Array.isArray(window.discussions.discussions)) {
+                        return window.discussions.discussions;
+                    }
                 }
             }
+            
+            // Try global variable
+            if (typeof discussions !== 'undefined') {
+                if (Array.isArray(discussions)) {
+                    return discussions;
+                } else if (typeof discussions === 'object') {
+                    // Maybe it has a discussions property?
+                    if (discussions.discussions && Array.isArray(discussions.discussions)) {
+                        return discussions.discussions;
+                    }
+                }
+            }
+            
+            // Try data attribute with more parsing options
+            if (discussionsContainer) {
+                // Try data-discussions attribute
+                let dataAttr = discussionsContainer.getAttribute('data-discussions');
+                if (dataAttr) {
+                    try {
+                        const parsed = JSON.parse(dataAttr);
+                        if (Array.isArray(parsed)) return parsed;
+                        if (parsed && Array.isArray(parsed.discussions)) return parsed.discussions;
+                    } catch (e) {
+                        console.warn('Failed to parse discussions data attribute');
+                    }
+                }
+                
+                // Try data-discussions-url attribute
+                dataAttr = discussionsContainer.getAttribute('data-discussions-url');
+                if (dataAttr) {
+                    console.log('Found data-discussions-url attribute, but async loading not implemented');
+                    // We could implement async loading here in the future
+                }
+            }
+            
+        } catch (e) {
+            console.error('Error finding discussion data:', e);
         }
         
         // Return empty array if no data found
