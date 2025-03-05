@@ -390,11 +390,12 @@ async function addReplyToDiscussion(parentId, content, mediaFile) {
             mediaType = mediaFile.type;
         }
         
-        // Create new reply entry
+        // Create new reply entry - Add a title field since it's required
         const { error } = await window.projectSupabase
             .from('discussions')
             .insert([
                 { 
+                    title: "Reply",   // Add this line to satisfy the NOT NULL constraint
                     content, 
                     media_url: mediaUrl,
                     media_type: mediaType,
