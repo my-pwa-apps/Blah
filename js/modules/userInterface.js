@@ -146,6 +146,16 @@ const UserInterface = {
                             <button type="submit" class="submit-btn">Save Changes</button>
                         </form>
                     </div>
+                    <div class="friends-section">
+                        <h3>Friends</h3>
+                        <div class="invite-friend">
+                            <input type="text" id="friendEmail" placeholder="Friend's email">
+                            <button id="inviteFriendBtn" class="submit-btn">Invite Friend</button>
+                        </div>
+                        <div id="friendsList" class="friends-list">
+                            <div class="loading">Loading friends...</div>
+                        </div>
+                    </div>
                     <div class="profile-actions">
                         <button id="logoutBtn" class="danger-btn">Logout</button>
                     </div>
@@ -154,6 +164,7 @@ const UserInterface = {
 
             document.body.appendChild(modal);
             this.setupProfileModalEvents(modal, userProfile);
+            this.loadFriendsList();
         } catch (error) {
             console.error('Error showing profile modal:', error);
             // Show error message to user
@@ -245,6 +256,59 @@ const UserInterface = {
                 console.error('Logout failed:', error);
             }
         };
+
+        // Add friend invitation handler
+        const inviteFriendBtn = modal.querySelector('#inviteFriendBtn');
+        const friendEmailInput = modal.querySelector('#friendEmail');
+
+        inviteFriendBtn.onclick = async () => {
+            const email = friendEmailInput.value.trim();
+            if (!email) {
+                alert('Please enter a friend\'s email');
+                return;
+            }
+
+            try {
+                inviteFriendBtn.disabled = true;
+                inviteFriendBtn.textContent = 'Sending...';
+                
+                await window.UserAuth.inviteFriend(email);
+                
+                friendEmailInput.value = '';
+                alert('Invitation sent successfully!');
+            } catch (error) {
+                alert(error.message || 'Failed to send invitation');
+            } finally {
+                inviteFriendBtn.disabled = false;
+                inviteFriendBtn.textContent = 'Invite Friend';
+            }
+        };
+    },
+
+    async loadFriendsList() {
+        const friendsList = document.querySelector('#friendsList');
+        if (!friendsList) return;
+
+        try {
+            const friends = await window.UserAuth.getFriends();
+            
+            if (!friends || friends.length === 0) {
+                friendsList.innerHTML = '<div class="no-friends">No friends yet</div>';
+                return;
+            }
+
+            friendsList.innerHTML = friends.map(friend => `
+                <div class="friend-item">
+                    <img src="${friend.avatar_url || 'images/default-avatar.png'}" 
+                         alt="${friend.display_name}" 
+                         class="friend-avatar"
+                         onerror="this.src='images/default-avatar.png'">
+                    <span class="friend-name">${friend.display_name}</span>
+                </div>
+            `).join('');
+        } catch (error) {
+            friendsList.innerHTML = '<div class="error">Failed to load friends</div>';
+        }
     },
 
     /**

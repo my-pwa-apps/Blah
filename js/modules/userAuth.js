@@ -357,6 +357,41 @@ const UserAuth = {
         }
     },
 
+    async inviteFriend(email) {
+        try {
+            const { data: session } = await window.projectSupabase.auth.getSession();
+            if (!session.session) throw new Error('No active session');
+
+            // Check if user exists
+            const { data: user, error: userError } = await window.projectSupabase
+                .from('profiles')
+                .select('id')
+                .eq('email', email)
+                .single();
+
+            if (userError && userError.code === 'PGRST116') {
+                throw new Error('User not found. Please check the email address.');
+            }
+            if (userError) throw userError;
+
+            // Create friendship request
+            const { error: friendError } = await window.projectSupabase
+                .from('friendships')
+                .insert({
+                    user_id: session.session.user.id,
+                    friend_id: user.id,
+                    status: 'pending'
+                });
+
+            if (friendError) throw friendError;
+
+            return true;
+        } catch (error) {
+            console.error('Friend invitation error:', error);
+            throw error;
+        }
+    },
+
     /**
      * Show the auth modal for login/register
      */
