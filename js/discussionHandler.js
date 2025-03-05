@@ -1,285 +1,402 @@
-const DiscussionHandler = (function() {
-    let wsManager = null;
+/**
+ * Discussion Handler Module
+ * Handles discussion rendering and real-time updates
+ */
+window.discussionHandler = (function() {
+    // Private state
+    let socketManager = null;
+    let initialized = false;
+    let discussionsContainer = null;
     
-    class Discussion {
-        constructor(data) {
-            this.id = data.id;
-            this.title = data.title;
-            this.content = data.content;
-            this.type = data.type;
-            this.parentId = data.parentId;
-        }
-        
-        render() {
-            if (!this.validate()) return null;
-            return createDiscussionElement(this);
-        }
-        
-        validate() {
-            return Boolean(this.title && this.id);
-        }
-    }
-
+    /**
+     * Initialize the discussion handler
+     */
     function init() {
-        wsManager = new WebSocketManager({
-            url: 'ws://your-server-url/discussions',
-            onMessage: handleRealtimeUpdate
-        });
+        if (initialized) return;
         
-        attachEventListeners();
-        return {
-            loadDiscussions,
-            cleanup
-        };
-    }
-
-    function cleanup() {
-        wsManager?.disconnect();
-        removeEventListeners();
-    }
-
-    function attachEventListeners() {
-        window.addEventListener('beforeunload', cleanup);
-        // ...existing event listener code...
-    }
-
-    function removeEventListeners() {
-        window.removeEventListener('beforeunload', cleanup);
-        // ...existing removal code...
-    }
-
-    function handleRealtimeUpdate(update) {
         try {
-            const discussion = new Discussion(update);
-            if (!discussion.validate()) return;
+            discussionsContainer = document.getElementById('discussions-container');
+            if (!discussionsContainer) {
+                console.error('Discussion container not found');
+                return;
+            }
             
-            const element = discussion.render();
-            if (!element) return;
+            // Initialize WebSocket if available
+            if (typeof WebSocketManager === 'function') {
+                initWebSocket();
+            }
             
-            updateDOM(element, discussion);
+            // Attach event listeners
+            window.addEventListener('beforeunload', cleanup);
+            
+            initialized = true;
+            console.log('Discussion handler initialized');
+            
+            return {
+                loadDiscussions,
+                addDiscussion,
+                addReply,
+                cleanup
+            };
         } catch (error) {
-            console.error('Error handling update:', error);
+            console.error('Failed to initialize discussion handler:', error);
+            return {
+                loadDiscussions: () => showError('Handler initialization failed'),
+                cleanup: () => {}
+            };
         }
     }
-
-    function updateDOM(element, discussion) {
-        const container = document.getElementById('discussions-container');
-        if (!container) return;
-        
-        element.classList.add('discussion-new');
-        
-        if (discussion.type === 'reply') {
-            appendReply(element, discussion.parentId);
-        } else {
-            container.insertBefore(element, container.firstChild);
-        }
-        
-        requestAnimationFrame(() => element.classList.remove('discussion-new'));
-    }
-
-    function appendReply(element, parentId) {
-        const parentDiscussion = document.querySelector(`[data-discussion-id="${parentId}"]`);
-        if (parentDiscussion) {
-            parentDiscussion.querySelector('.discussion-replies')?.appendChild(element);
+    
+    /**
+     * Set up WebSocket connection
+     */
+    function initWebSocket() {
+        try {
+            socketManager = new WebSocketManager({
+                url: 'ws://your-server-url/discussions',
+                onMessage: handleSocketMessage
+            });
+        } catch (error) {
+            console.error('WebSocket initialization failed:', error);
         }
     }
-
-    function createDiscussionElement(discussion) {
-        if (!discussion?.title || !discussion?.id) {
-            console.warn('Invalid discussion data:', discussion);
-            return null;
+    
+    /**
+     * Handle incoming WebSocket messages
+     */
+    function handleSocketMessage(data) {
+        try {
+            if (!data || typeof data !== 'object') return;
+            
+            if (data.type === 'reply' && data.parentId) {
+                addReply(data);
+            } else {
+                addDiscussion(data);
+            }
+        } catch (error) {
+            console.error('Failed to handle WebSocket message:', error);
         }
+    }
+    
+    /**
+     * Load discussions from data source
+     */
+    function loadDiscussions() {
+        if (!discussionsContainer) {
+            console.error('Discussion container not available');
+            return false;
+        }
+        
+        discussionsContainer.classList.add('loading');
+        showStatus('Loading discussions...');
         
         try {
+            // Find discussions data source
+            let discussionsData = findDiscussionsData();
+            
+            // Clear existing discussions
+            clearDiscussions();
+            
+            // Handle empty discussions
+            if (!discussionsData || !discussionsData.length) {
+                showEmpty('No discussions available');
+                return true;
+            }
+            
+            // Render discussions
+            renderDiscussions(discussionsData);
+            return true;
+        } catch (error) {
+            console.error('Failed to load discussions:', error);
+            showError('Failed to load discussions');
+            return false;
+        } finally {
+            discussionsContainer.classList.remove('loading');
+        }
+    }
+    
+    /**
+     * Try to find discussions data from various sources
+     */
+    function findDiscussionsData() {
+        // Try window property first
+        if (window.discussions && Array.isArray(window.discussions)) {
+            return window.discussions;
+        }
+        
+        // Try global variable
+        if (typeof discussions !== 'undefined' && Array.isArray(discussions)) {
+            return discussions;
+        }
+        
+        // Try data attribute
+        if (discussionsContainer) {
+            const dataAttr = discussionsContainer.getAttribute('data-discussions');
+            if (dataAttr) {
+                try {
+                    const parsed = JSON.parse(dataAttr);
+                    if (Array.isArray(parsed)) return parsed;
+                } catch (e) {
+                    console.warn('Failed to parse discussions data attribute');
+                }
+            }
+        }
+        
+        // Return empty array if no data found
+        return [];
+    }
+    
+    /**
+     * Clear all discussions from container
+     */
+    function clearDiscussions() {
+        if (discussionsContainer) {
+            // Create a new div to replace the content (safer than innerHTML)
+            const newContent = document.createElement('div');
+            newContent.id = discussionsContainer.id;
+            newContent.className = discussionsContainer.className;
+            
+            // Replace the old element with the new empty one
+            discussionsContainer.parentNode.replaceChild(newContent, discussionsContainer);
+            discussionsContainer = newContent;
+        }
+    }
+    
+    /**
+     * Render discussions to the container
+     */
+    function renderDiscussions(discussions) {
+        if (!discussionsContainer) return;
+        
+        // Use document fragment for better performance
+        const fragment = document.createDocumentFragment();
+        let validCount = 0;
+        
+        // Process each discussion
+        for (let i = 0; i < discussions.length; i++) {
+            try {
+                const discussion = discussions[i];
+                if (!isValidDiscussion(discussion)) continue;
+                
+                const element = createDiscussionElement(discussion);
+                if (element) {
+                    fragment.appendChild(element);
+                    validCount++;
+                }
+            } catch (error) {
+                console.warn(`Error rendering discussion at index ${i}:`, error);
+            }
+        }
+        
+        // Show empty message if no valid discussions
+        if (validCount === 0) {
+            showEmpty('No valid discussions found');
+            return;
+        }
+        
+        // Append all discussions at once
+        discussionsContainer.appendChild(fragment);
+    }
+    
+    /**
+     * Check if discussion object is valid
+     */
+    function isValidDiscussion(discussion) {
+        return (
+            discussion &&
+            typeof discussion === 'object' &&
+            typeof discussion.title === 'string' &&
+            discussion.title.trim() !== ''
+        );
+    }
+    
+    /**
+     * Create a discussion DOM element
+     */
+    function createDiscussionElement(discussion) {
+        try {
+            // Create safe discussion object with defaults
+            const safeDiscussion = {
+                id: String(discussion.id || `temp-${Date.now()}`),
+                title: String(discussion.title || ''),
+                content: String(discussion.content || ''),
+                type: String(discussion.type || 'discussion')
+            };
+            
+            // Skip if no title
+            if (!safeDiscussion.title.trim()) return null;
+            
+            // Create main element
             const element = document.createElement('div');
             element.className = 'discussion-item';
             element.setAttribute('role', 'article');
-            element.dataset.discussionId = discussion.id;
+            element.dataset.discussionId = safeDiscussion.id;
             
+            // Create title
             const title = document.createElement('h3');
             title.className = 'discussion-title';
-            title.textContent = discussion.title || '';
+            title.textContent = safeDiscussion.title;
+            element.appendChild(title);
             
+            // Create content
             const content = document.createElement('p');
             content.className = 'discussion-content';
-            content.textContent = discussion.content || '';
+            content.textContent = safeDiscussion.content;
+            element.appendChild(content);
             
+            // Create replies container
             const replies = document.createElement('div');
             replies.className = 'discussion-replies';
-            
-            element.appendChild(title);
-            element.appendChild(content);
             element.appendChild(replies);
+            
+            // Add touch handlers for mobile
+            element.addEventListener('touchstart', function() {
+                this.classList.add('discussion-touch');
+            });
+            
+            element.addEventListener('touchend', function() {
+                this.classList.remove('discussion-touch');
+            });
             
             return element;
         } catch (error) {
-            console.error('Error creating discussion element:', error);
+            console.error('Failed to create discussion element:', error);
             return null;
         }
     }
-
-    function displayDiscussions(discussions) {
-        try {
-            const container = document.getElementById('discussions-container');
-            if (!container) throw new Error('Discussions container not found');
-            
-            const fragment = document.createDocumentFragment();
-            container.innerHTML = '';
-            
-            if (!discussions || !Array.isArray(discussions) || !discussions.length) {
-                const empty = document.createElement('div');
-                empty.className = 'discussion-empty';
-                empty.textContent = 'No discussions found';
-                fragment.appendChild(empty);
-                container.appendChild(fragment);
-                return;
-            }
-
-            // Debug the discussions data
-            console.log('Processing discussions:', JSON.stringify(discussions).substring(0, 200) + '...');
-            
-            try {
-                // First create all valid elements
-                const validElements = [];
-                
-                for (let i = 0; i < discussions.length; i++) {
-                    try {
-                        const discussion = discussions[i];
-                        
-                        // Skip invalid discussions
-                        if (!discussion) {
-                            console.warn('Skipping null discussion at index', i);
-                            continue;
-                        }
-                        
-                        // Create a safe discussion object with defaults
-                        const safeDiscussion = {
-                            id: (discussion.id || `temp-${Date.now()}-${i}`).toString(),
-                            title: (discussion.title || '').toString(),
-                            content: (discussion.content || '').toString(),
-                            type: (discussion.type || 'discussion').toString()
-                        };
-                        
-                        // Skip discussions without titles
-                        if (!safeDiscussion.title) {
-                            console.warn('Skipping discussion without title at index', i);
-                            continue;
-                        }
-                        
-                        // Create the element
-                        const element = createDiscussionElement(safeDiscussion);
-                        
-                        // Only add valid DOM nodes
-                        if (element && element.nodeType === Node.ELEMENT_NODE) {
-                            validElements.push(element);
-                        } else {
-                            console.warn('Invalid element created for discussion at index', i);
-                        }
-                    } catch (err) {
-                        console.error('Error processing discussion at index', i, err);
-                    }
-                }
-                
-                // Now append all valid elements to the fragment
-                if (validElements.length === 0) {
-                    const empty = document.createElement('div');
-                    empty.className = 'discussion-empty';
-                    empty.textContent = 'No valid discussions found';
-                    fragment.appendChild(empty);
-                } else {
-                    validElements.forEach(element => {
-                        fragment.appendChild(element);
-                    });
-                }
-            } catch (err) {
-                console.error('Error processing discussions:', err);
-                const error = document.createElement('div');
-                error.className = 'discussion-error';
-                error.textContent = 'Error processing discussions';
-                fragment.appendChild(error);
-            }
-
-            container.appendChild(fragment);
-            return true;
-        } catch (error) {
-            console.error('Error displaying discussions:', error);
-            showErrorMessage('Failed to display discussions');
-            return false;
-        }
-    }
-
-    function handleTouchStart(e) {
-        this.classList.add('discussion-touch');
-    }
-
-    function handleTouchEnd(e) {
-        this.classList.remove('discussion-touch');
-    }
-
-    function showErrorMessage(message) {
-        const container = document.getElementById('discussions-container');
-        if (!container) return;
-        
-        const error = document.createElement('div');
-        error.className = 'discussion-error';
-        error.textContent = message;
-        container.appendChild(error);
-    }
-
-    function loadDiscussions() {
-        const container = document.getElementById('discussions-container');
-        if (!container) return;
-        
-        container.classList.add('loading');
+    
+    /**
+     * Add a new discussion to the container
+     */
+    function addDiscussion(discussion) {
+        if (!discussionsContainer || !isValidDiscussion(discussion)) return null;
         
         try {
-            // Check if WebSocketManager exists
-            if (typeof WebSocketManager !== 'undefined' && wsManager) {
-                wsManager.connect();
+            const element = createDiscussionElement(discussion);
+            if (!element) return null;
+            
+            element.classList.add('discussion-new');
+            
+            // Add to the beginning of the list
+            if (discussionsContainer.firstChild) {
+                discussionsContainer.insertBefore(element, discussionsContainer.firstChild);
             } else {
-                console.warn('WebSocketManager not initialized');
+                discussionsContainer.appendChild(element);
             }
             
-            // Get discussions data with more robust error handling
-            let discussionsData = [];
-            try {
-                // Try to get discussions from window or global scope
-                if (typeof window.discussions === 'object' && Array.isArray(window.discussions)) {
-                    discussionsData = window.discussions;
-                } else if (typeof discussions === 'object' && Array.isArray(discussions)) {
-                    discussionsData = discussions;
-                } else {
-                    // Try to get from data attribute
-                    const dataAttr = container.getAttribute('data-discussions');
-                    if (dataAttr) {
-                        try {
-                            discussionsData = JSON.parse(dataAttr);
-                        } catch (e) {
-                            console.error('Failed to parse discussions data attribute:', e);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('Error accessing discussions data:', e);
-            }
+            // Remove highlight after animation
+            setTimeout(() => {
+                element.classList.remove('discussion-new');
+            }, 300);
             
-            // Ensure we have an array
-            if (!Array.isArray(discussionsData)) {
-                console.warn('Discussions not found or not an array, using empty array');
-                discussionsData = [];
-            }
-            
-            displayDiscussions(discussionsData);
+            return element;
         } catch (error) {
-            console.error('Error loading discussions:', error);
-            showErrorMessage('Failed to load discussions');
-        } finally {
-            container.classList.remove('loading');
+            console.error('Failed to add discussion:', error);
+            return null;
         }
     }
-
-    return { init };
+    
+    /**
+     * Add a reply to an existing discussion
+     */
+    function addReply(reply) {
+        if (!discussionsContainer || !isValidDiscussion(reply) || !reply.parentId) return null;
+        
+        try {
+            const parentEl = discussionsContainer.querySelector(`[data-discussion-id="${reply.parentId}"]`);
+            if (!parentEl) return null;
+            
+            const repliesEl = parentEl.querySelector('.discussion-replies');
+            if (!repliesEl) return null;
+            
+            const element = createDiscussionElement(reply);
+            if (!element) return null;
+            
+            element.classList.add('discussion-reply', 'discussion-new');
+            repliesEl.appendChild(element);
+            
+            // Remove highlight after animation
+            setTimeout(() => {
+                element.classList.remove('discussion-new');
+            }, 300);
+            
+            return element;
+        } catch (error) {
+            console.error('Failed to add reply:', error);
+            return null;
+        }
+    }
+    
+    /**
+     * Show error message in container
+     */
+    function showError(message) {
+        if (!discussionsContainer) return;
+        
+        try {
+            const errorEl = document.createElement('div');
+            errorEl.className = 'discussion-error';
+            errorEl.textContent = message || 'An error occurred';
+            
+            clearDiscussions();
+            discussionsContainer.appendChild(errorEl);
+        } catch (error) {
+            console.error('Failed to show error message:', error);
+        }
+    }
+    
+    /**
+     * Show empty message in container
+     */
+    function showEmpty(message) {
+        if (!discussionsContainer) return;
+        
+        try {
+            const emptyEl = document.createElement('div');
+            emptyEl.className = 'discussion-empty';
+            emptyEl.textContent = message || 'No discussions found';
+            
+            discussionsContainer.appendChild(emptyEl);
+        } catch (error) {
+            console.error('Failed to show empty message:', error);
+        }
+    }
+    
+    /**
+     * Show status message in container
+     */
+    function showStatus(message) {
+        if (!discussionsContainer) return;
+        
+        try {
+            const statusEl = document.createElement('div');
+            statusEl.className = 'discussion-status';
+            statusEl.textContent = message || 'Loading...';
+            
+            clearDiscussions();
+            discussionsContainer.appendChild(statusEl);
+        } catch (error) {
+            console.error('Failed to show status message:', error);
+        }
+    }
+    
+    /**
+     * Clean up resources
+     */
+    function cleanup() {
+        try {
+            if (socketManager) {
+                socketManager.disconnect();
+                socketManager = null;
+            }
+            
+            window.removeEventListener('beforeunload', cleanup);
+            initialized = false;
+        } catch (error) {
+            console.error('Failed to clean up discussion handler:', error);
+        }
+    }
+    
+    // Return public API
+    return init();
 })();
-
-// Export for global use
-window.discussionHandler = DiscussionHandler.init();
