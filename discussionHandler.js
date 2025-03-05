@@ -1,18 +1,21 @@
 // Get Supabase client from global scope
 const supabase = window.projectSupabase;
 
+// Define functions in global scope
+window.discussionHandler = {};
+
 /**
  * Loads discussions based on the specified type
  * @param {string} type - 'all' or 'friends'
  */
-export async function loadDiscussions(type) {
+window.discussionHandler.loadDiscussions = async function(type) {
     try {
         console.log('Loading discussions in handler');
         
-        // Fetch discussions with their replies
+        // Fetch discussions (without trying to join replies - we'll handle that separately)
         let { data: discussions, error } = await supabase
             .from('discussions')
-            .select('*, replies(*)')
+            .select('*')
             .is('parent_id', null)
             .order('created_at', { ascending: false });
 
@@ -21,13 +24,35 @@ export async function loadDiscussions(type) {
         }
 
         console.log('Discussions loaded:', discussions);
+        
+        // Fetch replies for all discussions
+        if (discussions && discussions.length > 0) {
+            // Get all discussion IDs
+            const discussionIds = discussions.map(d => d.id);
+            
+            // Get replies for these discussions
+            let { data: replies, error: repliesError } = await supabase
+                .from('discussions')
+                .select('*')
+                .in('parent_id', discussionIds);
+                
+            if (repliesError) {
+                console.error('Error fetching replies:', repliesError);
+            } else if (replies) {
+                // Attach replies to their parent discussions
+                discussions.forEach(discussion => {
+                    discussion.replies = replies.filter(reply => reply.parent_id === discussion.id);
+                });
+            }
+        }
+        
         displayDiscussions(discussions || [], type);
     } catch (error) {
         console.error('Error fetching discussions:', error);
         document.getElementById('discussions').innerHTML = 
             '<p class="error-message">Failed to load discussions. Please try again later.</p>';
     }
-}
+};
 
 /**
  * Displays discussions in the UI
@@ -142,7 +167,7 @@ function escapeHtml(str) {
  * @param {File} mediaFile - Optional media file
  * @returns {Promise} Promise resolving when discussion is created
  */
-export async function createNewDiscussion(title, content, mediaFile) {
+window.discussionHandler.createNewDiscussion = async function(title, content, mediaFile) {
     console.log('Creating new discussion:', { title, content });
     try {
         let mediaUrl = null;
@@ -191,7 +216,7 @@ export async function createNewDiscussion(title, content, mediaFile) {
         console.error('Error creating discussion:', error);
         throw error;
     }
-}
+};
 
 /**
  * Opens a modal for replying to a discussion

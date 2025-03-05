@@ -127,7 +127,8 @@ function setupFormSubmission() {
         submitBtn.disabled = true;
         
         try {
-            await createNewDiscussion(title, content, mediaFile);
+            // Use the global function from discussionHandler
+            await window.discussionHandler.createNewDiscussion(title, content, mediaFile);
             
             // Reset form and close modal
             document.getElementById('newDiscussionForm').reset();
@@ -157,11 +158,6 @@ if (localStorage.getItem('darkMode') === 'true') {
 // Simple function to load discussions directly
 function loadDiscussions(type) {
     console.log(`Loading discussions: ${type}`);
-    import('./discussionHandler.js')
-        .then(module => {
-            module.loadDiscussions(type, supabase);
-        })
-        .catch(error => {
-            console.error('Error importing discussion handler:', error);
-        });
+    // Use the global function from discussionHandler
+    window.discussionHandler.loadDiscussions(type);
 }
