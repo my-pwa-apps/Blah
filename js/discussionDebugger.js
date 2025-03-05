@@ -2,10 +2,17 @@
  * Discussion Debugger
  * Helps troubleshoot issues with the discussion handler
  */
+console.log('%c[DiscussionDebugger] Script loading', 'color: #8B008B; font-weight: bold');
+
 window.discussionDebugger = (function() {
+    console.log('%c[DiscussionDebugger] Inside IIFE', 'color: #8B008B; font-weight: bold');
     
     function init() {
-        console.log('%c[DiscussionDebugger] Initialized', 'color: #8B008B; font-weight: bold');
+        console.log('%c[DiscussionDebugger] Initializing', 'color: #8B008B; font-weight: bold');
+        
+        // Run diagnostics immediately
+        setTimeout(diagnose, 0);
+        
         return {
             diagnose,
             inspectDOM,
@@ -174,9 +181,23 @@ window.discussionDebugger = (function() {
     return init();
 })();
 
-// Run diagnostics on page load
-window.addEventListener('load', function() {
-    if (window.discussionDebugger) {
-        window.discussionDebugger.diagnose();
+// Run diagnostics immediately
+console.log('%c[DiscussionDebugger] Running immediate diagnose', 'color: #8B008B; font-weight: bold');
+try {
+    // Force DOM test regardless of other code
+    const container = document.getElementById('discussions-container');
+    console.log('%c[DiscussionDebugger] Container check:', 'color: #8B008B', container);
+    
+    if (container) {
+        const emergencyTest = document.createElement('div');
+        emergencyTest.textContent = 'EMERGENCY DEBUG TEST';
+        emergencyTest.style.background = 'purple';
+        emergencyTest.style.color = 'white';
+        emergencyTest.style.padding = '5px';
+        emergencyTest.style.margin = '5px';
+        container.appendChild(emergencyTest);
+        console.log('%c[DiscussionDebugger] Emergency append test successful', 'color: green; font-weight: bold');
     }
-});
+} catch (e) {
+    console.error('%c[DiscussionDebugger] CRITICAL ERROR in emergency test:', 'color: red; background: yellow', e);
+}

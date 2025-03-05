@@ -1,3 +1,6 @@
+// Immediate execution debug statement
+console.log('%c[DISCUSSION DEBUG] Script loaded and executing', 'color: red; font-size: 16px; font-weight: bold');
+
 /**
  * Discussion Handler Module
  * Handles discussion rendering and real-time updates
@@ -9,19 +12,17 @@ window.discussionHandler = (function() {
     let discussionsContainer = null;
     const DEBUG = true; // Enable verbose debugging
     
-    /**
-     * Debug logger
-     */
+    // Immediate execution inside IIFE
+    console.log('%c[DISCUSSION DEBUG] Inside module IIFE', 'color: red; font-size: 14px');
+    
+    // Simplified debug function that always logs regardless of DEBUG flag
     function debug(message, ...args) {
-        if (!DEBUG) return;
-        console.log(`%c[DiscussionHandler] ${message}`, 'color: #6495ED', ...args);
+        console.log(`%c[DiscussionHandler] ${message}`, 'color: #6495ED; font-weight: bold', ...args);
     }
     
-    /**
-     * Error logger
-     */
+    // Always log errors with stack trace
     function logError(message, error) {
-        console.error(`%c[DiscussionHandler ERROR] ${message}`, 'color: #FF6347', error);
+        console.error(`%c[DiscussionHandler ERROR] ${message}`, 'color: #FF6347; font-size: 14px; font-weight: bold', error);
         console.trace('Stack trace:');
     }
     
@@ -29,7 +30,11 @@ window.discussionHandler = (function() {
      * Initialize the discussion handler
      */
     function init() {
+        // Immediate execution debug
+        console.log('%c[DISCUSSION DEBUG] Init function called', 'color: red');
+        
         debug('Initializing discussion handler');
+        
         if (initialized) {
             debug('Already initialized, skipping');
             return;
@@ -37,10 +42,16 @@ window.discussionHandler = (function() {
         
         try {
             discussionsContainer = document.getElementById('discussions-container');
+            
+            // Immediate container check
+            console.log('%c[DISCUSSION DEBUG] Container found?', 'color: red', Boolean(discussionsContainer));
+            console.log('%c[DISCUSSION DEBUG] Container:', 'color: red', discussionsContainer);
+            
             debug('Container found?', Boolean(discussionsContainer));
             
             if (!discussionsContainer) {
                 logError('Discussion container not found');
+                console.error('%c[CRITICAL ERROR] discussions-container element not found in DOM', 'color: red; font-size: 16px; background: yellow');
                 return null;
             }
             
@@ -73,7 +84,10 @@ window.discussionHandler = (function() {
         } catch (error) {
             logError('Failed to initialize discussion handler', error);
             return {
-                loadDiscussions: () => showError('Handler initialization failed'),
+                loadDiscussions: () => { 
+                    console.error('%c[CRITICAL ERROR] Using fallback loadDiscussions due to init failure', 'color: red; font-size: 14px');
+                    showError('Handler initialization failed');
+                },
                 cleanup: () => {}
             };
         }
@@ -114,9 +128,13 @@ window.discussionHandler = (function() {
      * Load discussions from data source
      */
     function loadDiscussions() {
+        // Immediate execution debug
+        console.log('%c[DISCUSSION DEBUG] loadDiscussions called', 'color: red; font-size: 14px');
+        
         debug('loadDiscussions() called');
         
         if (!discussionsContainer) {
+            console.error('%c[CRITICAL ERROR] discussionsContainer is null in loadDiscussions', 'color: red; font-size: 14px; background: yellow');
             logError('Discussion container not available');
             return false;
         }
@@ -126,14 +144,12 @@ window.discussionHandler = (function() {
         
         try {
             debug('Call stack:', new Error().stack);
-            debug('Container state before loading:', {
-                childNodes: discussionsContainer.childNodes.length,
-                innerHTML: discussionsContainer.innerHTML.substring(0, 100) + '...'
-            });
             
             // Find discussions data source
-            debug('Looking for discussions data');
+            console.log('%c[DISCUSSION DEBUG] Looking for discussions data', 'color: red');
             let discussionsData = findDiscussionsData();
+            
+            console.log('%c[DISCUSSION DEBUG] discussionsData found:', 'color: red', discussionsData);
             
             debug('Found discussions data:', {
                 type: Array.isArray(discussionsData) ? 'Array' : typeof discussionsData,
@@ -145,20 +161,35 @@ window.discussionHandler = (function() {
             debug('Clearing existing discussions');
             clearDiscussions();
             
-            // Handle empty discussions
+            // Always create at least mock data if none found
             if (!discussionsData || !discussionsData.length) {
-                debug('No discussions data found, showing empty message');
-                showEmpty('No discussions available');
-                return true;
+                console.log('%c[DISCUSSION DEBUG] No discussions data, creating mock data', 'color: red');
+                discussionsData = [
+                    { id: 'mock1', title: 'Mock Discussion 1', content: 'This is a mock discussion for debugging' },
+                    { id: 'mock2', title: 'Mock Discussion 2', content: 'This is another mock discussion' }
+                ];
+            }
+            
+            // Try simple DOM operations
+            console.log('%c[DISCUSSION DEBUG] Testing basic DOM append', 'color: red');
+            try {
+                const testElement = document.createElement('div');
+                testElement.textContent = 'DOM Test Element';
+                testElement.style.color = 'red';
+                discussionsContainer.appendChild(testElement);
+                console.log('%c[DISCUSSION DEBUG] Basic DOM append successful', 'color: green');
+            } catch (e) {
+                console.error('%c[CRITICAL ERROR] Basic DOM append failed', 'color: red; font-size: 14px; background: yellow', e);
             }
             
             // Render discussions with safer approach
-            debug('Beginning to render discussions, count:', discussionsData.length);
+            console.log('%c[DISCUSSION DEBUG] Beginning to render discussions, count:', 'color: red', discussionsData.length);
             renderDiscussionsSafe(discussionsData);
             
             debug('loadDiscussions completed');
             return true;
         } catch (error) {
+            console.error('%c[CRITICAL ERROR] Failed to load discussions', 'color: red; font-size: 16px; background: yellow', error);
             logError('Failed to load discussions', error);
             showError('Failed to load discussions. Please check console for details.');
             return false;
@@ -829,6 +860,49 @@ window.discussionHandler = (function() {
         }
     }
     
+    // Immediately run diagnostic on script load
+    console.log('%c[DISCUSSION DEBUG] Running immediate DOM check:', 'color: red; font-size: 14px');
+    const containerCheck = document.getElementById('discussions-container');
+    console.log('%c[DISCUSSION DEBUG] Container exists?', 'color: red', Boolean(containerCheck));
+    if (containerCheck) {
+        console.log('%c[DISCUSSION DEBUG] Container properties:', 'color: red', {
+            id: containerCheck.id,
+            className: containerCheck.className,
+            innerHTML: containerCheck.innerHTML.substring(0, 100) + '...'
+        });
+    }
+    
     // Return public API
-    return init();
+    const api = init();
+    console.log('%c[DISCUSSION DEBUG] Init returned:', 'color: red', api);
+    return api;
 })();
+
+// Immediate verification after module definition
+console.log('%c[DISCUSSION DEBUG] Module defined, handler exists?', 'color: red; font-size: 14px', Boolean(window.discussionHandler));
+console.log('%c[DISCUSSION DEBUG] Handler methods:', 'color: red', window.discussionHandler);
+
+// Force diagnostic run immediately without waiting for window.load
+setTimeout(function() {
+    console.log('%c[DISCUSSION DEBUG] Running immediate diagnostics', 'color: red; font-size: 14px');
+    
+    if (!document.getElementById('discussions-container')) {
+        console.error('%c[CRITICAL ERROR] discussions-container not found in DOM in timeout check', 'color: red; font-size: 14px; background: yellow');
+    }
+    
+    // Try a minimal test render
+    try {
+        const container = document.getElementById('discussions-container');
+        if (container) {
+            const testDiv = document.createElement('div');
+            testDiv.textContent = 'Emergency test render';
+            testDiv.style.color = 'red';
+            testDiv.style.border = '1px solid red';
+            testDiv.style.padding = '5px';
+            container.appendChild(testDiv);
+            console.log('%c[DISCUSSION DEBUG] Emergency test render successful', 'color: green');
+        }
+    } catch (e) {
+        console.error('%c[CRITICAL ERROR] Emergency test render failed:', 'color: red; background: yellow', e);
+    }
+}, 100);
