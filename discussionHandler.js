@@ -1,6 +1,3 @@
-// Get Supabase client from global scope
-const supabase = window.projectSupabase;
-
 // Define functions in global scope
 window.discussionHandler = {};
 
@@ -13,7 +10,7 @@ window.discussionHandler.loadDiscussions = async function(type) {
         console.log('Loading discussions in handler');
         
         // Fetch discussions (without trying to join replies - we'll handle that separately)
-        let { data: discussions, error } = await supabase
+        let { data: discussions, error } = await window.projectSupabase
             .from('discussions')
             .select('*')
             .is('parent_id', null)
@@ -31,7 +28,7 @@ window.discussionHandler.loadDiscussions = async function(type) {
             const discussionIds = discussions.map(d => d.id);
             
             // Get replies for these discussions
-            let { data: replies, error: repliesError } = await supabase
+            let { data: replies, error: repliesError } = await window.projectSupabase
                 .from('discussions')
                 .select('*')
                 .in('parent_id', discussionIds);
@@ -175,7 +172,7 @@ window.discussionHandler.createNewDiscussion = async function(title, content, me
         
         // Upload media file if provided
         if (mediaFile) {
-            const { data: uploadData, error: uploadError } = await supabase.storage
+            const { data: uploadData, error: uploadError } = await window.projectSupabase.storage
                 .from('discussion-media')
                 .upload(`${Date.now()}_${mediaFile.name}`, mediaFile);
                 
@@ -184,7 +181,7 @@ window.discussionHandler.createNewDiscussion = async function(title, content, me
             }
             
             // Get public URL for the uploaded file
-            const { data: { publicUrl } } = supabase.storage
+            const { data: { publicUrl } } = window.projectSupabase.storage
                 .from('discussion-media')
                 .getPublicUrl(uploadData.path);
             
@@ -193,7 +190,7 @@ window.discussionHandler.createNewDiscussion = async function(title, content, me
         }
         
         // Create new discussion entry
-        const { data, error } = await supabase
+        const { data, error } = await window.projectSupabase
             .from('discussions')
             .insert([
                 { 
@@ -345,7 +342,7 @@ async function addReplyToDiscussion(parentId, content, mediaFile) {
         
         // Upload media file if provided
         if (mediaFile) {
-            const { data: uploadData, error: uploadError } = await supabase.storage
+            const { data: uploadData, error: uploadError } = await window.projectSupabase.storage
                 .from('discussion-media')
                 .upload(`replies/${Date.now()}_${mediaFile.name}`, mediaFile);
                 
@@ -354,7 +351,7 @@ async function addReplyToDiscussion(parentId, content, mediaFile) {
             }
             
             // Get public URL for the uploaded file
-            const { data: { publicUrl } } = supabase.storage
+            const { data: { publicUrl } } = window.projectSupabase.storage
                 .from('discussion-media')
                 .getPublicUrl(uploadData.path);
             
@@ -363,7 +360,7 @@ async function addReplyToDiscussion(parentId, content, mediaFile) {
         }
         
         // Create new reply entry
-        const { error } = await supabase
+        const { error } = await window.projectSupabase
             .from('discussions')
             .insert([
                 { 
