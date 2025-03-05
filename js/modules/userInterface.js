@@ -3,6 +3,12 @@ const UserInterface = {
      * Initialize the user interface components
      */
     init() {
+        // Check required dependencies
+        if (!window.UserAuth || !window.UserProfile) {
+            console.error('Required modules not loaded: UserAuth or UserProfile missing');
+            return;
+        }
+
         // Set up profile icon click handler
         const profileIcon = document.getElementById('profileIcon');
         if (profileIcon) {
@@ -16,6 +22,8 @@ const UserInterface = {
         
         // Check initial auth state
         this.checkInitialAuthState();
+
+        console.log('User interface initialized');
     },
 
     // ...existing code...
