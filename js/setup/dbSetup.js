@@ -104,6 +104,20 @@ async function checkDatabaseExists() {
             window.projectSupabase.from('user_preferences').select('user_id').limit(1)
         ]);
 
+        // Check if we got a permissions error, which would indicate missing RLS policies
+        if (profilesCheck.error?.message?.includes('permission denied') || 
+            prefsCheck.error?.message?.includes('permission denied')) {
+            console.warn('RLS policies may not be set up correctly');
+            document.getElementById('discussions').innerHTML = `
+                <div class="setup-instructions">
+                    <h2>Database Setup Required</h2>
+                    <p>Please run the database setup SQL commands in your Supabase SQL editor.</p>
+                    <p>You can find the commands in: <code>js/setup/database.sql</code></p>
+                </div>
+            `;
+            return false;
+        }
+
         if (profilesCheck.error || prefsCheck.error) {
             console.log('Database needs setup');
             return await setupDatabase();
