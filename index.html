@@ -64,8 +64,10 @@
         </div>
     </div>
     
-    <!-- Change script order to ensure proper initialization -->
+    <!-- Load scripts in proper order -->
     <script src="scripts.js"></script>
+    <script src="js/setup/dbSetup.js"></script>
+    <script src="js/modules/supabaseClient.js"></script>
     <script src="discussionHandler.js"></script>
 </body>
 </html>

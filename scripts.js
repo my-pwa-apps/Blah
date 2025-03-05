@@ -11,16 +11,27 @@ const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
 // Export for other modules to use
 window.projectSupabase = supabase;
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM fully loaded');
     
-    // Load initial discussions
-    loadDiscussions('all');
+    // Check if database exists before proceeding
+    const dbExists = await window.dbSetup.checkDatabaseExists();
     
-    // Set up event listeners
-    setupEventListeners();
-    
-    console.log('Event listeners set up');
+    if (dbExists) {
+        // Load initial discussions
+        loadDiscussions('all');
+        
+        // Set up event listeners
+        setupEventListeners();
+        
+        console.log('Event listeners set up');
+    } else {
+        console.log('Database setup required');
+        // The setup UI is already rendered by checkDatabaseExists
+        
+        // Disable the new discussion button until database is set up
+        document.getElementById('newDiscussionBtn').disabled = true;
+    }
 });
 
 function setupEventListeners() {

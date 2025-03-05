@@ -9,6 +9,21 @@ window.discussionHandler.loadDiscussions = async function(type) {
     try {
         console.log('Loading discussions in handler');
         
+        // Check if database exists first
+        const { count, error: countError } = await window.projectSupabase
+            .from('discussions')
+            .select('*', { count: 'exact', head: true });
+            
+        if (countError) {
+            if (countError.code === '42P01') {
+                // Table doesn't exist, trigger setup
+                await window.dbSetup.setupDatabase();
+                return;
+            } else {
+                throw countError;
+            }
+        }
+        
         // Fetch discussions (without trying to join replies - we'll handle that separately)
         let { data: discussions, error } = await window.projectSupabase
             .from('discussions')
@@ -46,8 +61,14 @@ window.discussionHandler.loadDiscussions = async function(type) {
         displayDiscussions(discussions || [], type);
     } catch (error) {
         console.error('Error fetching discussions:', error);
-        document.getElementById('discussions').innerHTML = 
-            '<p class="error-message">Failed to load discussions. Please try again later.</p>';
+        
+        // Special handling for missing table error
+        if (error.code === '42P01') {
+            await window.dbSetup.setupDatabase();
+        } else {
+            document.getElementById('discussions').innerHTML = 
+                '<p class="error-message">Failed to load discussions. Please try again later.</p>';
+        }
     }
 };
 
