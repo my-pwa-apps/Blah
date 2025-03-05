@@ -84,8 +84,22 @@ const UserAuth = {
             
             // Fetch user profile data
             if (data.user) {
-                const profile = await this.getUserProfile(data.user.id);
-                return { user: data.user, profile };
+                try {
+                    const profile = await this.getUserProfile(data.user.id);
+                    // If no profile exists, create one
+                    if (!profile) {
+                        await this.createUserProfile(data.user);
+                        return { user: data.user, profile: await this.getUserProfile(data.user.id) };
+                    }
+                    return { user: data.user, profile };
+                } catch (error) {
+                    if (error.code === 'PGRST116') {
+                        // Profile doesn't exist, create it
+                        await this.createUserProfile(data.user);
+                        return { user: data.user, profile: await this.getUserProfile(data.user.id) };
+                    }
+                    throw error;
+                }
             }
             
             return data;
@@ -139,23 +153,26 @@ const UserAuth = {
      */
     async getUserProfile(userId) {
         try {
-            // Get profile data
-            const { data: profile, error: profileError } = await window.projectSupabase
+            // Get profile data with proper query
+            const { data: profiles, error: profileError } = await window.projectSupabase
                 .from('profiles')
                 .select('*')
-                .eq('id', userId)
-                .single();
+                .eq('id', userId);
                 
             if (profileError) throw profileError;
+            
+            // Get first profile or null
+            const profile = profiles?.[0] || null;
+            if (!profile) return null;
             
             // Get user preferences
             const { data: preferences, error: prefError } = await window.projectSupabase
                 .from('user_preferences')
                 .select('*')
                 .eq('user_id', userId)
-                .single();
+                .maybeSingle();
                 
-            if (prefError && prefError.code !== 'PGRST116') { // PGRST116 is "no rows returned" which is fine
+            if (prefError && prefError.code !== 'PGRST116') {
                 throw prefError;
             }
             
@@ -165,6 +182,47 @@ const UserAuth = {
             };
         } catch (error) {
             console.error('Error fetching user profile:', error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Create user profile
+     * @param {Object} user - User object
+     * @returns {Promise<boolean>} - Profile creation result
+     */
+    async createUserProfile(user) {
+        try {
+            const username = user.email.split('@')[0];
+            const displayName = user.user_metadata?.display_name || username;
+
+            // Create profile
+            const { error: profileError } = await window.projectSupabase
+                .from('profiles')
+                .insert({
+                    id: user.id,
+                    username,
+                    display_name: displayName,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                });
+            
+            if (profileError) throw profileError;
+            
+            // Create preferences
+            const { error: prefError } = await window.projectSupabase
+                .from('user_preferences')
+                .insert({
+                    user_id: user.id,
+                    dark_mode: false,
+                    email_notifications: true
+                });
+            
+            if (prefError) throw prefError;
+            
+            return true;
+        } catch (error) {
+            console.error('Error creating user profile:', error);
             throw error;
         }
     },
