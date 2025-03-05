@@ -16,7 +16,7 @@ const UserInterface = {
         }
         
         // Listen for auth state changes
-        window.UserAuth.onAuthStateChange((event, session) => {
+        window.projectSupabase.auth.onAuthStateChange((event, session) => {
             this.updateUIForAuthState(event, session);
         });
         
@@ -26,7 +26,59 @@ const UserInterface = {
         console.log('User interface initialized');
     },
 
-    // ...existing code...
+    /**
+     * Update UI elements based on authentication state
+     */
+    async updateUIForAuthState(event, session) {
+        console.log('Auth state changed:', event);
+        
+        // Update profile icon
+        this.updateProfileIcon(session !== null);
+        
+        // Handle specific events
+        if (event === 'SIGNED_IN') {
+            // Load user profile data
+            await window.UserProfile.init();
+            
+            // Close any open auth modals
+            this.closeAllModals();
+            
+            // Refresh discussions to show personalized content
+            if (window.discussionHandler && window.discussionHandler.loadDiscussions) {
+                window.discussionHandler.loadDiscussions('all');
+            }
+        } else if (event === 'SIGNED_OUT') {
+            // Reset to default view
+            if (window.discussionHandler && window.discussionHandler.loadDiscussions) {
+                window.discussionHandler.loadDiscussions('all');
+            }
+        }
+    },
+
+    /**
+     * Close all modal dialogs
+     */
+    closeAllModals() {
+        const modals = document.querySelectorAll('.modal');
+        modals.forEach(modal => {
+            modal.style.display = 'none';
+            // If it's a temporary modal, remove it
+            if (!modal.id) {
+                modal.remove();
+            }
+        });
+    },
+
+    /**
+     * Show the authentication modal
+     */
+    showAuthModal() {
+        if (!window.UserAuth) {
+            console.error('UserAuth module not loaded');
+            return;
+        }
+        window.UserAuth.showAuthModal();
+    },
 
     /**
      * Show profile modal
@@ -171,11 +223,61 @@ const UserInterface = {
         };
     },
 
+    /**
+     * Check initial authentication state and update UI
+     */
+    async checkInitialAuthState() {
+        const { session, user } = await window.projectSupabase.auth.getSession();
+        this.updateProfileIcon(session !== null);
+    },
+
+    /**
+     * Update the profile icon appearance based on auth state
+     */
+    async updateProfileIcon(isLoggedIn) {
+        const profileIcon = document.getElementById('profileIcon');
+        if (!profileIcon) return;
+        
+        if (isLoggedIn) {
+            try {
+                // Get user profile to use avatar if available
+                const { profile } = await window.UserAuth.getCurrentSession();
+                
+                if (profile && profile.avatar_url) {
+                    // Replace icon with avatar image
+                    profileIcon.innerHTML = '';
+                    profileIcon.classList.remove('material-icons');
+                    
+                    const avatar = document.createElement('img');
+                    avatar.src = profile.avatar_url;
+                    avatar.alt = 'Profile Avatar';
+                    avatar.className = 'avatar-image';
+                    
+                    profileIcon.appendChild(avatar);
+                } else {
+                    // Use a different icon for logged in state
+                    profileIcon.innerHTML = 'account_circle';
+                    profileIcon.classList.add('material-icons');
+                }
+                
+                // Add logged-in class for styling
+                profileIcon.classList.add('logged-in');
+            } catch (error) {
+                console.error('Error updating profile icon:', error);
+                profileIcon.innerHTML = 'account_circle';
+                profileIcon.classList.add('material-icons');
+            }
+        } else {
+            // Default icon for logged out state
+            profileIcon.innerHTML = 'account_circle';
+            profileIcon.classList.add('material-icons');
+            profileIcon.classList.remove('logged-in');
+        }
+    },
+
     handleProfileClick() {
         this.showProfileModal();
     }
-    
-    // ...existing code...
 };
 
 // Make it available globally
