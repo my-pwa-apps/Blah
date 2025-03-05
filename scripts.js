@@ -1,17 +1,4 @@
-// Use Supabase from CDN instead of ES module import
-// const { createClient } = supabase;
-
-// Supabase configuration
-const supabaseUrl = 'https://eawoqpkwyunkmpyuijuq.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd29xcGt3eXVua21weXVpanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExNzM4MTYsImV4cCI6MjA1Njc0OTgxNn0.TCrAX91vjEwc_S7eYLE9RwzrNXSh1D_NKZ9XV6VfBRM';
-
-// Create a single Supabase client for the entire application
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
-
-// Export for other modules to use
-window.projectSupabase = supabase;
-
-// Use the global Supabase client instead of creating a new one
+// Use the global Supabase client from the inline script
 
 document.addEventListener('DOMContentLoaded', async () => {
     console.log('DOM fully loaded');

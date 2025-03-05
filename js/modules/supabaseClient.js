@@ -1,9 +1,4 @@
-// Supabase client configuration and initialization
-const supabaseUrl = 'https://eawoqpkwyunkmpyuijuq.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd29xcGt3eXVua21weXVpanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExNzM4MTYsImV4cCI6MjA1Njc0OTgxNn0.TCrAX91vjEwc_S7eYLE9RwzrNXSh1D_NKZ9XV6VfBRM';
-
-// Create the Supabase client
-const supabase = window.supabase.createClient(supabaseUrl, supabaseKey);
+// Use the global Supabase client instead of creating a new one
 
 // Export methods to interact with Supabase
 const SupabaseClient = {
