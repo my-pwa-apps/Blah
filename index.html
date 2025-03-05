@@ -26,10 +26,41 @@
         </div>
     </header>
     <main>
+        <div class="new-discussion-container">
+            <button id="newDiscussionBtn" class="fab">
+                <span class="material-icons">add</span>
+                New Discussion
+            </button>
+        </div>
         <section id="discussions">
             <!-- Discussions will be dynamically loaded here -->
         </section>
     </main>
+
+    <!-- New Discussion Modal -->
+    <div id="newDiscussionModal" class="modal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h3>Start a New Discussion</h3>
+            <form id="newDiscussionForm">
+                <div class="form-group">
+                    <label for="discussionTitle">Title</label>
+                    <input type="text" id="discussionTitle" required>
+                </div>
+                <div class="form-group">
+                    <label for="discussionContent">Content</label>
+                    <textarea id="discussionContent" rows="4" required></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="discussionMedia">Add Media (optional)</label>
+                    <input type="file" id="discussionMedia" accept="image/*,video/*">
+                    <div id="mediaPreview" class="media-preview"></div>
+                </div>
+                <button type="submit" class="submit-btn">Post Discussion</button>
+            </form>
+        </div>
+    </div>
+    
     <script type="module" src="scripts.js"></script>
 </body>
 </html>

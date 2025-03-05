@@ -1,13 +1,13 @@
 body {
     font-family: 'Roboto', sans-serif;
-    background-color: #F0F4F8; /* light grey */
+    background-color: #E8F5E9; /* light green */
     color: #333; /* dark grey */
     margin: 0;
     padding: 0;
 }
 
 header {
-    background-color: #4CAF50; /* modern green */
+    background-color: #7CB342; /* sage */
     color: white;
     padding: 1rem;
     display: flex;
@@ -35,7 +35,7 @@ h1 {
 h2 {
     margin: 0;
     font-size: 1rem;
-    color: #C8E6C9; /* light green */
+    color: #E8F5E9; /* light green */
 }
 
 nav {
@@ -43,9 +43,9 @@ nav {
 }
 
 button {
-    background-color: #66BB6A; /* modern green */
+    background-color: #AED581; /* light sage */
     border: none;
-    color: white;
+    color: #33691E; /* dark green */
     padding: 0.5rem 1rem;
     margin: 0.5rem;
     cursor: pointer;
@@ -54,7 +54,7 @@ button {
 }
 
 button:hover {
-    background-color: #388E3C; /* darker green */
+    background-color: #8BC34A; /* darker light sage */
 }
 
 .profile-container {
@@ -70,10 +70,144 @@ button:hover {
 
 main {
     padding: 1rem;
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+.new-discussion-container {
+    display: flex;
+    justify-content: flex-end;
+    margin: 1rem 0;
+}
+
+.fab {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: #7CB342; /* sage */
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 50px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.fab:hover {
+    background-color: #558B2F; /* darker sage */
 }
 
 #discussions {
     margin-top: 1rem;
+}
+
+.discussion {
+    background-color: white;
+    border-radius: 8px;
+    padding: 1rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.discussion h2 {
+    color: #33691E; /* dark green */
+    margin-top: 0;
+}
+
+.discussion-content {
+    margin-top: 0.5rem;
+}
+
+.media-container {
+    margin-top: 1rem;
+    max-width: 100%;
+}
+
+.media-container img, 
+.media-container video {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+.replies-container {
+    margin-left: 1.5rem;
+    border-left: 2px solid #C8E6C9; /* very light green */
+    padding-left: 1rem;
+    margin-top: 1rem;
+}
+
+.reply {
+    margin-bottom: 0.5rem;
+    padding: 0.75rem;
+    background-color: #F5F5F5;
+    border-radius: 4px;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: #fff;
+    margin: 10% auto;
+    padding: 1.5rem;
+    width: 80%;
+    max-width: 600px;
+    border-radius: 8px;
+    position: relative;
+}
+
+.close-modal {
+    position: absolute;
+    right: 1.25rem;
+    top: 1rem;
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 0.5rem;
+    color: #33691E; /* dark green */
+}
+
+.form-group input,
+.form-group textarea {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    box-sizing: border-box;
+}
+
+.media-preview {
+    margin-top: 1rem;
+    max-width: 300px;
+}
+
+.media-preview img,
+.media-preview video {
+    max-width: 100%;
+    height: auto;
+    border-radius: 4px;
+}
+
+.submit-btn {
+    background-color: #7CB342; /* sage */
+    color: white;
+    padding: 0.75rem 1.5rem;
 }
 
 body.dark-mode {
@@ -92,4 +226,29 @@ button.dark-mode {
 
 button.dark-mode:hover {
     background-color: #6B6B6B;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    header {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .title-container {
+        margin-bottom: 1rem;
+    }
+    
+    nav {
+        margin: 0.5rem 0;
+    }
+    
+    .profile-container {
+        margin-top: 1rem;
+    }
+    
+    .modal-content {
+        width: 90%;
+        margin: 20% auto;
+    }
 }
