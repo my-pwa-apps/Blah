@@ -85,29 +85,37 @@ const DiscussionHandler = (function() {
     }
 
     function createDiscussionElement(discussion) {
-        if (!discussion?.title) return null;
+        if (!discussion?.title || !discussion?.id) {
+            console.warn('Invalid discussion data:', discussion);
+            return null;
+        }
         
-        const element = document.createElement('div');
-        element.className = 'discussion-item';
-        element.setAttribute('role', 'article');
-        element.dataset.discussionId = discussion.id;
-        
-        const title = document.createElement('h3');
-        title.className = 'discussion-title';
-        title.textContent = discussion.title;
-        
-        const content = document.createElement('p');
-        content.className = 'discussion-content';
-        content.textContent = discussion.content;
-        
-        const replies = document.createElement('div');
-        replies.className = 'discussion-replies';
-        
-        element.appendChild(title);
-        element.appendChild(content);
-        element.appendChild(replies);
-        
-        return element;
+        try {
+            const element = document.createElement('div');
+            element.className = 'discussion-item';
+            element.setAttribute('role', 'article');
+            element.dataset.discussionId = discussion.id;
+            
+            const title = document.createElement('h3');
+            title.className = 'discussion-title';
+            title.textContent = discussion.title || '';
+            
+            const content = document.createElement('p');
+            content.className = 'discussion-content';
+            content.textContent = discussion.content || '';
+            
+            const replies = document.createElement('div');
+            replies.className = 'discussion-replies';
+            
+            element.appendChild(title);
+            element.appendChild(content);
+            element.appendChild(replies);
+            
+            return element;
+        } catch (error) {
+            console.error('Error creating discussion element:', error);
+            return null;
+        }
     }
 
     function displayDiscussions(discussions) {
@@ -115,31 +123,44 @@ const DiscussionHandler = (function() {
             const container = document.getElementById('discussions-container');
             if (!container) throw new Error('Discussions container not found');
             
-            // Create document fragment for better performance
             const fragment = document.createDocumentFragment();
-            
-            // Clear existing discussions
             container.innerHTML = '';
             
-            if (!discussions?.length) {
+            if (!Array.isArray(discussions) || !discussions.length) {
                 const empty = document.createElement('div');
                 empty.className = 'discussion-empty';
                 empty.textContent = 'No discussions found';
                 fragment.appendChild(empty);
+                container.appendChild(fragment);
                 return;
             }
 
-            discussions.forEach(discussion => {
-                if (!discussion?.title) return; // Skip invalid discussions
-                
-                const discussionElement = createDiscussionElement(discussion);
-                fragment.appendChild(discussionElement);
-            });
+            const validDiscussions = discussions
+                .map(discussion => {
+                    const element = createDiscussionElement(discussion);
+                    return element;
+                })
+                .filter(Boolean); // Remove null/undefined elements
+
+            if (!validDiscussions.length) {
+                const empty = document.createElement('div');
+                empty.className = 'discussion-empty';
+                empty.textContent = 'No valid discussions found';
+                fragment.appendChild(empty);
+            } else {
+                validDiscussions.forEach(element => {
+                    if (element instanceof Node) {
+                        fragment.appendChild(element);
+                    }
+                });
+            }
 
             container.appendChild(fragment);
+            return true;
         } catch (error) {
             console.error('Error displaying discussions:', error);
             showErrorMessage('Failed to display discussions');
+            return false;
         }
     }
 
