@@ -329,9 +329,12 @@ export async function renderConversationsList() {
         const conversations = await fetchConversations(currentUser.id);
         
         conversations.forEach(conversation => {
-            const otherParticipants = conversation.participants
-                .filter(p => p.user_id !== currentUser.id)
-                .map(p => p.profiles);
+            const isSelfChat = conversation.is_self_chat;
+            const otherParticipants = isSelfChat 
+                ? [{ profiles: currentUser }]
+                : conversation.participants
+                    .filter(p => p.user_id !== currentUser.id)
+                    .map(p => p.profiles);
             
             const conversationEl = document.createElement('div');
             conversationEl.className = 'conversation-item';
@@ -340,8 +343,12 @@ export async function renderConversationsList() {
                     <img src="${otherParticipants[0]?.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
                 </div>
                 <div class="conversation-details">
-                    <div class="conversation-name">${otherParticipants[0]?.display_name || 'Unknown User'}</div>
-                    <div class="conversation-last-message">${conversation.last_message?.content || 'No messages yet'}</div>
+                    <div class="conversation-name">
+                        ${isSelfChat ? 'Notes to Self' : (otherParticipants[0]?.display_name || 'Unknown User')}
+                    </div>
+                    <div class="conversation-last-message">
+                        ${conversation.last_message?.content || 'No messages yet'}
+                    </div>
                 </div>
             `;
             

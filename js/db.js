@@ -92,6 +92,76 @@ export async function uploadAvatar(userId, file) {
 }
 
 // Conversation operations
+export async function findExistingConversation(participants) {
+    try {
+        // Get all conversations for the first participant
+        const { data: conversations, error } = await supabase
+            .from('conversations')
+            .select(`
+                id,
+                participants!inner (user_id)
+            `)
+            .eq('participants.user_id', participants[0]);
+
+        if (error) throw error;
+
+        // For each conversation, check if all participants are present
+        for (const conv of conversations) {
+            const participantIds = conv.participants.map(p => p.user_id);
+            const allParticipantsPresent = participants.every(id => 
+                participantIds.includes(id)
+            ) && participantIds.length === participants.length;
+
+            if (allParticipantsPresent) {
+                return conv.id;
+            }
+        }
+
+        return null;
+    } catch (error) {
+        console.error('Error finding existing conversation:', error);
+        return null;
+    }
+}
+
+export async function createConversation(participants) {
+    try {
+        // Check for existing conversation first
+        const existingId = await findExistingConversation(participants);
+        if (existingId) {
+            return { id: existingId };
+        }
+
+        // Create new conversation if none exists
+        const { data: conversation, error } = await supabase
+            .from('conversations')
+            .insert({
+                is_self_chat: participants.length === 1
+            })
+            .select()
+            .single();
+            
+        if (error) throw error;
+        
+        // Create participants
+        const participantsToInsert = participants.map(userId => ({
+            conversation_id: conversation.id,
+            user_id: userId
+        }));
+        
+        const { error: participantsError } = await supabase
+            .from('participants')
+            .insert(participantsToInsert);
+            
+        if (participantsError) throw participantsError;
+        
+        return conversation;
+    } catch (error) {
+        console.error('Error creating conversation:', error);
+        throw error;
+    }
+}
+
 export async function fetchConversations(userId) {
     try {
         const { data, error } = await supabase
@@ -114,55 +184,6 @@ export async function fetchConversations(userId) {
     } catch (error) {
         console.error('Error fetching conversations:', error.message);
         return [];
-    }
-}
-
-export async function createConversation(participants) {
-    try {
-        // First create the conversation
-        const { data: conversation, error } = await supabase
-            .from('conversations')
-            .insert({
-                is_self_chat: participants.length === 1
-            })
-            .select()
-            .single();
-            
-        if (error) throw error;
-        
-        // Then create the participants
-        const participantsToInsert = participants.map(userId => ({
-            conversation_id: conversation.id,
-            user_id: userId
-        }));
-        
-        const { error: participantsError } = await supabase
-            .from('participants')
-            .insert(participantsToInsert);
-            
-        if (participantsError) throw participantsError;
-        
-        // Subscribe to messages for this conversation
-        subscribeToMessages(conversation.id, message => {
-            // Only add message if it's from another user
-            if (message.sender_id !== participants[0]) {
-                const messageEl = document.createElement('div');
-                messageEl.className = 'message received';
-                messageEl.innerHTML = `
-                    <div class="message-content">${message.content}</div>
-                    <div class="message-info">
-                        ${new Date(message.created_at).toLocaleTimeString()}
-                    </div>
-                `;
-                document.getElementById('message-container')?.appendChild(messageEl);
-                messageEl.scrollIntoView({ behavior: 'smooth' });
-            }
-        });
-        
-        return conversation;
-    } catch (error) {
-        console.error('Error creating conversation:', error.message);
-        throw error;
     }
 }
 
