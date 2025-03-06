@@ -13,7 +13,39 @@ let currentUser = null;
 let currentConversation = null;
 let authInProgress = false;
 
+function setupTheme() {
+    const themeToggle = document.getElementById('theme-toggle');
+    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)');
+    
+    // Set initial theme
+    if (localStorage.getItem('theme') === 'dark' || (!localStorage.getItem('theme') && prefersDark.matches)) {
+        document.body.setAttribute('data-theme', 'dark');
+        themeToggle.querySelector('.material-icons').textContent = 'light_mode';
+    }
+    
+    // Theme toggle handler
+    themeToggle.addEventListener('click', () => {
+        const currentTheme = document.body.getAttribute('data-theme');
+        const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        
+        document.body.setAttribute('data-theme', newTheme);
+        localStorage.setItem('theme', newTheme);
+        themeToggle.querySelector('.material-icons').textContent = 
+            newTheme === 'dark' ? 'light_mode' : 'dark_mode';
+    });
+    
+    // Listen for system theme changes
+    prefersDark.addEventListener('change', (e) => {
+        if (!localStorage.getItem('theme')) {
+            document.body.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+            themeToggle.querySelector('.material-icons').textContent = 
+                e.matches ? 'light_mode' : 'dark_mode';
+        }
+    });
+}
+
 export function initUI() {
+    setupTheme();
     setupAuthListeners();
     setupMessageListeners();
     setupProfileListeners();

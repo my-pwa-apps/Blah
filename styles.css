@@ -1,3 +1,44 @@
+:root {
+    /* Light theme */
+    --md-primary: #2e7d32;
+    --md-primary-dark: #1b5e20;
+    --md-primary-light: #4caf50;
+    --md-secondary: #81c784;
+    --md-background: #ffffff;
+    --md-surface: #f5f5f5;
+    --md-text: #1c1c1c;
+    --md-text-secondary: #666666;
+    --md-divider: rgba(0, 0, 0, 0.12);
+    --md-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+[data-theme="dark"] {
+    /* Dark theme */
+    --md-primary: #43a047;
+    --md-primary-dark: #2e7d32;
+    --md-primary-light: #66bb6a;
+    --md-secondary: #81c784;
+    --md-background: #121212;
+    --md-surface: #1e1e1e;
+    --md-text: #ffffff;
+    --md-text-secondary: #b0b0b0;
+    --md-divider: rgba(255, 255, 255, 0.12);
+    --md-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Material Design Typography */
+.md-h1 {
+    font-size: 2.125rem;
+    font-weight: 400;
+    letter-spacing: 0.25px;
+}
+
+.md-h2 {
+    font-size: 1.5rem;
+    font-weight: 400;
+    letter-spacing: 0;
+}
+
 * {
     margin: 0;
     padding: 0;
@@ -6,10 +47,11 @@
 }
 
 body {
-    background-color: #f5f5f5;
+    background-color: var(--md-surface);
     height: 100vh;
     display: flex;
     flex-direction: column;
+    color: var(--md-text);
 }
 
 .app-container {
@@ -18,8 +60,8 @@ body {
     height: 100%;
     display: flex;
     flex-direction: column;
-    background-color: white;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    background-color: var(--md-background);
+    box-shadow: var(--md-shadow);
     position: relative;
 }
 
@@ -32,10 +74,10 @@ body {
 }
 
 .auth-form {
-    background-color: white;
+    background-color: var(--md-background);
     padding: 2rem;
     border-radius: 8px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: var(--md-shadow);
     width: 100%;
     max-width: 400px;
 }
@@ -43,7 +85,7 @@ body {
 .auth-form h2 {
     text-align: center;
     margin-bottom: 1.5rem;
-    color: #4285f4;
+    color: var(--md-primary);
 }
 
 .form-group {
@@ -53,9 +95,11 @@ body {
 .form-group input {
     width: 100%;
     padding: 0.8rem;
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--md-divider);
     border-radius: 4px;
     font-size: 1rem;
+    background-color: var(--md-surface);
+    color: var(--md-text);
 }
 
 .auth-buttons {
@@ -67,7 +111,7 @@ body {
 .auth-button {
     flex: 1;
     padding: 0.8rem;
-    background-color: #4285f4;
+    background-color: var(--md-primary);
     color: white;
     border: none;
     border-radius: 4px;
@@ -76,9 +120,9 @@ body {
 }
 
 .auth-button.secondary {
-    background-color: white;
-    color: #4285f4;
-    border: 1px solid #4285f4;
+    background-color: var(--md-background);
+    color: var(--md-primary);
+    border: 1px solid var(--md-primary);
 }
 
 .auth-error, .auth-message {
@@ -119,13 +163,54 @@ body {
 }
 
 .app-header {
-    padding: 1rem;
-    background-color: #4285f4;
+    background-color: var(--md-primary);
     color: white;
+    padding: 0.5rem 1rem;
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    z-index: 10;
+    gap: 1rem;
+    box-shadow: var(--md-shadow);
+}
+
+.app-title {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.app-logo {
+    height: 40px;
+    width: 40px;
+    object-fit: contain;
+}
+
+.app-name {
+    display: flex;
+    flex-direction: column;
+}
+
+.app-name h1 {
+    font-size: 1.5rem;
+    font-weight: 500;
+}
+
+.app-name small {
+    font-size: 0.875rem;
+    opacity: 0.8;
+}
+
+.theme-toggle {
+    background: none;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0.5rem;
+    border-radius: 50%;
+    margin-left: auto;
+}
+
+.theme-toggle:hover {
+    background-color: rgba(255, 255, 255, 0.1);
 }
 
 .header-left, .header-right {
@@ -177,13 +262,53 @@ body {
     overflow: hidden;
 }
 
+@media (min-width: 1024px) {
+    .content-container {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 1px;
+        background-color: var(--md-divider);
+    }
+
+    .sidebar {
+        position: relative;
+        width: auto;
+        background-color: var(--md-background);
+    }
+
+    .chat-area {
+        background-color: var(--md-background);
+    }
+}
+
+@media (max-width: 1023px) {
+    .content-container {
+        position: relative;
+    }
+
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+        z-index: 10;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+
+    .sidebar.active {
+        transform: translateX(0);
+    }
+}
+
 /* Sidebar styles */
 .sidebar {
     width: 300px;
-    border-right: 1px solid #e0e0e0;
+    border-right: 1px solid var(--md-divider);
     display: flex;
     flex-direction: column;
-    background-color: #f9f9f9;
+    background-color: var(--md-surface);
 }
 
 .sidebar-header {
@@ -191,13 +316,13 @@ body {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--md-divider);
 }
 
 .icon-button {
     background: none;
     border: none;
-    color: #4285f4;
+    color: var(--md-primary);
     font-size: 1.5rem;
     cursor: pointer;
     width: 36px;
@@ -219,7 +344,7 @@ body {
 
 .conversation-item {
     padding: 1rem;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--md-divider);
     cursor: pointer;
     display: flex;
     align-items: center;
@@ -259,7 +384,7 @@ body {
 
 .conversation-last-message {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--md-text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -290,14 +415,14 @@ body {
 }
 
 .message.sent {
-    background-color: #4285f4;
+    background-color: var(--md-primary);
     color: white;
     align-self: flex-end;
     border-bottom-right-radius: 0.2rem;
 }
 
 .message.received {
-    background-color: #e0e0e0;
+    background-color: var(--md-surface);
     align-self: flex-start;
     border-bottom-left-radius: 0.2rem;
 }
@@ -313,20 +438,22 @@ body {
 .message-input {
     display: flex;
     padding: 1rem;
-    border-top: 1px solid #e0e0e0;
+    border-top: 1px solid var(--md-divider);
 }
 
 #message-text {
     flex: 1;
     padding: 0.8rem;
-    border: 1px solid #e0e0e0;
+    border: 1px solid var(--md-divider);
     border-radius: 2rem;
     outline: none;
+    background-color: var(--md-surface);
+    color: var(--md-text);
 }
 
 #send-button {
     padding: 0.8rem 1.2rem;
-    background-color: #4285f4;
+    background-color: var(--md-primary);
     color: white;
     border: none;
     border-radius: 2rem;
@@ -349,7 +476,7 @@ body {
 }
 
 .modal-content {
-    background-color: white;
+    background-color: var(--md-background);
     border-radius: 8px;
     padding: 2rem;
     width: 90%;
@@ -360,7 +487,7 @@ body {
 
 .modal-content h2 {
     margin-bottom: 1.5rem;
-    color: #4285f4;
+    color: var(--md-primary);
 }
 
 .avatar-upload {
@@ -383,7 +510,7 @@ body {
 }
 
 .avatar-upload label {
-    background-color: #4285f4;
+    background-color: var(--md-primary);
     color: white;
     padding: 0.5rem 1rem;
     border-radius: 4px;
@@ -394,7 +521,7 @@ body {
     display: block;
     margin-bottom: 0.5rem;
     font-size: 0.9rem;
-    color: #555;
+    color: var(--md-text-secondary);
 }
 
 .modal-buttons {
@@ -412,14 +539,14 @@ body {
 }
 
 .modal-buttons button:first-child {
-    background-color: #4285f4;
+    background-color: var(--md-primary);
     color: white;
 }
 
 .modal-buttons button:last-child {
-    background-color: white;
-    color: #4285f4;
-    border: 1px solid #4285f4;
+    background-color: var(--md-background);
+    color: var(--md-primary);
+    border: 1px solid var(--md-primary);
 }
 
 .user-search-results {
@@ -430,7 +557,7 @@ body {
 
 .user-search-item {
     padding: 0.8rem;
-    border-bottom: 1px solid #e0e0e0;
+    border-bottom: 1px solid var(--md-divider);
     display: flex;
     align-items: center;
     gap: 0.8rem;
@@ -464,7 +591,7 @@ body {
 
 .user-email {
     font-size: 0.85rem;
-    color: #666;
+    color: var(--md-text-secondary);
 }
 
 /* Utility classes */
@@ -477,7 +604,7 @@ body {
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: #666;
+    color: var(--md-text-secondary);
     font-size: 1.1rem;
     text-align: center;
     padding: 2rem;
@@ -495,7 +622,7 @@ body {
         bottom: 0;
         width: 100%;
         z-index: 5;
-        background-color: #fff;
+        background-color: var(--md-background);
         transform: translateX(-100%);
         transition: transform 0.3s ease;
     }
