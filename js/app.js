@@ -1,47 +1,83 @@
-import { initAuth, getCurrentUser, onAuthStateChange } from './auth.js';
-import { initDatabase, fetchUserProfile, createUserProfile } from './db.js';
-import { initUI, showAuthScreen, showMainApp, renderConversationsList } from './ui.js';
+import { AuthModule } from './modules/auth/AuthModule.js';
+import { DataModule } from './modules/data/DataModule.js';
+import { UIModule } from './modules/ui/UIModule.js';
+import { LoggerModule } from './modules/utils/LoggerModule.js';
 
-// Initialize the application
-async function initApp() {
-    // Initialize Supabase clients
-    initAuth();
-    initDatabase();
-    
-    // Initialize UI components and event listeners
-    initUI();
-    
-    // Listen for auth state changes
-    onAuthStateChange(async (user) => {
-        if (user) {
-            // User is signed in
-            console.log('User is signed in:', user.email);
+class AppManager {
+    constructor() {
+        this.modules = new Map();
+        this.logger = new LoggerModule();
+    }
+
+    async init() {
+        try {
+            // Initialize core modules
+            await this.initModule('auth', new AuthModule(this));
+            await this.initModule('data', new DataModule(this));
+            await this.initModule('ui', new UIModule(this));
             
-            // Check if user profile exists, create if not
-            let profile = await fetchUserProfile(user.id);
-            if (!profile) {
-                // Create default profile for new user
-                profile = await createUserProfile({
-                    id: user.id,
-                    email: user.email,
-                    display_name: user.email.split('@')[0],
-                    avatar_url: null,
-                    status: 'Available'
-                });
-            }
+            // Setup auth state monitoring
+            this.modules.get('auth').onAuthStateChange(this.handleAuthChange.bind(this));
             
-            // Show main app UI
-            showMainApp(profile);
-            
-            // Load conversations
-            renderConversationsList();
-        } else {
-            // User is signed out
-            console.log('User is signed out');
-            showAuthScreen();
+            this.logger.log('Application initialized successfully');
+        } catch (error) {
+            this.logger.error('Failed to initialize application:', error);
         }
-    });
+    }
+
+    async initModule(name, module) {
+        try {
+            await module.init();
+            this.modules.get(name)?.cleanup?.();
+            this.modules.set(name, module);
+            this.logger.log(`Module '${name}' initialized`);
+        } catch (error) {
+            this.logger.error(`Failed to initialize module '${name}':`, error);
+            throw error;
+        }
+    }
+
+    async handleAuthChange(user) {
+        try {
+            if (user) {
+                this.logger.log('User authenticated:', user.email);
+                
+                const dataModule = this.modules.get('data');
+                const uiModule = this.modules.get('ui');
+                
+                // Get or create user profile
+                let profile = await dataModule.fetchUserProfile(user.id);
+                if (!profile) {
+                    profile = await dataModule.createUserProfile({
+                        id: user.id,
+                        email: user.email,
+                        display_name: user.email.split('@')[0],
+                        status: 'Available'
+                    });
+                }
+                
+                // Initialize UI with user data
+                uiModule.showMainApp(profile);
+                uiModule.renderConversationsList();
+            } else {
+                this.logger.log('User signed out');
+                this.modules.get('ui').showAuthScreen();
+            }
+        } catch (error) {
+            this.logger.error('Auth state change error:', error);
+        }
+    }
+
+    getModule(name) {
+        return this.modules.get(name);
+    }
 }
 
-// Start the app when DOM is loaded
-document.addEventListener('DOMContentLoaded', initApp);
+// Initialize app when DOM is ready
+document.addEventListener('DOMContentLoaded', () => {
+    const app = new AppManager();
+    app.init();
+    
+    // Make app instance available for debugging
+    window.app = app;
+});
