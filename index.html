@@ -24,44 +24,7 @@
         h1 {
             color: #2c3e50;
         }
-        
-        .timestamp {
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            font-size: 14px;
-            color: #666;
-            margin-bottom: 20px;
-        }
-        
-        /* Hidden debugging tools - only shown when needed */
-        .debug-panel {
-            display: none;
-            padding: 10px;
-            margin: 10px 0;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            background: #f8f9fa;
-        }
-        
-        body.debug-mode .debug-panel {
-            display: block;
-        }
-        
-        /* Version information - subtle footer */
-        .version-info {
-            font-size: 12px;
-            color: #999;
-            text-align: center;
-            margin-top: 40px;
-            padding-top: 10px;
-            border-top: 1px solid #eee;
-        }
     </style>
-    <!-- Add cache-busting query parameter to prevent caching -->
-    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-    <meta http-equiv="Pragma" content="no-cache">
-    <meta http-equiv="Expires" content="0">
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
     <!-- Add Supabase CDN -->
@@ -69,8 +32,6 @@
 </head>
 <body>
     <header>
-        <h1>Discussions Demo</h1>
-        <div class="timestamp">Last updated: <span id="build-time"></span></div>
         <div class="title-container">
             <img src="./images/countdracula.png" alt="Vampire Image" id="titleImage">
             <div class="title-text">
@@ -89,9 +50,6 @@
     </header>
     
     <main>
-        <h2>Discussions</h2>
-        <p>Below are the discussions loaded from the discussion handler:</p>
-        
         <div id="discussions-container"></div>
         <div class="new-discussion-container">
             <button id="newDiscussionBtn" class="fab">
@@ -102,20 +60,6 @@
         <section id="discussions">
             <!-- Discussions will be dynamically loaded here -->
         </section>
-        
-        <!-- Hidden debugging panel - only visible when needed -->
-        <div class="debug-panel">
-            <h3>Debugging Tools</h3>
-            <p>Press <code>Ctrl+Shift+D</code> to toggle debug mode</p>
-            <div class="debug-buttons">
-                <button id="debugTestBasicDom">Test Basic DOM</button>
-                <button id="debugLoadDiscussions">Load Discussions</button>
-                <button id="debugRunDiagnostics">Run Diagnostics</button>
-                <button id="debugCreateMockData">Use Mock Data</button>
-                <button id="debugRepairDiscussions">Repair Discussions</button>
-            </div>
-            <div id="debugStatus" class="status-message">Debug ready</div>
-        </div>
     </main>
 
     <!-- New Discussion Modal -->
@@ -142,14 +86,9 @@
         </div>
     </div>
     
-    <!-- Version information in footer -->
-    <footer class="version-info">
-        <p>Version: 1.0.3 | Last updated: <span id="build-time"></span></p>
-    </footer>
-    
     <!-- Initialize Supabase -->
     <script>
-        // Initialize Supabase globally first
+        // Initialize Supabase globally
         window.supabaseUrl = 'https://eawoqpkwyunkmpyuijuq.supabase.co';
         window.supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVhd29xcGt3eXVua21weXVpanVxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDExNzM4MTYsImV4cCI6MjA1Njc0OTgxNn0.TCrAX91vjEwc_S7eYLE9RwzrNXSh1D_NKZ9XV6VfBRM';
         
@@ -169,9 +108,6 @@
                 content: 'This is the content of the second discussion topic.'
             }
         ];
-        
-        // Update build time
-        document.getElementById('build-time').textContent = new Date().toLocaleString();
     </script>
     
     <!-- Load application scripts -->
@@ -180,118 +116,18 @@
     <script src="js/modules/userAuth.js"></script>
     <script src="js/modules/userProfile.js"></script>
     <script src="js/modules/userInterface.js"></script>
+    <script src="js/discussionHandler.js"></script>
     
-    <!-- Load discussion system scripts with cache-busting -->
-    <script src="js/webSocketManager.js?v=1.0.3"></script>
-    <script src="js/discussionHandler.js?v=1.0.3"></script>
-    <script src="js/discussionDebugger.js?v=1.0.3"></script>
-    <script src="js/discussionRepair.js?v=1.0.3"></script>
-    
-    <!-- Main application script -->
     <script>
-        // Initialize discussions without showing debug elements
+        // Initialize discussions on page load
         document.addEventListener('DOMContentLoaded', function() {
-            // Hide debug tools by default
-            const debugPanel = document.querySelector('.debug-panel');
-            if (debugPanel) {
-                debugPanel.style.display = 'none';
-            }
-            
-            // Add keyboard shortcut to toggle debug mode (Ctrl+Shift+D)
-            document.addEventListener('keydown', function(e) {
-                if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-                    document.body.classList.toggle('debug-mode');
-                    e.preventDefault();
-                }
-            });
-            
-            // Setup debug buttons
-            setupDebugButtons();
-            
-            // Initialize discussions
-            initializeDiscussions();
-        });
-        
-        function setupDebugButtons() {
-            // Test Basic DOM
-            document.getElementById('debugTestBasicDom')?.addEventListener('click', function() {
-                const container = document.getElementById('discussions-container');
-                if (container) {
-                    container.innerHTML = '';
-                    const testEl = document.createElement('div');
-                    testEl.className = 'discussion-item';
-                    testEl.innerHTML = '<h3>Test Element</h3><p>This is a test element</p>';
-                    container.appendChild(testEl);
-                }
-            });
-            
-            // Load Discussions
-            document.getElementById('debugLoadDiscussions')?.addEventListener('click', function() {
-                if (window.discussionHandler?.loadDiscussions) {
+            // Load discussions if handler exists
+            if (window.discussionHandler && typeof window.discussionHandler.loadDiscussions === 'function') {
+                setTimeout(() => {
                     window.discussionHandler.loadDiscussions();
-                }
-            });
-            
-            // Run Diagnostics
-            document.getElementById('debugRunDiagnostics')?.addEventListener('click', function() {
-                if (window.discussionDebugger?.diagnose) {
-                    window.discussionDebugger.diagnose();
-                }
-            });
-            
-            // Use Mock Data
-            document.getElementById('debugCreateMockData')?.addEventListener('click', function() {
-                window.discussions = [
-                    { id: "mock1", title: "Mock Discussion 1", content: "This is mock content 1" },
-                    { id: "mock2", title: "Mock Discussion 2", content: "This is mock content 2" },
-                    { id: "mock3", title: "Mock Discussion 3", content: "This is mock content 3" }
-                ];
-            });
-            
-            // Repair Discussions
-            document.getElementById('debugRepairDiscussions')?.addEventListener('click', function() {
-                if (window.discussionRepair?.runRepair) {
-                    window.discussionRepair.runRepair();
-                }
-            });
-        }
-        
-        function initializeDiscussions() {
-            // Try the main handler first, fallback to repair if needed
-            setTimeout(function() {
-                // Suppress WebSocket errors
-                const originalConsoleError = console.error;
-                let wsErrorDetected = false;
-                
-                console.error = function(msg, ...args) {
-                    if (typeof msg === 'string' && 
-                        (msg.includes('WebSocket') || 
-                         msg.includes('ws://') || 
-                         msg.includes('Mixed Content'))) {
-                        wsErrorDetected = true;
-                    }
-                    originalConsoleError.apply(console, [msg, ...args]);
-                };
-                
-                try {
-                    if (window.discussionHandler && typeof window.discussionHandler.loadDiscussions === 'function') {
-                        window.discussionHandler.loadDiscussions();
-                    } else if (window.discussionRepair && typeof window.discussionRepair.runRepair === 'function') {
-                        // Use repair as fallback
-                        window.discussionRepair.runRepair();
-                    }
-                } catch (e) {
-                    console.error('Error initializing discussions:', e);
-                    // Use repair as fallback for errors
-                    if (window.discussionRepair?.runRepair) {
-                        window.discussionRepair.runRepair();
-                    }
-                }
-                
-                // Restore original console.error
-                console.error = originalConsoleError;
-            }, 500);
-        }
+                }, 100);
+            }
+        });
     </script>
 </body>
 </html>
