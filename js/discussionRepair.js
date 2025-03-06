@@ -1,14 +1,14 @@
 /**
  * Discussion Repair Script
  * Repairs issues with discussion loading on the main page
- * Version: 1.0.1
+ * Version: 1.0.2
  */
 (function() {
     console.log('%c[Discussion Repair] Script loaded', 'color: #FF5722; font-weight: bold');
     
     // Configuration
     const config = {
-        version: '1.0.1',
+        version: '1.0.2',
         containerId: 'discussions-container',
         debugMode: true,
         syncIndicator: true
@@ -71,6 +71,9 @@
     }
     
     function checkAndRepairHandler() {
+        // Fix WebSocket issues before proceeding
+        fixWebSocketIssues();
+        
         // Check if handler exists
         if (!window.discussionHandler) {
             console.log('%c[Discussion Repair] discussionHandler not found, creating fallback', 'color: #FF5722');
@@ -88,6 +91,42 @@
                     createFallbackHandler();
                 }
             }, 500);
+        }
+    }
+    
+    function fixWebSocketIssues() {
+        console.log('%c[Discussion Repair] Checking for WebSocket issues', 'color: #FF5722');
+        
+        // Disable WebSocket manager if it's causing errors
+        if (window.WebSocketManager && window.WebSocketManager.prototype) {
+            console.log('%c[Discussion Repair] Patching WebSocketManager', 'color: #FF5722');
+            
+            const originalConnect = window.WebSocketManager.prototype.connect;
+            window.WebSocketManager.prototype.connect = function() {
+                if (window.location.protocol === 'https:' && this.url && this.url.startsWith('ws://')) {
+                    console.log('%c[Discussion Repair] Preventing insecure WebSocket connection on HTTPS', 'color: #FF5722');
+                    return; // Skip connection
+                }
+                
+                // Skip connection to placeholder URLs
+                if (this.url && this.url.includes('your-server-url')) {
+                    console.log('%c[Discussion Repair] Skipping connection to placeholder URL', 'color: #FF5722');
+                    return;
+                }
+                
+                return originalConnect.apply(this, arguments);
+            };
+        }
+        
+        // Fix any existing socket managers
+        if (window.discussionHandler && window.discussionHandler._socketManager) {
+            console.log('%c[Discussion Repair] Disabling active socket manager', 'color: #FF5722');
+            try {
+                window.discussionHandler._socketManager.disconnect();
+                window.discussionHandler._socketManager = null;
+            } catch (e) {
+                console.error('Error disabling socket manager:', e);
+            }
         }
     }
     

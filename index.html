@@ -154,18 +154,39 @@
             if (window.discussionHandler && typeof window.discussionHandler.loadDiscussions === 'function') {
                 console.log('Attempting to load discussions with handler');
                 try {
+                    // Check for WebSocket errors in console and ignore them
+                    const originalConsoleError = console.error;
+                    let wsErrorDetected = false;
+                    
+                    console.error = function(msg, ...args) {
+                        if (typeof msg === 'string' && 
+                            (msg.includes('WebSocket') || 
+                             msg.includes('ws://') || 
+                             msg.includes('Mixed Content'))) {
+                            wsErrorDetected = true;
+                        }
+                        originalConsoleError.apply(console, [msg, ...args]);
+                    };
+                    
                     window.discussionHandler.loadDiscussions();
+                    
+                    // Restore original console.error
+                    console.error = originalConsoleError;
+                    
+                    if (wsErrorDetected) {
+                        console.log('WebSocket errors detected but discussions loaded anyway');
+                    }
                 } catch (e) {
                     console.error('Error loading discussions with handler:', e);
                     // Fallback to repair script
-                    if (window.discussionRepair) {
+                    if (window.discussionRepair && typeof window.discussionRepair.runRepair === 'function') {
                         window.discussionRepair.runRepair();
                     }
                 }
             } else {
                 console.log('Discussion handler not found, using repair script');
                 // Use repair script
-                if (window.discussionRepair) {
+                if (window.discussionRepair && typeof window.discussionRepair.runRepair === 'function') {
                     window.discussionRepair.runRepair();
                 }
             }
