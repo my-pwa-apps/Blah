@@ -4,7 +4,9 @@ import {
     fetchMessages, 
     sendMessage, 
     searchUsers, 
-    createConversation 
+    createConversation,
+    updateUserProfile,
+    uploadAvatar
 } from './db.js';
 
 let currentUser = null;
@@ -345,6 +347,63 @@ function renderMessages(messages) {
     });
     
     messageContainer.scrollTop = messageContainer.scrollHeight;
+}
+
+async function handleProfileUpdate() {
+    const displayName = document.getElementById('display-name').value.trim();
+    const statusMessage = document.getElementById('status-message').value.trim();
+    
+    if (!displayName) {
+        showError('Display name is required');
+        return;
+    }
+    
+    try {
+        const updatedProfile = await updateUserProfile({
+            id: currentUser.id,
+            display_name: displayName,
+            status: statusMessage
+        });
+        
+        currentUser = updatedProfile;
+        showMessage('Profile updated successfully');
+        document.getElementById('profile-modal').classList.add('hidden');
+    } catch (error) {
+        showError('Failed to update profile');
+        console.error(error);
+    }
+}
+
+async function handleAvatarUpload(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!file.type.startsWith('image/')) {
+        showError('Please select an image file');
+        return;
+    }
+    
+    try {
+        const avatarUrl = await uploadAvatar(currentUser.id, file);
+        document.getElementById('avatar-preview').src = avatarUrl;
+        document.getElementById('profile-image').src = avatarUrl;
+        showMessage('Avatar updated successfully');
+    } catch (error) {
+        showError('Failed to upload avatar');
+        console.error(error);
+    }
+}
+
+async function handleLogout() {
+    try {
+        await signOut();
+        currentUser = null;
+        currentConversation = null;
+        document.getElementById('profile-modal').classList.add('hidden');
+    } catch (error) {
+        showError('Failed to logout');
+        console.error(error);
+    }
 }
 
 // ... add other UI utility functions ...
