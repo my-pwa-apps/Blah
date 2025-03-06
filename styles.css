@@ -202,8 +202,10 @@ body {
 }
 
 .app-name h1 {
-    font-size: 1.5rem;
-    font-weight: 500;
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 1.75rem;
+    font-weight: 700;
+    letter-spacing: -0.5px;
 }
 
 .app-name small {
@@ -354,6 +356,55 @@ body {
 }
 
 @media (max-width: 768px) {
+    .app-container {
+        max-width: 100%;
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    .content-container {
+        position: relative;
+        height: calc(100vh - 64px);
+        height: calc(100dvh - 64px);
+        overflow: hidden;
+    }
+
+    .sidebar {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        transform: translateX(0);
+        z-index: 1;
+    }
+
+    .chat-area {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        transform: translateX(100%);
+        z-index: 2;
+        transition: transform 0.3s ease;
+    }
+
+    .chat-area.active {
+        transform: translateX(0);
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+
+    /* New message indicator */
+    .conversation-item.unread::after {
+        content: '';
+        position: absolute;
+        right: 1rem;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background-color: var(--md-primary);
+    }
+    
     .content-container {
         position: relative;
     }

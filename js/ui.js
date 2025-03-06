@@ -6,12 +6,14 @@ import {
     searchUsers, 
     createConversation,
     updateUserProfile,
-    uploadAvatar
+    uploadAvatar,
+    subscribeToMessages
 } from './db.js';
 
 let currentUser = null;
 let currentConversation = null;
 let authInProgress = false;
+let messageSubscription = null;
 
 function setupTheme() {
     const themeToggle = document.getElementById('theme-toggle');
@@ -58,6 +60,11 @@ export function initUI() {
     
     // Show initial status
     showOnlineStatus(navigator.onLine);
+
+    // Request notification permission
+    if (Notification.permission === 'default') {
+        Notification.requestPermission();
+    }
 }
 
 function setupAuthListeners() {
@@ -450,6 +457,7 @@ export async function renderConversationsList() {
             
             const conversationEl = document.createElement('div');
             conversationEl.className = 'conversation-item';
+            conversationEl.dataset.conversationId = conversation.id;
             conversationEl.innerHTML = `
                 <div class="conversation-avatar">
                     <img src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">
@@ -486,6 +494,15 @@ async function loadConversation(conversationId) {
         const messages = await fetchMessages(conversationId);
         renderMessages(messages);
         
+        // Setup realtime updates for this conversation
+        setupRealtimeMessages(conversationId);
+        
+        // Remove unread indicator
+        const conversationEl = document.querySelector(`[data-conversation-id="${conversationId}"]`);
+        if (conversationEl) {
+            conversationEl.classList.remove('unread');
+        }
+
         // Show chat area on mobile
         if (window.innerWidth <= 768) {
             chatArea.classList.add('active');
@@ -616,6 +633,54 @@ function showOnlineStatus(online = true) {
     setTimeout(() => {
         status.classList.remove('show');
     }, 3000);
+}
+
+function setupRealtimeMessages(conversationId) {
+    // Unsubscribe from previous conversation if any
+    if (messageSubscription) {
+        messageSubscription.unsubscribe();
+    }
+
+    messageSubscription = subscribeToMessages(conversationId, (newMessage) => {
+        // Add new message to UI if in same conversation
+        if (currentConversation === conversationId) {
+            appendMessage(newMessage);
+        } else {
+            // Show notification and update conversation list
+            showNewMessageNotification(conversationId);
+            renderConversationsList();
+        }
+    });
+}
+
+function appendMessage(message) {
+    const messageEl = document.createElement('div');
+    messageEl.className = `message ${message.sender_id === currentUser.id ? 'sent' : 'received'}`;
+    messageEl.innerHTML = `
+        <div class="message-content">${message.content}</div>
+        <div class="message-info">
+            ${new Date(message.created_at).toLocaleTimeString()}
+        </div>
+    `;
+    const container = document.getElementById('message-container');
+    container.appendChild(messageEl);
+    messageEl.scrollIntoView({ behavior: 'smooth' });
+}
+
+function showNewMessageNotification(conversationId) {
+    // Mark conversation as unread
+    const conversationEl = document.querySelector(`[data-conversation-id="${conversationId}"]`);
+    if (conversationEl) {
+        conversationEl.classList.add('unread');
+    }
+
+    // Show system notification if permitted
+    if (Notification.permission === 'granted') {
+        new Notification('New Message', {
+            body: 'You have a new message',
+            icon: '/images/icon-192x192.png'
+        });
+    }
 }
 
 // ... add other UI utility functions ...
