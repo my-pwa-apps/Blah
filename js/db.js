@@ -170,9 +170,14 @@ export async function fetchConversations(userId) {
                 id, 
                 created_at,
                 is_self_chat,
-                participants (
-                    user_id, 
-                    profiles (id, display_name, avatar_url)
+                participants!inner (
+                    user_id,
+                    profiles (
+                        id,
+                        email,
+                        display_name,
+                        avatar_url
+                    )
                 ),
                 last_message
             `)

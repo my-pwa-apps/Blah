@@ -330,22 +330,28 @@ export async function renderConversationsList() {
         
         conversations.forEach(conversation => {
             const isSelfChat = conversation.is_self_chat;
-            const otherParticipants = isSelfChat 
-                ? [{ profiles: currentUser }]
-                : conversation.participants
-                    .filter(p => p.user_id !== currentUser.id)
-                    .map(p => p.profiles);
+            let displayName, avatarUrl;
+
+            if (isSelfChat) {
+                displayName = 'Notes to Self';
+                avatarUrl = currentUser.avatar_url;
+            } else {
+                // Get the other participant's profile
+                const otherParticipant = conversation.participants
+                    .find(p => p.user_id !== currentUser.id)?.profiles;
+                
+                displayName = otherParticipant?.display_name || otherParticipant?.email || 'Unknown User';
+                avatarUrl = otherParticipant?.avatar_url;
+            }
             
             const conversationEl = document.createElement('div');
             conversationEl.className = 'conversation-item';
             conversationEl.innerHTML = `
                 <div class="conversation-avatar">
-                    <img src="${otherParticipants[0]?.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+                    <img src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">
                 </div>
                 <div class="conversation-details">
-                    <div class="conversation-name">
-                        ${isSelfChat ? 'Notes to Self' : (otherParticipants[0]?.display_name || 'Unknown User')}
-                    </div>
+                    <div class="conversation-name">${displayName}</div>
                     <div class="conversation-last-message">
                         ${conversation.last_message?.content || 'No messages yet'}
                     </div>
