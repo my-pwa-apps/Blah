@@ -182,10 +182,18 @@ async function handleSendMessage() {
     const messageInput = document.getElementById('message-text');
     const content = messageInput.value.trim();
 
-    if (!content || !currentConversation) return;
+    if (!content) return;
 
     try {
         messageInput.disabled = true;
+        
+        // If no conversation is selected, start a self-conversation
+        if (!currentConversation) {
+            const selfConversation = await createConversation([currentUser.id]);
+            currentConversation = selfConversation.id;
+            await renderConversationsList();
+        }
+
         const message = await sendMessage(currentConversation, currentUser.id, content);
         messageInput.value = '';
         
@@ -469,8 +477,21 @@ async function handleLogout() {
 
 async function startNewConversation(otherUserId) {
     try {
-        const participants = [currentUser.id, otherUserId];
-        const conversation = await createConversation(participants);
+        // If selecting self, use existing self-conversation or create new one
+        if (otherUserId === currentUser.id) {
+            const conversations = await fetchConversations(currentUser.id);
+            const selfChat = conversations.find(c => c.is_self_chat);
+            
+            if (selfChat) {
+                currentConversation = selfChat.id;
+            } else {
+                const conversation = await createConversation([currentUser.id]);
+                currentConversation = conversation.id;
+            }
+        } else {
+            const conversation = await createConversation([currentUser.id, otherUserId]);
+            currentConversation = conversation.id;
+        }
         
         // Close the new conversation modal
         document.getElementById('new-conversation-modal').classList.add('hidden');
@@ -481,26 +502,9 @@ async function startNewConversation(otherUserId) {
         
         // Refresh conversations list and open the new conversation
         await renderConversationsList();
-        await loadConversation(conversation.id);
+        await loadConversation(currentConversation);
     } catch (error) {
         showError('Failed to start conversation');
-        console.error(error);
-    }
-}
-
-async function startSelfConversation() {
-    try {
-        const participants = [currentUser.id];
-        const conversation = await createConversation(participants);
-        
-        // Close the new conversation modal if open
-        document.getElementById('new-conversation-modal').classList.add('hidden');
-        
-        // Refresh conversations list and open the new conversation
-        await renderConversationsList();
-        await loadConversation(conversation.id);
-    } catch (error) {
-        showError('Failed to start self conversation');
         console.error(error);
     }
 }
