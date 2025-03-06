@@ -16,7 +16,7 @@ export class Logger {
         this._log('WARN', ...args);
     }
 
-    private _log(level, ...args) {
+    _log(level, ...args) {
         const message = this._formatMessage(level, ...args);
         this._addToLogs(message);
         
@@ -25,7 +25,7 @@ export class Logger {
         console.log(`%c${level}%c ${message.timestamp.toISOString()} -`, style, '', ...args);
     }
 
-    private _formatMessage(level, ...args) {
+    _formatMessage(level, ...args) {
         return {
             timestamp: new Date(),
             level,
@@ -37,14 +37,14 @@ export class Logger {
         };
     }
 
-    private _addToLogs(message) {
+    _addToLogs(message) {
         this.logs.push(message);
         if (this.logs.length > this.maxLogs) {
             this.logs.shift();
         }
     }
 
-    private _getLogStyle(level) {
+    _getLogStyle(level) {
         const styles = {
             INFO: 'background: #2196F3; color: white; padding: 2px 6px; border-radius: 2px;',
             WARN: 'background: #FFA000; color: white; padding: 2px 6px; border-radius: 2px;',

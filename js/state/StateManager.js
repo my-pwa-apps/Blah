@@ -7,7 +7,7 @@ export class StateManager {
         window.addEventListener('beforeunload', () => this.persistState());
     }
 
-    private loadInitialState() {
+    loadInitialState() {
         const defaultState = {
             currentUser: null,
             currentConversation: null,
@@ -29,7 +29,7 @@ export class StateManager {
         }
     }
 
-    private detectPreferredTheme() {
+    detectPreferredTheme() {
         const stored = localStorage.getItem('theme');
         if (stored) return stored;
         
@@ -37,7 +37,7 @@ export class StateManager {
             'dark' : 'light';
     }
 
-    private persistState() {
+    persistState() {
         try {
             const persistedState = {
                 theme: this.state.theme,
