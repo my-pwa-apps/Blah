@@ -10,6 +10,17 @@
     --md-text-secondary: #666666;
     --md-divider: rgba(0, 0, 0, 0.12);
     --md-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+    /* Material Elevation Shadows */
+    --elevation-1: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24);
+    --elevation-2: 0 3px 6px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.12);
+    --elevation-3: 0 10px 20px rgba(0,0,0,0.15), 0 3px 6px rgba(0,0,0,0.10);
+    --elevation-4: 0 15px 25px rgba(0,0,0,0.15), 0 5px 10px rgba(0,0,0,0.05);
+    
+    /* Material Motion */
+    --animation-standard: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    --animation-decelerate: 225ms cubic-bezier(0, 0, 0.2, 1);
+    --animation-accelerate: 195ms cubic-bezier(0.4, 0, 1, 1);
 }
 
 [data-theme="dark"] {
@@ -349,6 +360,7 @@ body {
     display: flex;
     align-items: center;
     gap: 0.8rem;
+    transition: background-color var(--animation-standard);
 }
 
 .conversation-item:hover {
@@ -439,6 +451,7 @@ body {
     display: flex;
     padding: 1rem;
     border-top: 1px solid var(--md-divider);
+    box-shadow: var(--elevation-1);
 }
 
 #message-text {
@@ -459,6 +472,8 @@ body {
     border-radius: 2rem;
     margin-left: 0.5rem;
     cursor: pointer;
+    box-shadow: var(--elevation-1);
+    transition: all var(--animation-standard);
 }
 
 /* Modal styles */
@@ -483,6 +498,15 @@ body {
     max-width: 500px;
     max-height: 90vh;
     overflow-y: auto;
+    box-shadow: var(--elevation-4);
+    transform: scale(0.9);
+    opacity: 0;
+    transition: all var(--animation-decelerate);
+}
+
+.modal.show .modal-content {
+    transform: scale(1);
+    opacity: 1;
 }
 
 .modal-content h2 {
@@ -638,4 +662,124 @@ body {
     .message {
         max-width: 85%;
     }
+}
+
+/* Material Buttons */
+.md-button {
+    position: relative;
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    border: none;
+    background-color: var(--md-primary);
+    color: white;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    overflow: hidden;
+    transition: background-color var(--animation-standard);
+    box-shadow: var(--elevation-1);
+    cursor: pointer;
+}
+
+.md-button:hover {
+    box-shadow: var(--elevation-2);
+}
+
+.md-button:active {
+    box-shadow: var(--elevation-1);
+}
+
+/* Floating Action Button */
+.fab {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background-color: var(--md-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--elevation-2);
+    cursor: pointer;
+    transition: all var(--animation-standard);
+}
+
+.fab:hover {
+    box-shadow: var(--elevation-3);
+    transform: translateY(-2px);
+}
+
+/* Material Input Fields */
+.md-input {
+    position: relative;
+    margin-bottom: 1.5rem;
+}
+
+.md-input input {
+    width: 100%;
+    padding: 0.75rem 0;
+    border: none;
+    border-bottom: 2px solid var(--md-divider);
+    background: none;
+    color: var(--md-text);
+    transition: border-color var(--animation-standard);
+}
+
+.md-input input:focus {
+    border-bottom-color: var(--md-primary);
+    outline: none;
+}
+
+.md-input label {
+    position: absolute;
+    top: 0.75rem;
+    left: 0;
+    transition: all var(--animation-standard);
+    color: var(--md-text-secondary);
+    pointer-events: none;
+}
+
+.md-input input:focus + label,
+.md-input input:not(:placeholder-shown) + label {
+    top: -0.5rem;
+    font-size: 0.75rem;
+    color: var(--md-primary);
+}
+
+/* Material Cards */
+.md-card {
+    background-color: var(--md-background);
+    border-radius: 8px;
+    box-shadow: var(--elevation-1);
+    transition: box-shadow var(--animation-standard);
+}
+
+.md-card:hover {
+    box-shadow: var(--elevation-2);
+}
+
+/* Ripple Effect */
+.ripple {
+    position: relative;
+    overflow: hidden;
+}
+
+.ripple::after {
+    content: "";
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,255,255,0) 100%);
+    transform: scale(0);
+    transition: transform var(--animation-standard);
+    pointer-events: none;
+}
+
+.ripple:active::after {
+    transform: scale(2);
+    opacity: 0;
+    transition: transform 0s, opacity var(--animation-standard);
 }

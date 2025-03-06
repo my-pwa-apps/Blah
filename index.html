@@ -19,15 +19,17 @@
         <div id="auth-container" class="auth-container">
             <div class="auth-form">
                 <h2>Welcome to Message PWA</h2>
-                <div class="form-group">
-                    <input type="email" id="email-input" placeholder="Email" required>
+                <div class="md-input">
+                    <input type="email" id="email-input" placeholder=" " required>
+                    <label for="email-input">Email</label>
                 </div>
-                <div class="form-group">
-                    <input type="password" id="password-input" placeholder="Password" required>
+                <div class="md-input">
+                    <input type="password" id="password-input" placeholder=" " required>
+                    <label for="password-input">Password</label>
                 </div>
                 <div class="auth-buttons">
-                    <button id="login-button" class="auth-button">Log In</button>
-                    <button id="signup-button" class="auth-button secondary">Sign Up</button>
+                    <button id="login-button" class="md-button ripple">Log In</button>
+                    <button id="signup-button" class="md-button ripple secondary">Sign Up</button>
                 </div>
             </div>
         </div>
@@ -56,7 +58,9 @@
                 <aside id="sidebar" class="sidebar">
                     <div class="sidebar-header">
                         <h2>Conversations</h2>
-                        <button id="new-conversation" class="icon-button">+</button>
+                        <button id="new-conversation" class="fab">
+                            <span class="material-icons">add</span>
+                        </button>
                     </div>
                     <div id="conversations-list" class="conversations-list">
                         <!-- Conversation items will be inserted here -->
