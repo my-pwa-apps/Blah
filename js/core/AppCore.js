@@ -12,7 +12,7 @@ export class AppCore {
     async init() {
         try {
             await this.modules.initializeAll();
-            this.setupGlobalEvents();
+            this._setupGlobalEvents();
             
             // Request notification permission
             if ('Notification' in window && Notification.permission === 'default') {
@@ -26,7 +26,8 @@ export class AppCore {
         }
     }
 
-    private setupGlobalEvents() {
+    // Changed from private to regular method with underscore prefix
+    _setupGlobalEvents() {
         // Handle online/offline status
         window.addEventListener('online', () => {
             this.state.set('isOnline', true);
