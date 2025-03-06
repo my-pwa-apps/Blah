@@ -9,6 +9,7 @@ import {
 
 let currentUser = null;
 let currentConversation = null;
+let authInProgress = false;
 
 export function initUI() {
     // ... existing auth listeners ...
@@ -25,29 +26,113 @@ function setupAuthListeners() {
     const loginBtn = document.getElementById('login-button');
     const signupBtn = document.getElementById('signup-button');
     const logoutBtn = document.getElementById('logout-button');
+    const emailInput = document.getElementById('email-input');
+    const passwordInput = document.getElementById('password-input');
 
-    loginBtn.addEventListener('click', async () => {
-        const email = document.getElementById('email-input').value;
-        const password = document.getElementById('password-input').value;
+    signupBtn.addEventListener('click', async () => {
+        if (authInProgress) return;
+        
+        const email = emailInput.value.trim();
+        const password = passwordInput.value.trim();
+        
+        if (!email || !password) {
+            showError('Please enter both email and password');
+            return;
+        }
         
         try {
+            authInProgress = true;
+            signupBtn.disabled = true;
             loginBtn.disabled = true;
-            await signIn(email, password);
+            
+            const { data } = await signUp(email, password);
+            if (data) {
+                showMessage('Sign up successful! Please check your email for verification.');
+                // Clear the form
+                emailInput.value = '';
+                passwordInput.value = '';
+            }
         } catch (error) {
             showError(error.message);
         } finally {
+            authInProgress = false;
+            signupBtn.disabled = false;
             loginBtn.disabled = false;
         }
     });
 
-    // ... similar handlers for signup and logout ...
+    loginBtn.addEventListener('click', async () => {
+        if (authInProgress) return;
+        
+        const email = emailInput.value.trim();
+        const password = passwordInput.value.trim();
+        
+        if (!email || !password) {
+            showError('Please enter both email and password');
+            return;
+        }
+        
+        try {
+            authInProgress = true;
+            loginBtn.disabled = true;
+            signupBtn.disabled = true;
+            
+            await signIn(email, password);
+        } catch (error) {
+            showError('Login failed: ' + error.message);
+        } finally {
+            authInProgress = false;
+            loginBtn.disabled = false;
+            signupBtn.disabled = false;
+        }
+    });
+
+    // Handle Enter key in password field
+    passwordInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            loginBtn.click();
+        }
+    });
 }
 
 // ... add other UI setup functions ...
 
 export function showError(message) {
-    // Implement error display
-    console.error(message);
+    const errorDiv = document.createElement('div');
+    errorDiv.className = 'auth-error';
+    errorDiv.textContent = message;
+    
+    // Remove any existing error
+    const existingError = document.querySelector('.auth-error');
+    if (existingError) {
+        existingError.remove();
+    }
+    
+    // Insert error after the auth form
+    const authForm = document.querySelector('.auth-form');
+    authForm.insertAdjacentElement('afterend', errorDiv);
+    
+    // Remove error after 5 seconds
+    setTimeout(() => errorDiv.remove(), 5000);
+}
+
+export function showMessage(message) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = 'auth-message';
+    messageDiv.textContent = message;
+    
+    // Remove any existing message
+    const existingMessage = document.querySelector('.auth-message');
+    if (existingMessage) {
+        existingMessage.remove();
+    }
+    
+    // Insert message after the auth form
+    const authForm = document.querySelector('.auth-form');
+    authForm.insertAdjacentElement('afterend', messageDiv);
+    
+    // Remove message after 5 seconds
+    setTimeout(() => messageDiv.remove(), 5000);
 }
 
 export function showLoading(show = true) {
