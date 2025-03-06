@@ -196,24 +196,23 @@ function setupConversationListeners() {
 
 function setupResponsiveListeners() {
     const backButton = document.getElementById('back-button');
-    const sidebar = document.getElementById('sidebar');
+    const chatArea = document.querySelector('.chat-area');
     
-    if (backButton && sidebar) {
+    if (backButton) {
         backButton.addEventListener('click', () => {
-            sidebar.classList.add('active');
-            backButton.classList.add('hidden');
-            // Clear current conversation view
-            document.getElementById('message-container').innerHTML = 
-                '<div class="no-conversation">Select a conversation to start chatting</div>';
-        });
-
-        window.addEventListener('resize', () => {
-            if (window.innerWidth > 768) {
-                sidebar.classList.remove('active');
-                backButton.classList.add('hidden');
+            if (window.innerWidth <= 768) {
+                chatArea.classList.remove('active');
+                currentConversation = null;
             }
         });
     }
+
+    // Handle resize events
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            chatArea.classList.remove('active');
+        }
+    });
 }
 
 async function handleSendMessage() {
@@ -374,7 +373,20 @@ export async function renderConversationsList() {
     try {
         const conversations = await fetchConversations(currentUser.id);
         
-        conversations.forEach(conversation => {
+        // Filter out duplicate self-conversations
+        const uniqueConversations = conversations.reduce((acc, curr) => {
+            if (curr.is_self_chat) {
+                // Only keep the most recent self-chat
+                const existingSelfChat = acc.find(c => c.is_self_chat);
+                if (!existingSelfChat || new Date(curr.created_at) > new Date(existingSelfChat.created_at)) {
+                    return [...acc.filter(c => !c.is_self_chat), curr];
+                }
+                return acc;
+            }
+            return [...acc, curr];
+        }, []);
+
+        uniqueConversations.forEach(conversation => {
             const isSelfChat = conversation.is_self_chat;
             let displayName, avatarUrl;
 
@@ -418,6 +430,7 @@ async function loadConversation(conversationId) {
     const messageContainer = document.getElementById('message-container');
     const messageInput = document.getElementById('message-text');
     const sendButton = document.getElementById('send-button');
+    const chatArea = document.querySelector('.chat-area');
     
     messageInput.disabled = false;
     sendButton.disabled = false;
@@ -428,12 +441,8 @@ async function loadConversation(conversationId) {
         renderMessages(messages);
         
         // Show chat area on mobile
-        const backButton = document.getElementById('back-button');
-        const sidebar = document.getElementById('sidebar');
-        
-        if (window.innerWidth <= 768 && backButton && sidebar) {
-            sidebar.classList.remove('active');
-            backButton.classList.remove('hidden');
+        if (window.innerWidth <= 768) {
+            chatArea.classList.add('active');
         }
     } catch (error) {
         showError('Failed to load messages');

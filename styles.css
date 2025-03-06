@@ -282,13 +282,14 @@ body {
     }
 
     .sidebar {
-        position: relative;
-        width: auto;
-        background-color: var(--md-background);
+        position: static;
+        width: 300px;
+        transform: none !important;
     }
 
     .chat-area {
-        background-color: var(--md-background);
+        flex: 1;
+        min-width: 0; /* Prevent flex item from overflowing */
     }
 }
 
@@ -310,6 +311,84 @@ body {
 
     .sidebar.active {
         transform: translateX(0);
+    }
+
+    .chat-area {
+        width: 100%;
+        flex: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .content-container {
+        position: relative;
+    }
+    
+    .sidebar {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 100%;
+        z-index: 5;
+        background-color: var(--md-background);
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .sidebar.active {
+        transform: translateX(0);
+    }
+    
+    .back-button.visible {
+        display: block;
+    }
+    
+    .message {
+        max-width: 85%;
+    }
+
+    .chat-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+    }
+    
+    #back-button {
+        margin-right: 0.5rem;
+    }
+
+    .mobile-only {
+        display: flex;
+    }
+    
+    .chat-area {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 20;
+        background: var(--md-background);
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    }
+    
+    .chat-area.active {
+        transform: translateX(0);
+    }
+    
+    .chat-header {
+        padding: 0.5rem;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        background-color: var(--md-primary);
+        color: white;
+    }
+    
+    #back-button {
+        color: white;
     }
 }
 
@@ -648,46 +727,6 @@ body {
     padding: 2rem;
 }
 
-@media (max-width: 768px) {
-    .content-container {
-        position: relative;
-    }
-    
-    .sidebar {
-        position: absolute;
-        left: 0;
-        top: 0;
-        bottom: 0;
-        width: 100%;
-        z-index: 5;
-        background-color: var(--md-background);
-        transform: translateX(-100%);
-        transition: transform 0.3s ease;
-    }
-    
-    .sidebar.active {
-        transform: translateX(0);
-    }
-    
-    .back-button.visible {
-        display: block;
-    }
-    
-    .message {
-        max-width: 85%;
-    }
-
-    .chat-header {
-        position: sticky;
-        top: 0;
-        z-index: 2;
-    }
-    
-    #back-button {
-        margin-right: 0.5rem;
-    }
-}
-
 /* Material Buttons */
 .md-button {
     position: relative;
@@ -806,4 +845,8 @@ body {
     transform: scale(2);
     opacity: 0;
     transition: transform 0s, opacity var(--animation-standard);
+}
+
+.mobile-only {
+    display: none;
 }
