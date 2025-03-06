@@ -196,18 +196,24 @@ function setupConversationListeners() {
 
 function setupResponsiveListeners() {
     const backButton = document.getElementById('back-button');
+    const sidebar = document.getElementById('sidebar');
     
-    backButton.addEventListener('click', () => {
-        document.getElementById('sidebar').classList.add('active');
-        backButton.classList.add('hidden');
-    });
-
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) {
-            document.getElementById('sidebar').classList.remove('active');
+    if (backButton && sidebar) {
+        backButton.addEventListener('click', () => {
+            sidebar.classList.add('active');
             backButton.classList.add('hidden');
-        }
-    });
+            // Clear current conversation view
+            document.getElementById('message-container').innerHTML = 
+                '<div class="no-conversation">Select a conversation to start chatting</div>';
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768) {
+                sidebar.classList.remove('active');
+                backButton.classList.add('hidden');
+            }
+        });
+    }
 }
 
 async function handleSendMessage() {
@@ -422,9 +428,12 @@ async function loadConversation(conversationId) {
         renderMessages(messages);
         
         // Show chat area on mobile
-        if (window.innerWidth <= 768) {
-            document.getElementById('sidebar').classList.remove('active');
-            document.getElementById('back-button').classList.remove('hidden');
+        const backButton = document.getElementById('back-button');
+        const sidebar = document.getElementById('sidebar');
+        
+        if (window.innerWidth <= 768 && backButton && sidebar) {
+            sidebar.classList.remove('active');
+            backButton.classList.remove('hidden');
         }
     } catch (error) {
         showError('Failed to load messages');
