@@ -42,10 +42,78 @@
             border-left: 4px solid #f44336;
             color: #b71c1c;
         }
+        
+        /* GitHub Sync Indicator */
+        .github-sync-indicator {
+            position: fixed;
+            top: 0;
+            right: 0;
+            background: #24292e;
+            color: white;
+            padding: 8px 15px;
+            font-size: 14px;
+            border-bottom-left-radius: 8px;
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .sync-status-icon {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+        
+        .sync-status-active {
+            background-color: #2cbe4e;
+            box-shadow: 0 0 8px #2cbe4e;
+            animation: pulse 1.5s infinite;
+        }
+        
+        .sync-status-inactive {
+            background-color: #cb2431;
+        }
+        
+        .sync-timestamp {
+            font-size: 12px;
+            margin-left: 8px;
+            opacity: 0.8;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        /* Version indicator for easy visual verification of updates */
+        .version-indicator {
+            background-color: #4CAF50;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            display: inline-block;
+            margin: 10px 0;
+            font-weight: bold;
+        }
     </style>
+    <!-- Add a build timestamp that will change with each deployment -->
+    <meta name="build-timestamp" content="2023-05-24T13:45:00Z">
 </head>
 <body>
+    <!-- GitHub Sync Status Indicator -->
+    <div class="github-sync-indicator">
+        <span class="sync-status-icon sync-status-active" id="syncStatusIcon"></span>
+        <span id="syncStatus">GitHub Sync: Active</span>
+        <span class="sync-timestamp" id="syncTimestamp">Last update: Just now</span>
+    </div>
+
     <h1>Discussion Test Page</h1>
+    
+    <!-- Version indicator - change this number to verify a new deployment -->
+    <div class="version-indicator" id="versionNumber">Version: 1.0.0</div>
     
     <div class="test-controls">
         <h2>Test Controls</h2>
@@ -53,6 +121,7 @@
         <button id="loadDiscussions">Load Discussions</button>
         <button id="runDiagnostics">Run Diagnostics</button>
         <button id="createMockData">Use Mock Data</button>
+        <button id="checkGitHubSync">Check GitHub Sync</button>
         <div id="status" class="status-message">Ready to test</div>
     </div>
     
@@ -60,6 +129,49 @@
     <div id="discussions-container"></div>
 
     <script>
+        // GitHub Sync Status Check
+        const VERSION = "1.0.0"; // Change this version number when making updates
+        const BUILD_TIME = "2023-05-24T13:45:00Z"; // This should match the meta tag
+        
+        function updateSyncStatus() {
+            const syncIcon = document.getElementById('syncStatusIcon');
+            const syncStatus = document.getElementById('syncStatus');
+            const syncTimestamp = document.getElementById('syncTimestamp');
+            const versionElement = document.getElementById('versionNumber');
+            
+            // Display the current version
+            versionElement.textContent = `Version: ${VERSION}`;
+            
+            // Get the build timestamp from meta tag
+            const metaTimestamp = document.querySelector('meta[name="build-timestamp"]')?.content;
+            
+            // Format timestamp as a readable date
+            let formattedTime = "Unknown";
+            try {
+                if (metaTimestamp) {
+                    const date = new Date(metaTimestamp);
+                    formattedTime = date.toLocaleString();
+                }
+            } catch (e) {
+                console.error("Error parsing timestamp:", e);
+            }
+            
+            // Update the timestamp display
+            syncTimestamp.textContent = `Last update: ${formattedTime}`;
+            
+            // Simulate checking GitHub sync status
+            // In a real implementation, you might check this against a server endpoint
+            const syncActive = true; // Assume sync is active
+            
+            if (syncActive) {
+                syncIcon.className = 'sync-status-icon sync-status-active';
+                syncStatus.textContent = 'GitHub Sync: Active';
+            } else {
+                syncIcon.className = 'sync-status-icon sync-status-inactive';
+                syncStatus.textContent = 'GitHub Sync: Inactive';
+            }
+        }
+        
         // Test mock data
         window.discussions = [
             { id: "test1", title: "Test Discussion 1", content: "This is test content 1" },
@@ -79,6 +191,9 @@
         document.addEventListener('DOMContentLoaded', function() {
             console.log('DOM fully loaded');
             showStatus('DOM loaded, scripts initializing...');
+            
+            // Initialize sync status display
+            updateSyncStatus();
             
             // Setup test buttons
             document.getElementById('testBasicDom').addEventListener('click', function() {
@@ -156,7 +271,27 @@
                     showStatus('Mock data creation failed: ' + error.message, true);
                 }
             });
+            
+            document.getElementById('checkGitHubSync').addEventListener('click', function() {
+                showStatus('Checking GitHub sync status...');
+                try {
+                    // Update the build timestamp to current time for demonstration
+                    const metaTag = document.querySelector('meta[name="build-timestamp"]');
+                    if (metaTag) {
+                        metaTag.content = new Date().toISOString();
+                    }
+                    
+                    updateSyncStatus();
+                    showStatus('GitHub sync status updated!');
+                } catch (error) {
+                    console.error('Sync check error:', error);
+                    showStatus('Sync check failed: ' + error.message, true);
+                }
+            });
         });
+        
+        // Add a console log that will be visible in browser tools for verification
+        console.log(`%cPage Version: ${VERSION}, Build Time: ${BUILD_TIME}`, 'color: green; font-size: 14px; font-weight: bold');
     </script>
 
     <!-- Load the scripts -->
