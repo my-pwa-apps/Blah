@@ -171,21 +171,21 @@ function setupConversationListeners() {
     const userSearch = document.getElementById('user-search');
     const userSearchResults = document.getElementById('user-search-results');
 
-    newConversationBtn.addEventListener('click', () => {
-        document.getElementById('new-conversation-modal').classList.remove('hidden');
-        userSearch.value = '';
-        userSearchResults.innerHTML = '';
-        userSearch.focus();
+    newConversationBtn?.addEventListener('click', () => {
+        const modal = document.getElementById('new-conversation-modal');
+        modal.classList.remove('hidden');
+        // Show initial self-chat option
+        handleUserSearch();
     });
 
-    closeNewConversation.addEventListener('click', () => {
+    closeNewConversation?.addEventListener('click', () => {
         document.getElementById('new-conversation-modal').classList.add('hidden');
     });
 
-    userSearch.addEventListener('input', debounce(handleUserSearch, 300));
+    userSearch?.addEventListener('input', debounce(handleUserSearch, 300));
 
     // Add delegation for user selection
-    userSearchResults.addEventListener('click', (e) => {
+    userSearchResults?.addEventListener('click', (e) => {
         const userItem = e.target.closest('.user-search-item');
         if (userItem) {
             const userId = userItem.dataset.userId;
@@ -258,17 +258,19 @@ async function handleSendMessage() {
 }
 
 async function handleUserSearch() {
-    const query = document.getElementById('user-search').value.trim();
+    const query = document.getElementById('user-search').value?.trim() || '';
     const resultsContainer = document.getElementById('user-search-results');
 
-    // Always show self-chat option first
+    if (!resultsContainer) return;
+
+    // Always start with self-chat option
     resultsContainer.innerHTML = `
-        <div class="user-search-item" data-user-id="${currentUser.id}">
+        <div class="user-search-item ripple" data-user-id="${currentUser.id}">
             <div class="user-avatar">
                 <img src="${currentUser.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
             </div>
             <div class="user-info">
-                <div class="user-name">${currentUser.display_name} (Self Chat)</div>
+                <div class="user-name">${currentUser.display_name || currentUser.email} (Notes to Self)</div>
                 <div class="user-email">${currentUser.email}</div>
             </div>
         </div>
@@ -281,7 +283,7 @@ async function handleUserSearch() {
         const otherUsers = users
             .filter(user => user.id !== currentUser.id)
             .map(user => `
-                <div class="user-search-item" data-user-id="${user.id}">
+                <div class="user-search-item ripple" data-user-id="${user.id}">
                     <div class="user-avatar">
                         <img src="${user.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
                     </div>
@@ -373,20 +375,22 @@ export async function renderConversationsList() {
     try {
         const conversations = await fetchConversations(currentUser.id);
         
-        // Filter out duplicate self-conversations
-        const uniqueConversations = conversations.reduce((acc, curr) => {
-            if (curr.is_self_chat) {
-                // Only keep the most recent self-chat
-                const existingSelfChat = acc.find(c => c.is_self_chat);
-                if (!existingSelfChat || new Date(curr.created_at) > new Date(existingSelfChat.created_at)) {
-                    return [...acc.filter(c => !c.is_self_chat), curr];
+        // Better filtering for self-conversations
+        const processedConversations = new Map();
+        
+        conversations.forEach(conv => {
+            if (conv.is_self_chat) {
+                const existing = processedConversations.get('self');
+                if (!existing || new Date(conv.created_at) > new Date(existing.created_at)) {
+                    processedConversations.set('self', conv);
                 }
-                return acc;
+            } else {
+                processedConversations.set(conv.id, conv);
             }
-            return [...acc, curr];
-        }, []);
+        });
 
-        uniqueConversations.forEach(conversation => {
+        // Convert back to array and render
+        Array.from(processedConversations.values()).forEach(conversation => {
             const isSelfChat = conversation.is_self_chat;
             let displayName, avatarUrl;
 
