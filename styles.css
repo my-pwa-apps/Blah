@@ -65,8 +65,7 @@ body {
 }
 
 .app-container {
-    max-width: 1200px;
-    margin: 0 auto;
+    width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
@@ -303,35 +302,63 @@ body {
     object-fit: cover;
 }
 
+/* Fix sidebar and chat area layering */
 .content-container {
     display: flex;
     flex: 1;
     overflow: hidden;
+    position: relative;
+}
+
+.sidebar {
+    display: flex;
+    flex-direction: column;
+    background-color: var(--md-background);
+    z-index: 1;
+}
+
+.sidebar-header {
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--md-divider);
+    position: relative;  /* For proper button positioning */
 }
 
 @media (min-width: 1024px) {
     .content-container {
         display: grid;
-        grid-template-columns: 300px 1fr;
+        grid-template-columns: minmax(300px, 25%) 1fr;
         gap: 1px;
         background-color: var(--md-divider);
+        height: calc(100vh - 64px); /* Account for header height */
     }
 
     .sidebar {
-        position: static;
-        width: 300px;
-        transform: none !important;
+        min-width: 300px;
+        max-width: 400px;
+        height: 100%;
     }
 
     .chat-area {
         flex: 1;
         min-width: 0; /* Prevent flex item from overflowing */
+        height: 100%;
     }
 }
 
 @media (max-width: 1023px) {
+    .app-container {
+        height: 100vh;
+        height: 100dvh;
+    }
+
     .content-container {
         position: relative;
+        height: calc(100vh - 64px);
+        height: calc(100dvh - 64px);
+        overflow: hidden;
     }
 
     .sidebar {
@@ -353,6 +380,95 @@ body {
         width: 100%;
         flex: 1;
     }
+}
+
+@media (max-width: 768px) {
+    .app-container {
+        height: 100vh;
+        height: 100dvh;
+    }
+
+    .content-container {
+        height: calc(100vh - 64px);
+        height: calc(100dvh - 64px);
+    }
+
+    .sidebar {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        transform: translateX(0);  /* Show by default on mobile */
+        transition: transform 0.3s ease;
+    }
+
+    .chat-area {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        background-color: var(--md-background);
+    }
+
+    .chat-area.active {
+        transform: translateX(0);
+        z-index: 2;  /* Ensure chat is above sidebar when active */
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+
+    .fab {
+        position: fixed;  /* Fixed position on mobile */
+        right: 1rem;
+        bottom: 1rem;
+        top: auto;
+        transform: none;
+        width: 56px;  /* Larger on mobile */
+        height: 56px;
+    }
+
+    /* Fix chat header on mobile */
+    .chat-header {
+        background-color: var(--md-primary);
+        color: white;
+        padding: 1rem;
+    }
+
+    .chat-header #back-button {
+        display: flex;
+    }
+}
+
+@media (min-width: 769px) {
+    .content-container {
+        display: grid;
+        grid-template-columns: minmax(300px, 25%) 1fr;
+        gap: 1px;
+        background-color: var(--md-divider);
+    }
+
+    .sidebar {
+        position: relative;
+        width: 100%;
+        transform: none !important;
+    }
+
+    .chat-area {
+        position: relative;
+        transform: none !important;
+    }
+
+    #back-button {
+        display: none;  /* Hide back button on desktop */
+    }
+}
+
+.content-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
 }
 
 @media (max-width: 768px) {
@@ -846,11 +962,12 @@ body {
 
 /* Floating Action Button */
 .fab {
-    position: fixed;
-    right: 24px;
-    bottom: 24px;
-    width: 56px;
-    height: 56px;
+    position: absolute;  /* Changed from fixed to absolute */
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;  /* Slightly smaller on desktop */
+    height: 40px;
     border-radius: 50%;
     background-color: var(--md-primary);
     color: white;
