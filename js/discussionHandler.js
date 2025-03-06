@@ -102,18 +102,25 @@ window.discussionHandler = (function() {
             const isSecureSite = window.location.protocol === 'https:';
             const isGitHubPages = window.location.hostname.includes('github.io');
             
-            // Skip WebSocket on GitHub Pages to prevent connection errors
+            // Skip WebSocket completely on GitHub Pages or when no real URL is configured
             if (isGitHubPages) {
                 console.log('WebSocket connections disabled on GitHub Pages');
                 return;
             }
             
-            // Create WebSocketManager with proper configuration
-            socketManager = new WebSocketManager({
-                url: isSecureSite ? 'wss://your-server-url/discussions' : 'ws://your-server-url/discussions',
-                onMessage: handleSocketMessage,
-                enabled: false // Disable by default for now until you set up a real WebSocket server
-            });
+            // For real deployment, you would replace this with your actual WebSocket URL
+            const wsUrl = null; // Set to null to disable WebSocket or specify a real URL like 'wss://your-real-server.com/ws'
+            
+            // Only create WebSocketManager if URL is provided
+            if (wsUrl) {
+                socketManager = new WebSocketManager({
+                    url: wsUrl,
+                    onMessage: handleSocketMessage,
+                    enabled: true
+                });
+            } else {
+                console.log('WebSocket disabled - no URL configured');
+            }
         } catch (error) {
             console.error('WebSocket initialization failed:', error);
         }

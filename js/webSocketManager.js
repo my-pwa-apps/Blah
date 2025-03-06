@@ -7,26 +7,49 @@ class WebSocketManager {
         this.ws = null;
         this.enabled = config.enabled !== false;
         
-        // Only attempt connection if explicitly enabled
-        if (this.enabled) {
+        // Check for valid URL configuration
+        if (this.url && (this.url.includes('your-server-url') || this.url.includes('placeholder'))) {
+            console.log('WebSocket disabled - using placeholder URL:', this.url);
+            this.enabled = false;
+        }
+        
+        // Only attempt connection if explicitly enabled AND has valid URL
+        if (this.enabled && this.isValidUrl(this.url)) {
+            console.log('WebSocket connection enabled to:', this.url);
             this.connect();
         } else {
-            console.log('WebSocket connection disabled by configuration');
+            console.log('WebSocket connection disabled');
+        }
+    }
+    
+    isValidUrl(url) {
+        if (!url) return false;
+        if (typeof url !== 'string') return false;
+        if (url.includes('your-server-url')) return false;
+        if (url.includes('placeholder')) return false;
+        
+        try {
+            // Test if URL is valid format
+            new URL(url);
+            return true;
+        } catch (e) {
+            console.error('Invalid WebSocket URL format:', url);
+            return false;
         }
     }
 
     connect() {
         try {
+            // Skip connection to invalid URLs
+            if (!this.isValidUrl(this.url)) {
+                console.log('Skipping WebSocket connection to invalid URL');
+                return;
+            }
+            
             // Check if we're on HTTPS and adjust protocol automatically
             if (window.location.protocol === 'https:' && this.url.startsWith('ws://')) {
                 console.log('Upgrading WebSocket connection to WSS for HTTPS site');
                 this.url = this.url.replace('ws://', 'wss://');
-            }
-            
-            // Check if it's a placeholder URL and don't connect if it is
-            if (this.url.includes('your-server-url')) {
-                console.log('Skipping WebSocket connection to placeholder URL');
-                return;
             }
             
             console.log('Connecting to WebSocket:', this.url);
