@@ -51,6 +51,13 @@ export function initUI() {
     setupProfileListeners();
     setupConversationListeners();
     setupResponsiveListeners();
+    
+    // Handle online/offline status
+    window.addEventListener('online', () => showOnlineStatus(true));
+    window.addEventListener('offline', () => showOnlineStatus(false));
+    
+    // Show initial status
+    showOnlineStatus(navigator.onLine);
 }
 
 function setupAuthListeners() {
@@ -187,15 +194,25 @@ function setupProfileListeners() {
 
 function setupConversationListeners() {
     const newConversationBtn = document.getElementById('new-conversation');
+    const newConversationModal = document.getElementById('new-conversation-modal');
     const closeNewConversation = document.getElementById('close-new-conversation');
     const userSearch = document.getElementById('user-search');
     const userSearchResults = document.getElementById('user-search-results');
 
     newConversationBtn?.addEventListener('click', () => {
-        const modal = document.getElementById('new-conversation-modal');
-        modal.classList.remove('hidden');
-        // Show initial self-chat option
-        handleUserSearch();
+        if (newConversationModal) {
+            newConversationModal.classList.remove('hidden');
+            userSearch?.focus();
+            // Initialize search results with self-chat option
+            handleUserSearch();
+        }
+    });
+
+    // Close modal when clicking outside
+    newConversationModal?.addEventListener('click', (e) => {
+        if (e.target === newConversationModal) {
+            newConversationModal.classList.add('hidden');
+        }
     });
 
     closeNewConversation?.addEventListener('click', () => {
@@ -586,6 +603,19 @@ async function startNewConversation(otherUserId) {
         showError('Failed to start conversation');
         console.error(error);
     }
+}
+
+function showOnlineStatus(online = true) {
+    const status = document.getElementById('status');
+    if (!status) return;
+
+    status.textContent = online ? 'Online' : 'Offline';
+    status.className = `status-indicator ${online ? '' : 'offline'} show`;
+    
+    // Hide after 3 seconds
+    setTimeout(() => {
+        status.classList.remove('show');
+    }, 3000);
 }
 
 // ... add other UI utility functions ...

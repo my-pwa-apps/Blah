@@ -189,9 +189,11 @@ body {
 }
 
 .app-logo {
-    height: 40px;
-    width: 40px;
-    object-fit: contain;
+    height: 48px;  /* Increased from 40px */
+    width: 48px;
+    object-fit: cover;
+    object-position: center top;  /* Focus on top part of image */
+    margin-bottom: -4px;  /* Cut off bottom slightly */
 }
 
 .app-name {
@@ -242,10 +244,23 @@ body {
 }
 
 .status-indicator {
-    font-size: 0.8rem;
-    padding: 0.3rem 0.6rem;
+    position: fixed;
+    top: 1rem;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 0.5rem 1rem;
+    border-radius: 2rem;
     background-color: #34a853;
-    border-radius: 12px;
+    color: white;
+    font-size: 0.875rem;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+}
+
+.status-indicator.show {
+    opacity: 1;
 }
 
 .status-indicator.offline {
@@ -259,7 +274,8 @@ body {
     cursor: pointer;
     padding: 0.5rem;
     border-radius: 2rem;
-    transition: background-color 0.2s;
+    transition: all 0.2s;
+    height: 48px;  /* Match logo size */
 }
 
 .user-profile:hover {
@@ -267,7 +283,7 @@ body {
 }
 
 .user-profile .material-icons {
-    font-size: 24px;
+    font-size: 32px;  /* Bigger icon */
     color: white;
 }
 
@@ -599,14 +615,15 @@ body {
     align-items: center;
     justify-content: center;
     z-index: 100;
-    opacity: 0;
-    visibility: hidden;
+    opacity: 1;
+    visibility: visible;
     transition: opacity 0.3s, visibility 0.3s;
 }
 
-.modal:not(.hidden) {
-    opacity: 1;
-    visibility: visible;
+.modal.hidden {
+    opacity: 0;
+    visibility: hidden;
+    display: none;
 }
 
 .modal-content {
@@ -686,7 +703,7 @@ body {
 
 .modal-buttons button:last-child {
     background-color: var(--md-background);
-    color: var(--md-primary);
+    color: var (--md-primary);
     border: 1px solid var(--md-primary);
 }
 
