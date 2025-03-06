@@ -1,12 +1,12 @@
 const CACHE_NAME = 'message-pwa-v1';
 const ASSETS = [
-    '/',
-    '/index.html',
-    '/styles.css',
-    '/scripts.js',
-    '/manifest.json',
-    '/images/icon-192x192.png',
-    '/images/icon-512x512.png'
+    './',
+    './index.html',
+    './styles.css',
+    './js/app.js',
+    './manifest.json',
+    './images/icon-192x192.png',
+    './images/icon-512x512.png'
 ];
 
 // Install event - cache assets
@@ -14,7 +14,14 @@ self.addEventListener('install', event => {
     event.waitUntil(
         caches.open(CACHE_NAME)
             .then(cache => {
-                return cache.addAll(ASSETS);
+                // Cache what we can, but don't fail on errors
+                return Promise.allSettled(
+                    ASSETS.map(url => 
+                        cache.add(url).catch(err => 
+                            console.warn(`Failed to cache ${url}:`, err)
+                        )
+                    )
+                );
             })
             .then(() => self.skipWaiting())
     );
