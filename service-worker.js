@@ -1,12 +1,15 @@
 const CACHE_NAME = 'message-pwa-v1';
+const BASE_PATH = '/Blah';
 const ASSETS = [
-    './',
-    './index.html',
-    './styles.css',
-    './js/app.js',
-    './manifest.json',
-    './images/icon-192x192.png',
-    './images/icon-512x512.png'
+    `${BASE_PATH}/`,
+    `${BASE_PATH}/index.html`,
+    `${BASE_PATH}/styles.css`,
+    `${BASE_PATH}/js/app.js`,
+    `${BASE_PATH}/manifest.json`,
+    `${BASE_PATH}/images/icon-192x192.png`,
+    `${BASE_PATH}/images/icon-512x512.png`,
+    `${BASE_PATH}/images/default-avatar.png`,
+    `${BASE_PATH}/images/countdracula.png`
 ];
 
 // Install event - cache assets
