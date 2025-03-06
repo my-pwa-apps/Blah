@@ -47,9 +47,13 @@
                 <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
                     <span class="material-icons">dark_mode</span>
                 </button>
-                <div class="status-indicator" id="status">Online</div>
+                <div class="status-indicator" id="status">
+                    <span class="material-icons">circle</span>
+                    <span>Online</span>
+                </div>
                 <div class="user-profile" id="user-profile">
-                    <img id="profile-image" src="images/default-avatar.png" alt="Profile">
+                    <span class="material-icons">account_circle</span>
+                    <span class="profile-name"></span>
                 </div>
             </header>
             
@@ -90,7 +94,12 @@
         <!-- User profile modal -->
         <div id="profile-modal" class="modal hidden">
             <div class="modal-content">
-                <h2>Your Profile</h2>
+                <div class="modal-header">
+                    <h2>Your Profile</h2>
+                    <button id="close-profile" class="icon-button">
+                        <span class="material-icons">close</span>
+                    </button>
+                </div>
                 <div class="profile-form">
                     <div class="avatar-upload">
                         <img id="avatar-preview" src="images/default-avatar.png" alt="Avatar">

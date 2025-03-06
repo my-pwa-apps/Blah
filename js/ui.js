@@ -147,22 +147,42 @@ function setupMessageListeners() {
 
 function setupProfileListeners() {
     const userProfile = document.getElementById('user-profile');
+    const profileModal = document.getElementById('profile-modal');
     const closeProfile = document.getElementById('close-profile');
     const saveProfile = document.getElementById('save-profile');
     const avatarUpload = document.getElementById('avatar-upload');
     const logoutButton = document.getElementById('logout-button');
+    const profileName = document.querySelector('.profile-name');
 
-    userProfile.addEventListener('click', () => {
-        document.getElementById('profile-modal').classList.remove('hidden');
+    // Update profile name in header
+    if (currentUser) {
+        profileName.textContent = currentUser.display_name || currentUser.email;
+    }
+
+    userProfile?.addEventListener('click', () => {
+        profileModal?.classList.remove('hidden');
+        // Pre-fill form fields
+        if (currentUser) {
+            document.getElementById('display-name').value = currentUser.display_name || '';
+            document.getElementById('status-message').value = currentUser.status || '';
+            document.getElementById('avatar-preview').src = currentUser.avatar_url || 'images/default-avatar.png';
+        }
     });
 
-    closeProfile.addEventListener('click', () => {
-        document.getElementById('profile-modal').classList.add('hidden');
+    closeProfile?.addEventListener('click', () => {
+        profileModal?.classList.add('hidden');
     });
 
-    saveProfile.addEventListener('click', handleProfileUpdate);
-    avatarUpload.addEventListener('change', handleAvatarUpload);
-    logoutButton.addEventListener('click', handleLogout);
+    // Close modal when clicking outside
+    profileModal?.addEventListener('click', (e) => {
+        if (e.target === profileModal) {
+            profileModal.classList.add('hidden');
+        }
+    });
+
+    saveProfile?.addEventListener('click', handleProfileUpdate);
+    avatarUpload?.addEventListener('change', handleAvatarUpload);
+    logoutButton?.addEventListener('click', handleLogout);
 }
 
 function setupConversationListeners() {
@@ -365,7 +385,12 @@ export function showMainApp(profile) {
     currentUser = profile;
     document.getElementById('auth-container').classList.add('hidden');
     document.getElementById('app-content').classList.remove('hidden');
-    document.getElementById('profile-image').src = profile.avatar_url || 'images/default-avatar.png';
+    
+    // Update profile display
+    const profileName = document.querySelector('.profile-name');
+    if (profileName) {
+        profileName.textContent = profile.display_name || profile.email;
+    }
 }
 
 export async function renderConversationsList() {
