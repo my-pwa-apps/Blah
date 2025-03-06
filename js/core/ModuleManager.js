@@ -1,6 +1,6 @@
-import { AuthModule } from './auth/AuthModule.js';
-import { DataModule } from './data/DataModule.js';
-import { UIModule } from './ui/UIModule.js';
+import { AuthModule } from '../modules/auth/AuthModule.js';
+import { DataModule } from '../modules/data/DataModule.js';
+import { UIModule } from '../modules/ui/UIModule.js';
 
 export class ModuleManager {
     constructor(app) {

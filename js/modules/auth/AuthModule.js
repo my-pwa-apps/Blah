@@ -1,5 +1,5 @@
 import { BaseModule } from '../BaseModule.js';
-import { SUPABASE_CONFIG } from '../../../config.js';
+import { SUPABASE_CONFIG } from '../../config.js';
 
 export class AuthModule extends BaseModule {
     constructor(app) {
