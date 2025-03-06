@@ -221,12 +221,16 @@ export async function sendMessage(conversationId, senderId, content) {
 
 export async function searchUsers(query, currentUserId) {
     try {
-        const { data, error } = await supabase
+        let queryBuilder = supabase
             .from('profiles')
-            .select('id, email, display_name, avatar_url')
-            .or(`email.ilike.%${query}%,display_name.ilike.%${query}%`)
-            .neq('id', currentUserId)
-            .limit(10);
+            .select('id, email, display_name, avatar_url');
+            
+        if (query) {
+            queryBuilder = queryBuilder
+                .or(`email.ilike.%${query}%,display_name.ilike.%${query}%`);
+        }
+        
+        const { data, error } = await queryBuilder.limit(10);
             
         if (error) throw error;
         

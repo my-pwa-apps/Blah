@@ -472,6 +472,17 @@ body {
     display: none !important;
 }
 
+.no-conversation {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: #666;
+    font-size: 1.1rem;
+    text-align: center;
+    padding: 2rem;
+}
+
 @media (max-width: 768px) {
     .content-container {
         position: relative;

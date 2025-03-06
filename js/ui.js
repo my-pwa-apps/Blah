@@ -97,6 +97,14 @@ function setupAuthListeners() {
 function setupMessageListeners() {
     const sendButton = document.getElementById('send-button');
     const messageInput = document.getElementById('message-text');
+    const messageContainer = document.getElementById('message-container');
+
+    // Show placeholder when no conversation selected
+    if (!currentConversation) {
+        messageContainer.innerHTML = '<div class="no-conversation">Select a conversation or start a new one</div>';
+        messageInput.disabled = true;
+        sendButton.disabled = true;
+    }
 
     sendButton.addEventListener('click', () => handleSendMessage());
     messageInput.addEventListener('keypress', (e) => {
@@ -211,28 +219,33 @@ async function handleUserSearch() {
     const resultsContainer = document.getElementById('user-search-results');
 
     if (!query) {
-        resultsContainer.innerHTML = '';
+        resultsContainer.innerHTML = `
+            <div class="user-search-item" data-user-id="${currentUser.id}">
+                <div class="user-avatar">
+                    <img src="${currentUser.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+                </div>
+                <div class="user-info">
+                    <div class="user-name">${currentUser.display_name} (You)</div>
+                    <div class="user-email">${currentUser.email}</div>
+                </div>
+            </div>
+        `;
         return;
     }
 
     try {
-        const users = await searchUsers(query, currentUser.id);
+        const users = await searchUsers(query, null); // Remove currentUserId filter to allow self-chat
         resultsContainer.innerHTML = users.map(user => `
             <div class="user-search-item" data-user-id="${user.id}">
                 <div class="user-avatar">
                     <img src="${user.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
                 </div>
                 <div class="user-info">
-                    <div class="user-name">${user.display_name}</div>
+                    <div class="user-name">${user.display_name}${user.id === currentUser.id ? ' (You)' : ''}</div>
                     <div class="user-email">${user.email}</div>
                 </div>
             </div>
         `).join('');
-
-        // Add click handlers for search results
-        resultsContainer.querySelectorAll('.user-search-item').forEach(item => {
-            item.addEventListener('click', () => startNewConversation(item.dataset.userId));
-        });
     } catch (error) {
         showError('Failed to search users');
         console.error(error);
@@ -342,6 +355,11 @@ export async function renderConversationsList() {
 async function loadConversation(conversationId) {
     currentConversation = conversationId;
     const messageContainer = document.getElementById('message-container');
+    const messageInput = document.getElementById('message-text');
+    const sendButton = document.getElementById('send-button');
+    
+    messageInput.disabled = false;
+    sendButton.disabled = false;
     messageContainer.innerHTML = '';
     
     try {
