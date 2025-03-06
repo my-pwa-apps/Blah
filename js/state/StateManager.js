@@ -1,17 +1,18 @@
 export class StateManager {
     constructor() {
-        this.state = this.loadInitialState();
+        this.state = this._loadInitialState();
         this.listeners = new Map();
         
         // Setup persistence
-        window.addEventListener('beforeunload', () => this.persistState());
+        window.addEventListener('beforeunload', () => this._persistState());
     }
 
-    loadInitialState() {
+    // Changed to underscore prefix convention for "private" methods
+    _loadInitialState() {
         const defaultState = {
             currentUser: null,
             currentConversation: null,
-            theme: this.detectPreferredTheme(),
+            theme: this._detectPreferredTheme(),
             isOnline: navigator.onLine,
             isVisible: document.visibilityState === 'visible',
             notifications: {
@@ -29,7 +30,7 @@ export class StateManager {
         }
     }
 
-    detectPreferredTheme() {
+    _detectPreferredTheme() {
         const stored = localStorage.getItem('theme');
         if (stored) return stored;
         
@@ -37,7 +38,7 @@ export class StateManager {
             'dark' : 'light';
     }
 
-    persistState() {
+    _persistState() {
         try {
             const persistedState = {
                 theme: this.state.theme,
