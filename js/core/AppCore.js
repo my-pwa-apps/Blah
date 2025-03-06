@@ -1,6 +1,6 @@
 import { ModuleManager } from './ModuleManager.js';
-import { StateManager } from '../state/StateManager.js';
-import { Logger } from '../utils/Logger.js';
+import { StateManager } from './state/StateManager.js';
+import { Logger } from './utils/Logger.js';
 
 export class AppCore {
     constructor() {
