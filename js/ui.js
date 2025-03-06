@@ -131,9 +131,13 @@ function setupConversationListeners() {
     const newConversationBtn = document.getElementById('new-conversation');
     const closeNewConversation = document.getElementById('close-new-conversation');
     const userSearch = document.getElementById('user-search');
+    const userSearchResults = document.getElementById('user-search-results');
 
     newConversationBtn.addEventListener('click', () => {
         document.getElementById('new-conversation-modal').classList.remove('hidden');
+        userSearch.value = '';
+        userSearchResults.innerHTML = '';
+        userSearch.focus();
     });
 
     closeNewConversation.addEventListener('click', () => {
@@ -141,6 +145,15 @@ function setupConversationListeners() {
     });
 
     userSearch.addEventListener('input', debounce(handleUserSearch, 300));
+
+    // Add delegation for user selection
+    userSearchResults.addEventListener('click', (e) => {
+        const userItem = e.target.closest('.user-search-item');
+        if (userItem) {
+            const userId = userItem.dataset.userId;
+            startNewConversation(userId);
+        }
+    });
 }
 
 function setupResponsiveListeners() {
@@ -167,8 +180,23 @@ async function handleSendMessage() {
 
     try {
         messageInput.disabled = true;
-        await sendMessage(currentConversation, currentUser.id, content);
+        const message = await sendMessage(currentConversation, currentUser.id, content);
         messageInput.value = '';
+        
+        // Add the new message to the UI immediately
+        const messageEl = document.createElement('div');
+        messageEl.className = 'message sent';
+        messageEl.innerHTML = `
+            <div class="message-content">${content}</div>
+            <div class="message-info">
+                ${new Date().toLocaleTimeString()}
+            </div>
+        `;
+        document.getElementById('message-container').appendChild(messageEl);
+        messageEl.scrollIntoView({ behavior: 'smooth' });
+        
+        // Refresh conversations list to update last message
+        await renderConversationsList();
     } catch (error) {
         showError('Failed to send message');
         console.error(error);
@@ -402,6 +430,27 @@ async function handleLogout() {
         document.getElementById('profile-modal').classList.add('hidden');
     } catch (error) {
         showError('Failed to logout');
+        console.error(error);
+    }
+}
+
+async function startNewConversation(otherUserId) {
+    try {
+        const participants = [currentUser.id, otherUserId];
+        const conversation = await createConversation(participants);
+        
+        // Close the new conversation modal
+        document.getElementById('new-conversation-modal').classList.add('hidden');
+        
+        // Clear the search
+        document.getElementById('user-search').value = '';
+        document.getElementById('user-search-results').innerHTML = '';
+        
+        // Refresh conversations list and open the new conversation
+        await renderConversationsList();
+        await loadConversation(conversation.id);
+    } catch (error) {
+        showError('Failed to start conversation');
         console.error(error);
     }
 }

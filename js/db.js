@@ -139,6 +139,23 @@ export async function createConversation(participants) {
             
         if (participantsError) throw participantsError;
         
+        // Subscribe to messages for this conversation
+        subscribeToMessages(conversation.id, message => {
+            // Only add message if it's from another user
+            if (message.sender_id !== participants[0]) {
+                const messageEl = document.createElement('div');
+                messageEl.className = 'message received';
+                messageEl.innerHTML = `
+                    <div class="message-content">${message.content}</div>
+                    <div class="message-info">
+                        ${new Date(message.created_at).toLocaleTimeString()}
+                    </div>
+                `;
+                document.getElementById('message-container')?.appendChild(messageEl);
+                messageEl.scrollIntoView({ behavior: 'smooth' });
+            }
+        });
+        
         return conversation;
     } catch (error) {
         console.error('Error creating conversation:', error.message);
