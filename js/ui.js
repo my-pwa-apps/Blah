@@ -12,9 +12,6 @@ let currentConversation = null;
 let authInProgress = false;
 
 export function initUI() {
-    // ... existing auth listeners ...
-
-    // Initialize UI components
     setupAuthListeners();
     setupMessageListeners();
     setupProfileListeners();
@@ -95,7 +92,135 @@ function setupAuthListeners() {
     });
 }
 
-// ... add other UI setup functions ...
+function setupMessageListeners() {
+    const sendButton = document.getElementById('send-button');
+    const messageInput = document.getElementById('message-text');
+
+    sendButton.addEventListener('click', () => handleSendMessage());
+    messageInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSendMessage();
+        }
+    });
+}
+
+function setupProfileListeners() {
+    const userProfile = document.getElementById('user-profile');
+    const closeProfile = document.getElementById('close-profile');
+    const saveProfile = document.getElementById('save-profile');
+    const avatarUpload = document.getElementById('avatar-upload');
+    const logoutButton = document.getElementById('logout-button');
+
+    userProfile.addEventListener('click', () => {
+        document.getElementById('profile-modal').classList.remove('hidden');
+    });
+
+    closeProfile.addEventListener('click', () => {
+        document.getElementById('profile-modal').classList.add('hidden');
+    });
+
+    saveProfile.addEventListener('click', handleProfileUpdate);
+    avatarUpload.addEventListener('change', handleAvatarUpload);
+    logoutButton.addEventListener('click', handleLogout);
+}
+
+function setupConversationListeners() {
+    const newConversationBtn = document.getElementById('new-conversation');
+    const closeNewConversation = document.getElementById('close-new-conversation');
+    const userSearch = document.getElementById('user-search');
+
+    newConversationBtn.addEventListener('click', () => {
+        document.getElementById('new-conversation-modal').classList.remove('hidden');
+    });
+
+    closeNewConversation.addEventListener('click', () => {
+        document.getElementById('new-conversation-modal').classList.add('hidden');
+    });
+
+    userSearch.addEventListener('input', debounce(handleUserSearch, 300));
+}
+
+function setupResponsiveListeners() {
+    const backButton = document.getElementById('back-button');
+    
+    backButton.addEventListener('click', () => {
+        document.getElementById('sidebar').classList.add('active');
+        backButton.classList.add('hidden');
+    });
+
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            document.getElementById('sidebar').classList.remove('active');
+            backButton.classList.add('hidden');
+        }
+    });
+}
+
+async function handleSendMessage() {
+    const messageInput = document.getElementById('message-text');
+    const content = messageInput.value.trim();
+
+    if (!content || !currentConversation) return;
+
+    try {
+        messageInput.disabled = true;
+        await sendMessage(currentConversation, currentUser.id, content);
+        messageInput.value = '';
+    } catch (error) {
+        showError('Failed to send message');
+        console.error(error);
+    } finally {
+        messageInput.disabled = false;
+        messageInput.focus();
+    }
+}
+
+async function handleUserSearch() {
+    const query = document.getElementById('user-search').value.trim();
+    const resultsContainer = document.getElementById('user-search-results');
+
+    if (!query) {
+        resultsContainer.innerHTML = '';
+        return;
+    }
+
+    try {
+        const users = await searchUsers(query, currentUser.id);
+        resultsContainer.innerHTML = users.map(user => `
+            <div class="user-search-item" data-user-id="${user.id}">
+                <div class="user-avatar">
+                    <img src="${user.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+                </div>
+                <div class="user-info">
+                    <div class="user-name">${user.display_name}</div>
+                    <div class="user-email">${user.email}</div>
+                </div>
+            </div>
+        `).join('');
+
+        // Add click handlers for search results
+        resultsContainer.querySelectorAll('.user-search-item').forEach(item => {
+            item.addEventListener('click', () => startNewConversation(item.dataset.userId));
+        });
+    } catch (error) {
+        showError('Failed to search users');
+        console.error(error);
+    }
+}
+
+// Utility function for debouncing
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
 
 export function showError(message) {
     const errorDiv = document.createElement('div');
