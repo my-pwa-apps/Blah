@@ -33,6 +33,30 @@
             color: #666;
             margin-bottom: 20px;
         }
+        
+        /* Hidden debugging tools - only shown when needed */
+        .debug-panel {
+            display: none;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: #f8f9fa;
+        }
+        
+        body.debug-mode .debug-panel {
+            display: block;
+        }
+        
+        /* Version information - subtle footer */
+        .version-info {
+            font-size: 12px;
+            color: #999;
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+        }
     </style>
     <!-- Add cache-busting query parameter to prevent caching -->
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
@@ -78,6 +102,20 @@
         <section id="discussions">
             <!-- Discussions will be dynamically loaded here -->
         </section>
+        
+        <!-- Hidden debugging panel - only visible when needed -->
+        <div class="debug-panel">
+            <h3>Debugging Tools</h3>
+            <p>Press <code>Ctrl+Shift+D</code> to toggle debug mode</p>
+            <div class="debug-buttons">
+                <button id="debugTestBasicDom">Test Basic DOM</button>
+                <button id="debugLoadDiscussions">Load Discussions</button>
+                <button id="debugRunDiagnostics">Run Diagnostics</button>
+                <button id="debugCreateMockData">Use Mock Data</button>
+                <button id="debugRepairDiscussions">Repair Discussions</button>
+            </div>
+            <div id="debugStatus" class="status-message">Debug ready</div>
+        </div>
     </main>
 
     <!-- New Discussion Modal -->
@@ -104,7 +142,12 @@
         </div>
     </div>
     
-    <!-- Load scripts in correct order to prevent conflicts -->
+    <!-- Version information in footer -->
+    <footer class="version-info">
+        <p>Version: 1.0.3 | Last updated: <span id="build-time"></span></p>
+    </footer>
+    
+    <!-- Initialize Supabase -->
     <script>
         // Initialize Supabase globally first
         window.supabaseUrl = 'https://eawoqpkwyunkmpyuijuq.supabase.co';
@@ -112,18 +155,6 @@
         
         // Create a single Supabase client for the entire application
         window.projectSupabase = window.supabase.createClient(window.supabaseUrl, window.supabaseKey);
-        console.log('Global Supabase client initialized');
-    </script>
-    <script src="js/setup/dbSetup.js"></script>
-    <script src="js/modules/supabaseClient.js"></script>
-    <script src="js/modules/userAuth.js"></script>
-    <script src="js/modules/userProfile.js"></script>
-    <script src="js/modules/userInterface.js"></script>
-    <script src="discussionHandler.js"></script>
-    <script src="scripts.js"></script>
-    <script>
-        // Set current time to verify page reload
-        document.getElementById('build-time').textContent = new Date().toLocaleString();
         
         // Create some mock discussions data
         window.discussions = [
@@ -138,59 +169,129 @@
                 content: 'This is the content of the second discussion topic.'
             }
         ];
+        
+        // Update build time
+        document.getElementById('build-time').textContent = new Date().toLocaleString();
     </script>
     
-    <!-- Add scripts with cache-busting parameters -->
-    <script src="js/webSocketManager.js?v=1.0.2"></script>
-    <script src="js/discussionHandler.js?v=1.0.2"></script>
-    <script src="js/discussionDebugger.js?v=1.0.2"></script>
-    <script src="js/discussionRepair.js?v=1.0.2"></script>
-    <script src="js/githubPagesLoader.js?v=1.0.2"></script>
+    <!-- Load application scripts -->
+    <script src="js/setup/dbSetup.js"></script>
+    <script src="js/modules/supabaseClient.js"></script>
+    <script src="js/modules/userAuth.js"></script>
+    <script src="js/modules/userProfile.js"></script>
+    <script src="js/modules/userInterface.js"></script>
     
+    <!-- Load discussion system scripts with cache-busting -->
+    <script src="js/webSocketManager.js?v=1.0.3"></script>
+    <script src="js/discussionHandler.js?v=1.0.3"></script>
+    <script src="js/discussionDebugger.js?v=1.0.3"></script>
+    <script src="js/discussionRepair.js?v=1.0.3"></script>
+    
+    <!-- Main application script -->
     <script>
-        // Initialize discussions after a delay to ensure scripts are loaded
-        setTimeout(function() {
-            // Try to load discussions using handler if it exists
-            if (window.discussionHandler && typeof window.discussionHandler.loadDiscussions === 'function') {
-                console.log('Attempting to load discussions with handler');
-                try {
-                    // Check for WebSocket errors in console and ignore them
-                    const originalConsoleError = console.error;
-                    let wsErrorDetected = false;
-                    
-                    console.error = function(msg, ...args) {
-                        if (typeof msg === 'string' && 
-                            (msg.includes('WebSocket') || 
-                             msg.includes('ws://') || 
-                             msg.includes('Mixed Content'))) {
-                            wsErrorDetected = true;
-                        }
-                        originalConsoleError.apply(console, [msg, ...args]);
-                    };
-                    
+        // Initialize discussions without showing debug elements
+        document.addEventListener('DOMContentLoaded', function() {
+            // Hide debug tools by default
+            const debugPanel = document.querySelector('.debug-panel');
+            if (debugPanel) {
+                debugPanel.style.display = 'none';
+            }
+            
+            // Add keyboard shortcut to toggle debug mode (Ctrl+Shift+D)
+            document.addEventListener('keydown', function(e) {
+                if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+                    document.body.classList.toggle('debug-mode');
+                    e.preventDefault();
+                }
+            });
+            
+            // Setup debug buttons
+            setupDebugButtons();
+            
+            // Initialize discussions
+            initializeDiscussions();
+        });
+        
+        function setupDebugButtons() {
+            // Test Basic DOM
+            document.getElementById('debugTestBasicDom')?.addEventListener('click', function() {
+                const container = document.getElementById('discussions-container');
+                if (container) {
+                    container.innerHTML = '';
+                    const testEl = document.createElement('div');
+                    testEl.className = 'discussion-item';
+                    testEl.innerHTML = '<h3>Test Element</h3><p>This is a test element</p>';
+                    container.appendChild(testEl);
+                }
+            });
+            
+            // Load Discussions
+            document.getElementById('debugLoadDiscussions')?.addEventListener('click', function() {
+                if (window.discussionHandler?.loadDiscussions) {
                     window.discussionHandler.loadDiscussions();
-                    
-                    // Restore original console.error
-                    console.error = originalConsoleError;
-                    
-                    if (wsErrorDetected) {
-                        console.log('WebSocket errors detected but discussions loaded anyway');
+                }
+            });
+            
+            // Run Diagnostics
+            document.getElementById('debugRunDiagnostics')?.addEventListener('click', function() {
+                if (window.discussionDebugger?.diagnose) {
+                    window.discussionDebugger.diagnose();
+                }
+            });
+            
+            // Use Mock Data
+            document.getElementById('debugCreateMockData')?.addEventListener('click', function() {
+                window.discussions = [
+                    { id: "mock1", title: "Mock Discussion 1", content: "This is mock content 1" },
+                    { id: "mock2", title: "Mock Discussion 2", content: "This is mock content 2" },
+                    { id: "mock3", title: "Mock Discussion 3", content: "This is mock content 3" }
+                ];
+            });
+            
+            // Repair Discussions
+            document.getElementById('debugRepairDiscussions')?.addEventListener('click', function() {
+                if (window.discussionRepair?.runRepair) {
+                    window.discussionRepair.runRepair();
+                }
+            });
+        }
+        
+        function initializeDiscussions() {
+            // Try the main handler first, fallback to repair if needed
+            setTimeout(function() {
+                // Suppress WebSocket errors
+                const originalConsoleError = console.error;
+                let wsErrorDetected = false;
+                
+                console.error = function(msg, ...args) {
+                    if (typeof msg === 'string' && 
+                        (msg.includes('WebSocket') || 
+                         msg.includes('ws://') || 
+                         msg.includes('Mixed Content'))) {
+                        wsErrorDetected = true;
+                    }
+                    originalConsoleError.apply(console, [msg, ...args]);
+                };
+                
+                try {
+                    if (window.discussionHandler && typeof window.discussionHandler.loadDiscussions === 'function') {
+                        window.discussionHandler.loadDiscussions();
+                    } else if (window.discussionRepair && typeof window.discussionRepair.runRepair === 'function') {
+                        // Use repair as fallback
+                        window.discussionRepair.runRepair();
                     }
                 } catch (e) {
-                    console.error('Error loading discussions with handler:', e);
-                    // Fallback to repair script
-                    if (window.discussionRepair && typeof window.discussionRepair.runRepair === 'function') {
+                    console.error('Error initializing discussions:', e);
+                    // Use repair as fallback for errors
+                    if (window.discussionRepair?.runRepair) {
                         window.discussionRepair.runRepair();
                     }
                 }
-            } else {
-                console.log('Discussion handler not found, using repair script');
-                // Use repair script
-                if (window.discussionRepair && typeof window.discussionRepair.runRepair === 'function') {
-                    window.discussionRepair.runRepair();
-                }
-            }
-        }, 1000);
+                
+                // Restore original console.error
+                console.error = originalConsoleError;
+            }, 500);
+        }
     </script>
 </body>
 </html>
