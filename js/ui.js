@@ -99,11 +99,9 @@ function setupMessageListeners() {
     const messageInput = document.getElementById('message-text');
     const messageContainer = document.getElementById('message-container');
 
-    // Show placeholder when no conversation selected
+    // Create default self-conversation if none exists
     if (!currentConversation) {
-        messageContainer.innerHTML = '<div class="no-conversation">Select a conversation or start a new one</div>';
-        messageInput.disabled = true;
-        sendButton.disabled = true;
+        startSelfConversation();
     }
 
     sendButton.addEventListener('click', () => handleSendMessage());
@@ -218,34 +216,38 @@ async function handleUserSearch() {
     const query = document.getElementById('user-search').value.trim();
     const resultsContainer = document.getElementById('user-search-results');
 
-    if (!query) {
-        resultsContainer.innerHTML = `
-            <div class="user-search-item" data-user-id="${currentUser.id}">
-                <div class="user-avatar">
-                    <img src="${currentUser.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
-                </div>
-                <div class="user-info">
-                    <div class="user-name">${currentUser.display_name} (You)</div>
-                    <div class="user-email">${currentUser.email}</div>
-                </div>
+    // Always show self-chat option first
+    resultsContainer.innerHTML = `
+        <div class="user-search-item" data-user-id="${currentUser.id}">
+            <div class="user-avatar">
+                <img src="${currentUser.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
             </div>
-        `;
-        return;
-    }
+            <div class="user-info">
+                <div class="user-name">${currentUser.display_name} (Self Chat)</div>
+                <div class="user-email">${currentUser.email}</div>
+            </div>
+        </div>
+    `;
+
+    if (!query) return;
 
     try {
-        const users = await searchUsers(query, null); // Remove currentUserId filter to allow self-chat
-        resultsContainer.innerHTML = users.map(user => `
-            <div class="user-search-item" data-user-id="${user.id}">
-                <div class="user-avatar">
-                    <img src="${user.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+        const users = await searchUsers(query);
+        const otherUsers = users
+            .filter(user => user.id !== currentUser.id)
+            .map(user => `
+                <div class="user-search-item" data-user-id="${user.id}">
+                    <div class="user-avatar">
+                        <img src="${user.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+                    </div>
+                    <div class="user-info">
+                        <div class="user-name">${user.display_name || user.email}</div>
+                        <div class="user-email">${user.email}</div>
+                    </div>
                 </div>
-                <div class="user-info">
-                    <div class="user-name">${user.display_name}${user.id === currentUser.id ? ' (You)' : ''}</div>
-                    <div class="user-email">${user.email}</div>
-                </div>
-            </div>
-        `).join('');
+            `).join('');
+        
+        resultsContainer.innerHTML += otherUsers;
     } catch (error) {
         showError('Failed to search users');
         console.error(error);
@@ -469,6 +471,23 @@ async function startNewConversation(otherUserId) {
         await loadConversation(conversation.id);
     } catch (error) {
         showError('Failed to start conversation');
+        console.error(error);
+    }
+}
+
+async function startSelfConversation() {
+    try {
+        const participants = [currentUser.id];
+        const conversation = await createConversation(participants);
+        
+        // Close the new conversation modal if open
+        document.getElementById('new-conversation-modal').classList.add('hidden');
+        
+        // Refresh conversations list and open the new conversation
+        await renderConversationsList();
+        await loadConversation(conversation.id);
+    } catch (error) {
+        showError('Failed to start self conversation');
         console.error(error);
     }
 }

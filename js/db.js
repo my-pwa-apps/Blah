@@ -99,6 +99,7 @@ export async function fetchConversations(userId) {
             .select(`
                 id, 
                 created_at,
+                is_self_chat,
                 participants (
                     user_id, 
                     profiles (id, display_name, avatar_url)
@@ -121,7 +122,9 @@ export async function createConversation(participants) {
         // First create the conversation
         const { data: conversation, error } = await supabase
             .from('conversations')
-            .insert({})
+            .insert({
+                is_self_chat: participants.length === 1
+            })
             .select()
             .single();
             
@@ -219,18 +222,13 @@ export async function sendMessage(conversationId, senderId, content) {
     }
 }
 
-export async function searchUsers(query, currentUserId) {
+export async function searchUsers(query) {
     try {
-        let queryBuilder = supabase
+        const { data, error } = await supabase
             .from('profiles')
-            .select('id, email, display_name, avatar_url');
-            
-        if (query) {
-            queryBuilder = queryBuilder
-                .or(`email.ilike.%${query}%,display_name.ilike.%${query}%`);
-        }
-        
-        const { data, error } = await queryBuilder.limit(10);
+            .select('id, email, display_name, avatar_url')
+            .ilike('email', `%${query}%`)
+            .limit(10);
             
         if (error) throw error;
         
