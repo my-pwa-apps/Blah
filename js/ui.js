@@ -99,10 +99,10 @@ function setupMessageListeners() {
     const messageInput = document.getElementById('message-text');
     const messageContainer = document.getElementById('message-container');
 
-    // Create default self-conversation if none exists
-    if (!currentConversation) {
-        startSelfConversation();
-    }
+    // Show placeholder when no conversation is selected
+    messageContainer.innerHTML = '<div class="no-conversation">Type a message to start a self-chat, or select a conversation</div>';
+    messageInput.disabled = false;
+    sendButton.disabled = false;
 
     sendButton.addEventListener('click', () => handleSendMessage());
     messageInput.addEventListener('keypress', (e) => {
