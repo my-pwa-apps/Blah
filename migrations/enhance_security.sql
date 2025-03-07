@@ -56,9 +56,11 @@ CREATE POLICY "Users can read participants"
 ON participants FOR SELECT
 TO authenticated
 USING (
-    conversation_id IN (
-        SELECT conversation_id FROM participants
-        WHERE user_id = auth.uid()
+    user_id = auth.uid() OR  -- Can read own participant entries
+    conversation_id IN (     -- Can read participants of conversations they're in
+        SELECT p.conversation_id 
+        FROM participants p 
+        WHERE p.user_id = auth.uid()
     )
 );
 
@@ -66,16 +68,13 @@ CREATE POLICY "Users can add participants"
 ON participants FOR INSERT
 TO authenticated
 WITH CHECK (
-    -- Can only add participants to conversations they're in
-    conversation_id IN (
-        SELECT conversation_id FROM participants
-        WHERE user_id = auth.uid()
+    -- Only allow adding participants if user is already a participant or creating new conversation
+    NEW.user_id = auth.uid() OR
+    EXISTS (
+        SELECT 1 FROM participants p
+        WHERE p.conversation_id = NEW.conversation_id
+        AND p.user_id = auth.uid()
     )
-    -- Prevent adding more than 50 participants per conversation
-    AND (
-        SELECT COUNT(*) FROM participants
-        WHERE conversation_id = NEW.conversation_id
-    ) < 50
 );
 
 -- Message policies with rate limiting

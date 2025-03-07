@@ -492,11 +492,50 @@ export class DataModule extends BaseModule {
         }
     }
 
+    async _handleSubscriptionError(channel, conversationId) {
+        try {
+            this.logger.info(`Handling subscription error for conversation ${conversationId}`);
+            
+            // Wait a bit before attempting reconnect
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // Create a new channel instead of reusing the old one
+            if (channel) {
+                try {
+                    await channel.unsubscribe();
+                } catch (err) {
+                    // Ignore unsubscribe errors
+                }
+                
+                const newChannel = this.supabase.channel(`messages:${conversationId}:${Date.now()}`);
+                
+                newChannel
+                    .on('postgres_changes', {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `conversation_id=eq.${conversationId}`
+                    }, payload => {
+                        if (payload.new) {
+                            this.logger.info(`Received message on new channel for ${conversationId}`);
+                            callback(payload.new);
+                        }
+                    })
+                    .subscribe();
+                
+                return newChannel;
+            }
+        } catch (error) {
+            this.logger.error(`Error handling subscription reconnect for ${conversationId}:`, error);
+        }
+    }
+
     subscribeToNewMessages(conversationId, callback) {
         this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
         
         try {
-            const channel = this.supabase.channel(`messages:${conversationId}`)
+            const channelName = `messages:${conversationId}:${Date.now()}`; // Add timestamp to make unique
+            const channel = this.supabase.channel(channelName)
                 .on(
                     'postgres_changes',
                     {
@@ -524,7 +563,11 @@ export class DataModule extends BaseModule {
             return {
                 unsubscribe: () => {
                     this.logger.info(`Unsubscribing from conversation ${conversationId}`);
-                    channel.unsubscribe();
+                    try {
+                        channel.unsubscribe();
+                    } catch (err) {
+                        this.logger.warn('Error during unsubscribe:', err);
+                    }
                 },
                 conversationId
             };
@@ -534,26 +577,6 @@ export class DataModule extends BaseModule {
                 unsubscribe: () => {},
                 conversationId
             };
-        }
-    }
-
-    // Add this new method for handling subscription errors
-    async _handleSubscriptionError(channel, conversationId) {
-        try {
-            this.logger.info(`Handling subscription error for conversation ${conversationId}`);
-            
-            // Wait a bit before attempting reconnect
-            await new Promise(resolve => setTimeout(resolve, 3000));
-            
-            // Check if the channel is still active
-            if (channel) {
-                this.logger.info(`Attempting to resubscribe to conversation ${conversationId}`);
-                await channel.subscribe();
-            }
-        } catch (error) {
-            this.logger.error(`Error handling subscription reconnect for ${conversationId}:`, error);
-            // If reconnect fails, try again in 5 seconds
-            setTimeout(() => this._handleSubscriptionError(channel, conversationId), 5000);
         }
     }
 
