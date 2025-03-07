@@ -17,24 +17,42 @@ export class DataModule extends BaseModule {
 
     _setupConnectionMonitoring() {
         try {
-            this.heartbeatChannel = this.supabase.channel('heartbeat')
-                .subscribe((status) => {
-                    this.connectionStatus = status;
-                    this.logger.info(`Real-time connection status: ${status}`);
-                    
-                    if (status === 'SUBSCRIBED') {
-                        this.connectionStatus = 'CONNECTED';
-                    } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
-                        this.connectionStatus = 'DISCONNECTED';
-                        // Try to reconnect
-                        setTimeout(() => {
-                            this.heartbeatChannel.subscribe();
-                        }, 3000);
-                    }
-                });
+            this._createHeartbeatChannel();
         } catch (error) {
             this.logger.error('Error setting up connection monitoring:', error);
         }
+    }
+    
+    // New helper method to create heartbeat channel
+    _createHeartbeatChannel() {
+        this.heartbeatChannel = this.supabase.channel('heartbeat')
+            .subscribe((status) => {
+                this.connectionStatus = status;
+                this.logger.info(`Real-time connection status: ${status}`);
+                
+                if (status === 'SUBSCRIBED') {
+                    this.connectionStatus = 'CONNECTED';
+                } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
+                    this.connectionStatus = 'DISCONNECTED';
+                    // Try to reconnect with a new channel instance
+                    setTimeout(() => {
+                        try {
+                            // Unsubscribe from the old channel first
+                            try {
+                                this.heartbeatChannel.unsubscribe();
+                            } catch (err) {
+                                // Ignore errors during unsubscribe
+                            }
+                            
+                            // Create a completely new channel with timestamp to avoid conflicts
+                            this.logger.info('Attempting to recreate heartbeat connection...');
+                            this._createHeartbeatChannel();
+                        } catch (innerError) {
+                            this.logger.error('Failed to recreate heartbeat:', innerError);
+                        }
+                    }, 3000);
+                }
+            });
     }
 
     // Add a method to get current connection status
@@ -552,8 +570,6 @@ export class DataModule extends BaseModule {
             
             // Create channel first without subscribing
             const channel = this.supabase.channel(channelName);
-            let subscriptionInitiated = false;
-            let subscriptionTimedOut = false;
             let isSubscribed = false;
             
             // Configure retry mechanism
@@ -592,20 +608,12 @@ export class DataModule extends BaseModule {
                 
                 if (status === 'SUBSCRIBED') {
                     isSubscribed = true;
-                    subscriptionTimedOut = false;
-                    retryCount = 0; // Reset retry counter on success
+                    // ...existing success code...
                     
-                    // Clear any pending retry
-                    if (retryTimer) {
-                        clearTimeout(retryTimer);
-                        retryTimer = null;
-                    }
-                    
-                } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+                } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
                     isSubscribed = false;
-                    subscriptionTimedOut = true;
                     
-                    // Update UI about the issue
+                    // Dispatch the subscription error event
                     window.dispatchEvent(new CustomEvent('subscription-error', {
                         detail: { conversationId, status }
                     }));
@@ -617,18 +625,37 @@ export class DataModule extends BaseModule {
                         retryTimer = setTimeout(() => {
                             retryCount++;
                             
-                            // Try to unsubscribe first
+                            // Unsubscribe from current channel before creating a new one
                             try {
                                 channel.unsubscribe();
                             } catch (err) {
                                 this.logger.warn('Error unsubscribing before retry:', err);
                             }
                             
-                            // Resubscribe after a delay
+                            // Create a completely new channel with unique name (critical fix)
+                            this.logger.info('Creating new channel for retry...');
                             try {
-                                channel.subscribe(handleStatus);
+                                const newChannelName = `messages:${conversationId}:${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
+                                const newChannel = this.supabase.channel(newChannelName);
+                                
+                                // Configure the new channel the same as the old one
+                                newChannel.on('postgres_changes', 
+                                    {
+                                        event: 'INSERT',
+                                        schema: 'public',
+                                        table: 'messages',
+                                        filter: `conversation_id=eq.${conversationId}`
+                                    },
+                                    payload => safeCallback(payload)
+                                );
+                                
+                                // Subscribe to the new channel
+                                newChannel.subscribe(handleStatus);
+                                
+                                // Update the channel reference in the closure
+                                channel = newChannel;
                             } catch (err) {
-                                this.logger.error('Error resubscribing:', err);
+                                this.logger.error('Error creating new channel for retry:', err);
                                 
                                 // Fall back to polling if subscription fails repeatedly
                                 if (retryCount >= maxRetries) {
@@ -646,14 +673,7 @@ export class DataModule extends BaseModule {
             };
             
             // Now subscribe and get the initial status
-            try {
-                subscriptionInitiated = true;
-                channel.subscribe(handleStatus);
-            } catch (err) {
-                this.logger.error('Error during initial subscription:', err);
-                // Try polling as immediate fallback
-                this._fallbackToPolling(conversationId, safeCallback);
-            }
+            channel.subscribe(handleStatus);
             
             // Return a custom subscription object with additional info
             return {
@@ -812,9 +832,10 @@ export class DataModule extends BaseModule {
         this.logger.info('Setting up global real-time subscription for all conversations');
         
         try {
-            // Create unique channel name
+            // Create unique channel name with timestamp
             const uniqueId = new Date().getTime();
-            const channelName = `all_messages:${uniqueId}`;
+            const random = Math.random().toString(36).substring(2, 10);
+            const channelName = `all_messages:${uniqueId}_${random}`;
             
             const channel = this.supabase
                 .channel(channelName)
