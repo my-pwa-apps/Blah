@@ -232,11 +232,61 @@ export class DataModule extends BaseModule {
         }
     }
 
+    // Add this new method to clean up duplicate self-chats
+    async cleanupSelfChats(userId) {
+        try {
+            this.logger.info(`Cleaning up duplicate self-chats for user: ${userId}`);
+            
+            // 1. Find all self-chats for this user
+            const { data: selfChats, error } = await this.supabase
+                .from('conversations')
+                .select('id, created_at')
+                .eq('is_self_chat', true)
+                .in('id', sb => sb
+                    .from('participants')
+                    .select('conversation_id')
+                    .eq('user_id', userId)
+                )
+                .order('created_at', { ascending: false });
+                
+            if (error) throw error;
+            
+            if (!selfChats || selfChats.length <= 1) {
+                this.logger.info('No duplicate self-chats to clean up');
+                return; // Nothing to clean up
+            }
+            
+            // 2. Keep the most recent self-chat, delete the rest
+            const mostRecentId = selfChats[0].id;
+            const idsToDelete = selfChats.slice(1).map(chat => chat.id);
+            
+            this.logger.info(`Keeping self-chat: ${mostRecentId}, deleting: ${idsToDelete.join(', ')}`);
+            
+            // 3. Delete the duplicate conversations
+            if (idsToDelete.length > 0) {
+                const { error: deleteError } = await this.supabase
+                    .from('conversations')
+                    .delete()
+                    .in('id', idsToDelete);
+                    
+                if (deleteError) throw deleteError;
+                
+                this.logger.info(`Successfully removed ${idsToDelete.length} duplicate self-chats`);
+            }
+        } catch (error) {
+            this.logger.error('Error cleaning up self-chats:', error);
+        }
+    }
+
+    // Modify fetchConversations to deduplicate self-chats in the query
     async fetchConversations(userId, skipCache = false) {
         try {
-            this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
+            this.logger.info(`Fetching conversations for user: ${userId}`);
             
-            // Use a more reliable query with a better profile selection
+            // Try to clean up duplicates first (optional - can be removed if causing performance issues)
+            await this.cleanupSelfChats(userId);
+            
+            // A more reliable query that returns all conversations
             const query = this.supabase
                 .from('conversations')
                 .select(`
@@ -259,7 +309,6 @@ export class DataModule extends BaseModule {
             
             // Skip cache if needed
             if (skipCache) {
-                // Add a timestamp to break cache
                 query.limit(100, { foreignTable: 'participants' });
             }
             
@@ -270,20 +319,29 @@ export class DataModule extends BaseModule {
                 throw error;
             }
             
-            this.logger.info(`Found ${data?.length || 0} conversations for user ${userId}`);
+            // Process conversations to handle self-chats
+            let processedConversations = [];
+            let foundSelfChat = false;
             
-            // Add detailed logging about each conversation for debugging
-            if (data && data.length > 0) {
-                data.forEach(conv => {
-                    const selfChat = conv.is_self_chat ? 'Yes' : 'No';
-                    const participantCount = conv.participants?.length || 0;
-                    const participantIds = conv.participants?.map(p => p.user_id).join(', ') || 'none';
-                    
-                    this.logger.info(`Conversation ${conv.id}: Self chat: ${selfChat}, Participants: ${participantCount}, IDs: ${participantIds}`);
-                });
+            for (const conv of data || []) {
+                const isSelfChat = conv.is_self_chat || conv.participants.length === 1;
+                
+                if (isSelfChat) {
+                    if (!foundSelfChat) {
+                        // Keep only the first (most recent) self chat
+                        processedConversations.push(conv);
+                        foundSelfChat = true;
+                    }
+                    // Skip other self-chats
+                } else {
+                    // Add all regular conversations
+                    processedConversations.push(conv);
+                }
             }
             
-            return data || [];
+            this.logger.info(`Returning ${processedConversations.length} conversations (filtered from ${data?.length || 0})`);
+            
+            return processedConversations;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
             return [];
