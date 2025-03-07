@@ -10,232 +10,45 @@ export class DataModule extends BaseModule {
 
     async init() {
         this.supabase = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
-        this.connectionStatus = 'CONNECTING';
+        
+        // Set up a status channel to monitor real-time connection status
         this._setupConnectionMonitoring();
+        
         this.logger.info('Data module initialized');
     }
 
+    // Add connection status monitoring
     _setupConnectionMonitoring() {
         try {
-            this._createHeartbeatChannel();
+            // Create a status channel to monitor connection state
+            const statusChannel = this.supabase.channel('status-channel');
             
-            // Add automatic fallback check that runs periodically
-            this.connectionCheckInterval = setInterval(() => {
-                if (this.connectionStatus === 'DISCONNECTED') {
-                    this.logger.info('Connection has been down for a while, considering fallback to polling');
-                    this._considerFallbackToPolling();
-                }
-            }, 30000); // Check every 30 seconds
-        } catch (error) {
-            this.logger.error('Error setting up connection monitoring:', error);
-        }
-    }
-
-    // New method to consider fallback to polling
-    _considerFallbackToPolling() {
-        // Only trigger if we have a current conversation and it's not already polling
-        if (this.app && this.app.state) {
-            const currentConversationId = this.app.state.get('currentConversation');
-            
-            if (currentConversationId && 
-                (!this.pollingSubscriptions || !this.pollingSubscriptions[currentConversationId])) {
-                
-                this.logger.info(`Auto-switching to polling mode for conversation: ${currentConversationId}`);
-                
-                // Notify the UI
-                window.dispatchEvent(new CustomEvent('auto-fallback-to-polling', {
-                    detail: { conversationId: currentConversationId }
-                }));
-                
-                // Get the current callback from the subscription if available
-                let callback = null;
-                if (this.app.modules.get('ui') && this.app.modules.get('ui').currentSubscription) {
-                    const originalCallback = this.app.modules.get('ui').currentSubscription.callback;
-                    if (typeof originalCallback === 'function') {
-                        callback = originalCallback;
-                    }
-                }
-                
-                // Fall back to a generic callback if needed
-                if (!callback) {
-                    callback = (message) => {
-                        window.dispatchEvent(new CustomEvent('message-received', {
-                            detail: { message }
-                        }));
-                    };
-                }
-                
-                // Start polling
-                this._fallbackToPolling(currentConversationId, callback);
-            }
-        }
-    }
-    
-    // New helper method to create heartbeat channel
-    _createHeartbeatChannel() {
-        // Track reconnection attempts
-        if (!this.heartbeatReconnectCount) {
-            this.heartbeatReconnectCount = 0;
-        }
-        
-        // Generate a unique channel name with timestamp to avoid conflicts
-        const channelName = `heartbeat-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-        
-        this.logger.info(`Creating new heartbeat channel: ${channelName}`);
-        
-        this.heartbeatChannel = this.supabase.channel(channelName)
-            .subscribe((status) => {
-                this.connectionStatus = status;
-                this.logger.info(`Real-time connection status: ${status}`);
-                
-                if (status === 'SUBSCRIBED') {
+            statusChannel
+                .on('system', { event: 'presence_state' }, () => {
                     this.connectionStatus = 'CONNECTED';
-                    this.heartbeatReconnectCount = 0; // Reset counter on success
-                    
-                    // Reset failover mode if we're reconnected
-                    if (this.failoverMode) {
-                        this.failoverMode = false;
-                        this.logger.info('Exiting failover mode - real-time connection restored');
-                        window.dispatchEvent(new CustomEvent('real-time-connection-restored', {}));
-                    }
-                    
-                } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
-                    this.connectionStatus = 'DISCONNECTED';
-                    this.heartbeatReconnectCount++;
-                    
-                    // After several failed attempts, switch to failover mode
-                    if (this.heartbeatReconnectCount >= 5 && !this.failoverMode) {
-                        this.logger.warn(`Failed to connect after ${this.heartbeatReconnectCount} attempts. Switching to failover mode.`);
-                        this.failoverMode = true;
-                        this._enableGlobalFailoverMode();
-                        return; // Don't continue reconnection attempts
-                    }
-                    
-                    // Try to reconnect with a new channel instance, but only if not in failover mode
-                    if (!this.failoverMode) {
+                    this.logger.info('Supabase real-time connection established');
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        this.connectionStatus = 'CONNECTED';
+                        this.logger.info('Real-time status channel connected');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        this.connectionStatus = 'ERROR';
+                        this.logger.error('Real-time connection error');
+                    } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
+                        this.connectionStatus = 'DISCONNECTED';
+                        this.logger.warn('Real-time connection closed or timed out');
+                        
+                        // Try to reconnect after 3 seconds
                         setTimeout(() => {
-                            try {
-                                // Unsubscribe from the old channel first
-                                try {
-                                    this.heartbeatChannel.unsubscribe();
-                                } catch (err) {
-                                    // Ignore errors during unsubscribe
-                                }
-                                
-                                this.logger.info('Attempting to recreate heartbeat connection...');
-                                this._createHeartbeatChannel();
-                            } catch (innerError) {
-                                this.logger.error('Failed to recreate heartbeat:', innerError);
-                            }
+                            this.logger.info('Attempting to reconnect status channel');
+                            statusChannel.subscribe();
                         }, 3000);
                     }
-                }
-            });
-    }
-
-    // New method to enable global failover mode
-    _enableGlobalFailoverMode() {
-        this.logger.info('Enabling global failover mode');
-        
-        // Show status message to user
-        window.dispatchEvent(new CustomEvent('real-time-connection-failed', {
-            detail: {
-                message: 'Unable to establish real-time connection. Using backup communication mode.',
-                timestamp: new Date().toISOString()
-            }
-        }));
-        
-        // Automatically enable polling for current conversation
-        if (this.app && this.app.state) {
-            const currentConversationId = this.app.state.get('currentConversation');
-            if (currentConversationId) {
-                this.logger.info(`Auto-enabling polling for current conversation: ${currentConversationId}`);
-                this._switchToPollingForCurrentConversation(currentConversationId);
-            }
+                });
+        } catch (error) {
+            this.logger.error('Failed to setup connection monitoring:', error);
         }
-        
-        // Also enable global message polling to keep conversation list updated
-        this._setupGlobalPolling();
-    }
-
-    // Helper method to switch to polling for current conversation
-    _switchToPollingForCurrentConversation(conversationId) {
-        // First check if we have a UI module with callback
-        const uiModule = this.app.modules.get('ui');
-        let messageCallback = null;
-        
-        if (uiModule && uiModule.currentSubscription && typeof uiModule.currentSubscription.callback === 'function') {
-            messageCallback = uiModule.currentSubscription.callback;
-        } else {
-            // Use a default callback that dispatches a general event
-            messageCallback = (message) => {
-                window.dispatchEvent(new CustomEvent('message-received', {
-                    detail: { message }
-                }));
-            };
-        }
-        
-        // Now set up polling for this conversation
-        this._fallbackToPolling(conversationId, messageCallback);
-    }
-
-    // New method to set up global polling to keep conversation list updated
-    _setupGlobalPolling() {
-        // Don't setup multiple times
-        if (this.globalPollingInterval) {
-            return;
-        }
-        
-        this.logger.info('Setting up global polling for all conversations');
-        
-        // Get current user
-        const userId = this.app.state.get('currentUser')?.id;
-        if (!userId) {
-            this.logger.warn('Cannot set up global polling: No current user');
-            return;
-        }
-        
-        let lastPollTimestamp = new Date().toISOString();
-        
-        // Poll for new messages every 10 seconds
-        this.globalPollingInterval = setInterval(async () => {
-            try {
-                // Query for any new messages in any conversation this user participates in
-                const { data, error } = await this.supabase
-                    .from('messages')
-                    .select(`
-                        id,
-                        content,
-                        created_at,
-                        conversation_id,
-                        sender_id,
-                        profiles:sender_id(display_name, avatar_url)
-                    `)
-                    .gt('created_at', lastPollTimestamp)
-                    .in('conversation_id', this.supabase.from('participants').select('conversation_id').eq('user_id', userId))
-                    .order('created_at', { ascending: true });
-                    
-                if (error) {
-                    throw error;
-                }
-                
-                if (data && data.length > 0) {
-                    lastPollTimestamp = data[data.length - 1].created_at;
-                    
-                    data.forEach(message => {
-                        // Dispatch event for each new message
-                        window.dispatchEvent(new CustomEvent('global-message-received', {
-                            detail: { message }
-                        }));
-                    });
-                    
-                    // Also trigger a conversations refresh
-                    window.dispatchEvent(new CustomEvent('refresh-conversations', {}));
-                }
-            } catch (error) {
-                this.logger.error('Error during global polling:', error);
-            }
-        }, 10000); // Every 10 seconds
     }
 
     // Add a method to get current connection status
@@ -390,17 +203,6 @@ export class DataModule extends BaseModule {
 
     async sendMessage(conversationId, senderId, content) {
         try {
-            // Sanitize and validate input
-            content = this._sanitizeInput(content);
-            if (!this._validateMessageContent(content)) {
-                throw new Error('Invalid message content');
-            }
-
-            // Add rate limiting for messages
-            if (this._isRateLimited('message_send')) {
-                throw new Error('Please wait before sending more messages');
-            }
-
             const { data, error } = await this.supabase
                 .from('messages')
                 .insert({
@@ -410,49 +212,26 @@ export class DataModule extends BaseModule {
                 })
                 .select()
                 .single();
-
+            
             if (error) throw error;
-            this._updateRateLimit('message_send');
+            
+            // Update conversation's last message
+            await this.supabase
+                .from('conversations')
+                .update({
+                    last_message: {
+                        content,
+                        sender_id: senderId,
+                        created_at: new Date().toISOString()
+                    }
+                })
+                .eq('id', conversationId);
+            
             return data;
         } catch (error) {
             this.logger.error('Error sending message:', error);
             throw error;
         }
-    }
-
-    _sanitizeInput(content) {
-        // Basic XSS prevention
-        return content
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#x27;')
-            .trim();
-    }
-
-    _validateMessageContent(content) {
-        return content && 
-               content.length > 0 && 
-               content.length <= 2000 && // reasonable message length limit
-               !/^\s*$/.test(content);    // not just whitespace
-    }
-
-    _isRateLimited(action) {
-        const key = `rate_limit_${action}`;
-        const limit = JSON.parse(sessionStorage.getItem(key) || '[]');
-        const now = Date.now();
-        // Keep only recent attempts (last 60 seconds)
-        const recent = limit.filter(time => now - time < 60000);
-        // Allow 10 messages per minute
-        return recent.length >= 10;
-    }
-
-    _updateRateLimit(action) {
-        const key = `rate_limit_${action}`;
-        const limit = JSON.parse(sessionStorage.getItem(key) || '[]');
-        limit.push(Date.now());
-        sessionStorage.setItem(key, JSON.stringify(limit));
     }
 
     async fetchMessages(conversationId) {
@@ -693,269 +472,143 @@ export class DataModule extends BaseModule {
         }
     }
 
-    async _handleSubscriptionError(channel, conversationId, callback) {
-        try {
-            this.logger.info(`Handling subscription error for conversation ${conversationId}`);
-            
-            // First, ensure we properly unsubscribe from the old channel
-            if (channel) {
-                try {
-                    channel.unsubscribe();
-                    this.logger.info('Successfully unsubscribed from old channel');
-                } catch (err) {
-                    this.logger.warn('Failed to unsubscribe from old channel:', err);
-                }
-            }
-            
-            // Only proceed if we have a callback
-            if (!callback || typeof callback !== 'function') {
-                this.logger.warn('No callback provided for reconnected channel');
-                return null;
-            }
-            
-            // Wait to avoid rapid reconnections
-            await new Promise(resolve => setTimeout(resolve, 5000));
-            
-            // Don't create a subscription within this method anymore
-            // Instead notify the caller that they should recreate the subscription
-            window.dispatchEvent(new CustomEvent('subscription-reconnect-needed', { 
-                detail: { conversationId } 
-            }));
-            
-            return null;
-        } catch (error) {
-            this.logger.error('Error handling subscription reconnect:', error);
-            return null;
-        }
-    }
-
+    // Add a method to subscribe to real-time message updates
     subscribeToNewMessages(conversationId, callback) {
-        // Validate inputs to prevent errors
-        if (!conversationId) {
-            this.logger.error('Missing conversation ID for subscription');
-            return { unsubscribe: () => {}, conversationId: null };
-        }
-        
-        if (!callback || typeof callback !== 'function') {
-            this.logger.error('Invalid callback provided to subscribeToNewMessages');
-            return { unsubscribe: () => {}, conversationId };
-        }
-        
-        this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
+        this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
         
         try {
-            // Create a truly unique channel name with timestamp to avoid conflicts
-            const timestamp = Date.now();
-            const random = Math.random().toString(36).substring(2, 10);
-            const channelName = `messages:${conversationId}:${timestamp}_${random}`;
+            // Create truly unique channel name using timestamp
+            const uniqueId = new Date().getTime();
+            const channelName = `message_updates:${conversationId}:${uniqueId}`;
             
-            this.logger.info(`Creating channel with unique name: ${channelName}`);
+            this.logger.info(`Creating channel: ${channelName}`);
             
-            // CRITICAL FIX: Change from const to let so it can be reassigned during retries
-            let channel = this.supabase.channel(channelName);
-            let subscriptionInitiated = false;
-            let isSubscribed = false;
-            
-            // Configure retry mechanism
-            const maxRetries = 3;
-            let retryCount = 0;
-            let retryTimer = null;
-            
-            // Keep a local reference to the callback
-            const safeCallback = payload => {
-                try {
-                    if (payload && payload.new) {
-                        callback(payload.new);
-                    }
-                } catch (err) {
-                    this.logger.error('Error in message callback:', err);
-                }
-            };
-            
-            // Configure the channel to listen for changes
-            channel.on('postgres_changes', 
-                {
+            const channel = this.supabase
+                .channel(channelName)
+                .on('postgres_changes', {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
-                },
-                payload => {
-                    this.logger.info(`Received message for conversation ${conversationId}`);
-                    safeCallback(payload);
-                }
-            );
+                }, async (payload) => {
+                    this.logger.info(`Received real-time event for conversation ${conversationId}`);
+                    
+                    if (!payload.new || !payload.new.id) {
+                        this.logger.warn('Received empty payload', payload);
+                        return;
+                    }
+                    
+                    try {
+                        // Get complete message data with sender profile
+                        const { data, error } = await this.supabase
+                            .from('messages')
+                            .select(`
+                                id,
+                                content,
+                                created_at,
+                                sender_id,
+                                conversation_id,
+                                profiles:sender_id (
+                                    id,
+                                    email,
+                                    display_name,
+                                    avatar_url
+                                )
+                            `)
+                            .eq('id', payload.new.id)
+                            .single();
+                        
+                        if (error) {
+                            this.logger.error(`Error fetching message details:`, error);
+                            callback(payload.new);
+                        } else {
+                            callback(data);
+                        }
+                    } catch (err) {
+                        this.logger.error('Error processing real-time message:', err);
+                        callback(payload.new);
+                    }
+                });
             
-            // Handle subscription status
-            const handleStatus = (status) => {
-                this.logger.info(`Subscription status for ${conversationId}: ${status}`);
+            // Add detailed connection state handling
+            channel.subscribe(async (status, err) => {
+                this.logger.info(`Channel ${channelName} status: ${status}`);
                 
                 if (status === 'SUBSCRIBED') {
-                    isSubscribed = true;
-                    // ...existing success code...
-                    
-                } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR' || status === 'CLOSED') {
-                    isSubscribed = false;
-                    
-                    // Dispatch the subscription error event
-                    window.dispatchEvent(new CustomEvent('subscription-error', {
-                        detail: { conversationId, status }
-                    }));
-                    
-                    // Try to reconnect if we haven't exceeded max retries
-                    if (retryCount < maxRetries) {
-                        this.logger.warn(`Subscription failed (${status}). Retry ${retryCount + 1}/${maxRetries} in 5 seconds...`);
-                        
-                        retryTimer = setTimeout(() => {
-                            retryCount++;
-                            
-                            // Unsubscribe from current channel before creating a new one
-                            try {
-                                channel.unsubscribe();
-                            } catch (err) {
-                                this.logger.warn('Error unsubscribing before retry:', err);
-                            }
-                            
-                            // Create a completely new channel with unique name (critical fix)
-                            this.logger.info('Creating new channel for retry...');
-                            try {
-                                const newChannelName = `messages:${conversationId}:${Date.now()}_${Math.random().toString(36).substring(2, 10)}`;
-                                const newChannel = this.supabase.channel(newChannelName);
-                                
-                                // Configure the new channel the same as the old one
-                                newChannel.on('postgres_changes', 
-                                    {
-                                        event: 'INSERT',
-                                        schema: 'public',
-                                        table: 'messages',
-                                        filter: `conversation_id=eq.${conversationId}`
-                                    },
-                                    payload => safeCallback(payload)
-                                );
-                                
-                                // Subscribe to the new channel
-                                newChannel.subscribe(handleStatus);
-                                
-                                // Update the channel reference in the closure
-                                channel = newChannel;
-                            } catch (err) {
-                                this.logger.error('Error creating new channel for retry:', err);
-                                
-                                // Fall back to polling if subscription fails repeatedly
-                                if (retryCount >= maxRetries) {
-                                    this.logger.warn('Max retries exceeded, falling back to polling');
-                                    this._fallbackToPolling(conversationId, safeCallback);
-                                }
-                            }
-                        }, 5000);
-                    } else {
-                        // We've exceeded max retries, fall back to polling
-                        this.logger.warn('Max retries exceeded, falling back to polling');
-                        this._fallbackToPolling(conversationId, safeCallback);
-                    }
+                    this.logger.info(`Successfully subscribed to conversation ${conversationId}`);
+                } else if (status === 'CHANNEL_ERROR') {
+                    this.logger.error(`Channel error for ${conversationId}:`, err);
+                    await this._handleSubscriptionError(channel, conversationId);
+                } else if (status === 'TIMED_OUT') {
+                    this.logger.error(`Subscription timed out for ${conversationId}`);
+                    await this._handleSubscriptionError(channel, conversationId);
+                } else if (status === 'CLOSED') {
+                    this.logger.warn(`Channel closed for conversation ${conversationId}`);
                 }
-            };
+            });
             
-            // Now subscribe and get the initial status
-            channel.subscribe(handleStatus);
-            
-            // Return a custom subscription object with additional info
+            // Return subscription handle
             return {
                 unsubscribe: () => {
-                    this.logger.info(`Unsubscribing from ${channelName}`);
-                    
-                    // Clear any pending retry
-                    if (retryTimer) {
-                        clearTimeout(retryTimer);
-                        retryTimer = null;
-                    }
-                    
-                    // Stop polling if it was started - WITH PROPER VALIDATION
-                    if (this.pollingSubscriptions && 
-                        this.pollingSubscriptions[conversationId] && 
-                        typeof this.pollingSubscriptions[conversationId].stop === 'function') {
-                        try {
-                            this.pollingSubscriptions[conversationId].stop();
-                            delete this.pollingSubscriptions[conversationId];
-                            this.logger.info(`Stopped polling fallback for ${conversationId}`);
-                        } catch (err) {
-                            this.logger.warn(`Error stopping polling for ${conversationId}:`, err);
-                        }
-                    }
-                    
-                    // Try to unsubscribe if we actually subscribed
-                    if (subscriptionInitiated) {
-                        try {
-                            channel.unsubscribe();
-                        } catch (err) {
-                            this.logger.warn('Error during unsubscribe:', err);
-                        }
+                    this.logger.info(`Unsubscribing from conversation ${conversationId}`);
+                    try {
+                        channel.unsubscribe();
+                    } catch (err) {
+                        this.logger.error(`Error unsubscribing:`, err);
                     }
                 },
-                checkStatus: () => ({ 
-                    isSubscribed, 
-                    subscriptionTimedOut,
-                    retryCount
-                }),
-                channelName,
                 conversationId
             };
         } catch (error) {
-            this.logger.error('Error setting up subscription:', error);
+            this.logger.error(`Failed to create subscription:`, error);
             return {
                 unsubscribe: () => {},
-                conversationId,
-                checkStatus: () => ({ 
-                    isSubscribed: false,
-                    subscriptionTimedOut: true,
-                    retryCount: 0
-                })
+                conversationId
             };
         }
     }
-    
-    // Add a new method for polling fallback
-    _fallbackToPolling(conversationId, callback) {
-        // Initialize polling subscriptions store if needed
-        if (!this.pollingSubscriptions) {
-            this.pollingSubscriptions = {};
+
+    // Add helper method for subscription error handling
+    async _handleSubscriptionError(channel, conversationId) {
+        this.logger.info(`Attempting to reconnect to conversation ${conversationId}`);
+        try {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            await channel.subscribe();
+        } catch (error) {
+            this.logger.error(`Reconnection failed for conversation ${conversationId}:`, error);
         }
-        
-        // Stop existing polling if any - WITH PROPER VALIDATION
-        if (this.pollingSubscriptions[conversationId] && 
-            typeof this.pollingSubscriptions[conversationId].stop === 'function') {
-            try {
-                this.pollingSubscriptions[conversationId].stop();
-                this.logger.info(`Stopped existing polling for conversation ${conversationId}`);
-            } catch (err) {
-                this.logger.warn(`Error stopping existing polling for ${conversationId}:`, err);
-            }
-        }
-        
-        // Set up new polling
-        this.logger.info(`Setting up polling fallback for conversation ${conversationId}`);
-        const pollingSubscription = this.setupMessagePolling(conversationId, callback);
-        this.pollingSubscriptions[conversationId] = pollingSubscription;
-        
-        // Notify that we're using polling
-        window.dispatchEvent(new CustomEvent('polling-fallback-enabled', {
-            detail: { conversationId }
-        }));
-        
-        return pollingSubscription;
     }
 
-    // Add polling fallback for when real-time fails - WITH PROPER ERROR HANDLING
+    // Add method to mark messages as read
+    async markMessagesAsRead(conversationId, userId) {
+        try {
+            // Update the participant's last_read_at field instead of conversation's last_read
+            const { error } = await this.supabase
+                .from('participants')
+                .update({
+                    last_read_at: new Date().toISOString()
+                })
+                .eq('conversation_id', conversationId)
+                .eq('user_id', userId);
+            
+            if (error) throw error;
+            
+            this.logger.info(`Marked conversation ${conversationId} as read for user ${userId}`);
+            return true;
+        } catch (error) {
+            this.logger.error('Error marking messages as read:', error);
+            return false;
+        }
+    }
+
+    // Add polling fallback for when real-time fails
     async setupMessagePolling(conversationId, callback, interval = 3000) {
         this.logger.info(`Setting up message polling for conversation: ${conversationId}`);
         
         let lastTimestamp = new Date().toISOString();
         let timerId = null;
-        let isActive = true;
         
         const checkForNewMessages = async () => {
-            if (!isActive) return;
-            
             try {
                 const { data, error } = await this.supabase
                     .from('messages')
@@ -984,59 +637,25 @@ export class DataModule extends BaseModule {
                     
                     // Process each new message
                     data.forEach(message => {
-                        if (isActive && typeof callback === 'function') {
-                            callback(message);
-                        }
+                        callback(message);
                     });
                 }
             } catch (error) {
                 this.logger.error('Error during message polling:', error);
             }
-            
-            // Schedule next check if still active
-            if (isActive) {
-                timerId = setTimeout(checkForNewMessages, interval);
-            }
         };
         
-        // Start the polling process
-        timerId = setTimeout(checkForNewMessages, 0);
+        timerId = setInterval(checkForNewMessages, interval);
         
-        // Always return a properly structured object with a stop method
         return {
             stop: () => {
-                this.logger.info(`Stopping polling for conversation: ${conversationId}`);
-                isActive = false;
                 if (timerId) {
-                    clearTimeout(timerId);
-                    timerId = null;
+                    clearInterval(timerId);
+                    this.logger.info(`Stopped polling for conversation: ${conversationId}`);
                 }
             },
-            isActive: () => isActive,
             conversationId
         };
-    }
-
-    // Add method to mark messages as read
-    async markMessagesAsRead(conversationId, userId) {
-        try {
-            // Update the participant's last_read_at field instead of conversation's last_read
-            const { error } = await this.supabase
-                .from('participants')
-                .update({
-                    last_read_at: new Date().toISOString()
-                })
-                .eq('conversation_id', conversationId)
-                .eq('user_id', userId);
-            
-            if (error) throw error;
-            
-            this.logger.info(`Marked conversation ${conversationId} as read for user ${userId}`);
-            return true;
-        } catch (error) {
-            this.logger.error('Error marking messages as read:', error);
-            return false;
-        }
     }
 
     // Add a method to subscribe to all new messages (global updates)
@@ -1044,10 +663,9 @@ export class DataModule extends BaseModule {
         this.logger.info('Setting up global real-time subscription for all conversations');
         
         try {
-            // Create unique channel name with timestamp
+            // Create unique channel name
             const uniqueId = new Date().getTime();
-            const random = Math.random().toString(36).substring(2, 10);
-            const channelName = `all_messages:${uniqueId}_${random}`;
+            const channelName = `all_messages:${uniqueId}`;
             
             const channel = this.supabase
                 .channel(channelName)
@@ -1119,41 +737,6 @@ export class DataModule extends BaseModule {
             return {
                 unsubscribe: () => {}
             };
-        }
-    }
-
-    cleanup() {
-        // Clear the connection check interval when cleaning up
-        if (this.connectionCheckInterval) {
-            clearInterval(this.connectionCheckInterval);
-        }
-        
-        // Clear global polling if active
-        if (this.globalPollingInterval) {
-            clearInterval(this.globalPollingInterval);
-            this.globalPollingInterval = null;
-        }
-        
-        // Unsubscribe from heartbeat
-        if (this.heartbeatChannel) {
-            try {
-                this.heartbeatChannel.unsubscribe();
-            } catch (err) {
-                this.logger.warn('Error unsubscribing from heartbeat:', err);
-            }
-        }
-        
-        // Stop all polling subscriptions
-        if (this.pollingSubscriptions) {
-            Object.values(this.pollingSubscriptions).forEach(sub => {
-                if (sub && typeof sub.stop === 'function') {
-                    try {
-                        sub.stop();
-                    } catch (err) {
-                        this.logger.warn('Error stopping polling subscription:', err);
-                    }
-                }
-            });
         }
     }
 }

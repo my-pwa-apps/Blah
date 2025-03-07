@@ -28,36 +28,12 @@ export class AuthModule extends BaseModule {
 
     async signIn(email, password) {
         try {
-            // Add rate limiting check
-            if (this._isRateLimited('signin')) {
-                throw new Error('Too many sign in attempts. Please wait before trying again.');
-            }
-
-            // Improved validation with better error messages
-            if (!email || !password) {
-                throw new Error('Email and password are required');
-            }
-
-            if (!this._validateEmail(email)) {
-                throw new Error('Please enter a valid email address');
-            }
-
-            if (!this._validatePassword(password)) {
-                throw new Error('Password must be at least 6 characters long');
-            }
-
+            this.logger.info('Attempting sign in for:', email);
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email,
                 password
             });
-            
-            if (error) {
-                this._updateRateLimit('signin');
-                throw error;
-            }
-
-            // Clear rate limit on success
-            this._clearRateLimit('signin');
+            if (error) throw error;
             this.logger.info('Sign in successful');
             return data;
         } catch (error) {
@@ -85,49 +61,5 @@ export class AuthModule extends BaseModule {
                 callback(null);
             }
         });
-    }
-
-    _isRateLimited(action) {
-        const attempts = JSON.parse(sessionStorage.getItem(`${action}_attempts`) || '[]');
-        const now = Date.now();
-        // Remove attempts older than 15 minutes
-        const recentAttempts = attempts.filter(time => now - time < 900000);
-        return recentAttempts.length >= 5;
-    }
-
-    _updateRateLimit(action) {
-        const attempts = JSON.parse(sessionStorage.getItem(`${action}_attempts`) || '[]');
-        attempts.push(Date.now());
-        sessionStorage.setItem(`${action}_attempts`, JSON.stringify(attempts));
-    }
-
-    _clearRateLimit(action) {
-        sessionStorage.removeItem(`${action}_attempts`);
-    }
-
-    _validateEmail(email) {
-        // Using a more permissive but secure email validation
-        return email && 
-               email.includes('@') && 
-               email.includes('.') && 
-               email.length >= 5 && 
-               email.length <= 254;  // RFC 5321
-    }
-
-    _validatePassword(password) {
-        // Allow any password that's at least 6 characters
-        return password && password.length >= 6;
-    }
-
-    // Add CSRF token handling
-    _generateCsrfToken() {
-        const token = crypto.getRandomValues(new Uint8Array(32))
-            .reduce((acc, val) => acc + val.toString(16).padStart(2, '0'), '');
-        sessionStorage.setItem('csrf_token', token);
-        return token;
-    }
-
-    _validateCsrfToken(token) {
-        return token === sessionStorage.getItem('csrf_token');
     }
 }

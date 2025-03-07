@@ -26,14 +26,11 @@ export class NotificationModule extends BaseModule {
             }
         }
         
-        // Preload notification sound with fallback URL
+        // Preload notification sound
         this._preloadSound('notification', 'sounds/notification.mp3');
         
         // Load user preferences from storage
         this._loadPreferences();
-        
-        // Listen for connection-related events
-        this._setupConnectionListeners();
         
         this.logger.info('Notification module initialized', {
             platform: this.platform,
@@ -65,18 +62,6 @@ export class NotificationModule extends BaseModule {
             this.notificationSound = new Audio(path);
             this.notificationSound.load(); // Preload audio
             this.logger.info(`Preloaded sound: ${name}`);
-            
-            // Add error handler to try fallback URL if the primary one fails
-            this.notificationSound.onerror = () => {
-                this.logger.warn(`Failed to load sound ${name} from ${path}, trying fallback`);
-                try {
-                    // Fallback to a different hosted sound file
-                    this.notificationSound = new Audio('https://assets.mixkit.co/sfx/preview/mixkit-notification-pop-up-951.mp3');
-                    this.notificationSound.load();
-                } catch (fallbackError) {
-                    this.logger.error(`Failed to load fallback sound:`, fallbackError);
-                }
-            };
         } catch (error) {
             this.logger.error(`Error preloading sound "${name}":`, error);
         }
@@ -125,10 +110,6 @@ export class NotificationModule extends BaseModule {
     async notify(options) {
         const { title, message, icon, conversationId, soundType = 'notification', showNotification = true } = options;
         
-        // Use a fallback icon URL if the original doesn't exist
-        const fallbackIcon = 'https://ui-avatars.com/api/?name=Chat&background=4a6741&color=fff&size=192';
-        const iconUrl = icon || fallbackIcon;
-        
         this.logger.info(`Processing notification: ${title}`);
         let notificationShown = false;
         
@@ -137,8 +118,8 @@ export class NotificationModule extends BaseModule {
             try {
                 const notification = new Notification(title, {
                     body: message,
-                    icon: iconUrl,
-                    badge: iconUrl,
+                    icon: icon || 'images/icon-192x192.png',
+                    badge: 'images/icon-192x192.png',
                     tag: conversationId ? `conversation-${conversationId}` : undefined,
                     renotify: !!conversationId,
                     // Consider platform specifics
@@ -164,7 +145,7 @@ export class NotificationModule extends BaseModule {
             }
         }
         
-        // Play sound if enabled (regardless of notification display)       
+        // Play sound if enabled (regardless of notification display)
         let soundPlayed = false;
         if (this.soundsEnabled) {
             soundPlayed = this._playSound(soundType);
@@ -230,35 +211,5 @@ export class NotificationModule extends BaseModule {
             this.logger.error('Error playing sound:', error);
             return false;
         }
-    }
-
-    _setupConnectionListeners() {
-        // Listen for real-time fallback events
-        window.addEventListener('auto-fallback-to-polling', (event) => {
-            const { conversationId } = event.detail;
-            
-            // Show a notification about the fallback
-            if (this.hasNotificationPermission) {
-                this.notify({
-                    title: 'Connection Notice',
-                    message: 'Switched to polling mode due to connection issues',
-                    showNotification: false, // Just show in-app
-                    soundType: 'none'
-                });
-            }
-        });
-        
-        // Listen for connection recovery
-        window.addEventListener('real-time-connection-recovered', () => {
-            // Notify when connection is back
-            if (this.hasNotificationPermission) {
-                this.notify({
-                    title: 'Connection Restored',
-                    message: 'Real-time connection has been restored',
-                    showNotification: false,
-                    soundType: 'notification'
-                });
-            }
-        });
     }
 }
