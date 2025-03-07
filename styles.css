@@ -1430,3 +1430,79 @@ body {
         cursor: pointer;
     }
 }
+
+/* Fix desktop layout */
+@media (min-width: 769px) {
+    .content-container {
+        display: grid;
+        grid-template-columns: 300px 1fr; /* Fixed width for sidebar */
+        gap: 1px;
+        background-color: var(--md-divider);
+        height: calc(100vh - 64px);
+        overflow: hidden;
+    }
+
+    .sidebar {
+        position: relative !important;
+        width: 100%;
+        transform: none !important;
+        grid-column: 1;
+        overflow-y: auto;
+        max-height: 100%;
+        z-index: 1;
+    }
+
+    .chat-area {
+        position: relative !important;
+        grid-column: 2;
+        transform: none !important;
+        width: 100%;
+        height: 100%;
+        display: flex !important;
+        flex-direction: column;
+        z-index: 1;
+    }
+    
+    /* Remove any absolute positioning that might cause overlap */
+    .sidebar, .chat-area {
+        top: auto;
+        left: auto;
+        right: auto;
+        bottom: auto;
+    }
+}
+
+/* Mobile fixes - make transitions immediate when returning to list */
+@media (max-width: 768px) {
+    .sidebar {
+        transition: transform 0.3s ease-out;
+    }
+    
+    .chat-area {
+        transition: transform 0.3s ease-in;
+    }
+    
+    /* Special class for instant transitions */
+    .no-transition {
+        transition: none !important;
+    }
+    
+    /* Ensure back button is more visible and easily tappable */
+    #back-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        height: 44px;
+        margin-right: 8px;
+        color: white !important;
+        font-size: 24px;
+        cursor: pointer;
+        background-color: rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+    }
+    
+    #back-button:active {
+        background-color: rgba(255, 255, 255, 0.2);
+    }
+}

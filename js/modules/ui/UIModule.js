@@ -443,14 +443,34 @@ export class UIModule extends BaseModule {
             chatHeader.dataset.isSelfChat = conversationItem.dataset.isSelfChat || 'false';
         }
         
-        // Show chat area (especially important on mobile)
-        if (chatArea) {
-            chatArea.classList.add('active');
-        }
-        
-        // Hide sidebar on mobile
-        if (window.innerWidth <= 768 && sidebar) {
-            sidebar.classList.add('hidden');
+        // For mobile, disable transitions when showing chat area
+        if (window.innerWidth <= 768) {
+            chatArea?.classList.add('no-transition');
+            sidebar?.classList.add('no-transition');
+            
+            // Force browser to acknowledge the class change
+            void chatArea?.offsetWidth;
+            
+            // Show chat area (especially important on mobile)
+            if (chatArea) {
+                chatArea.classList.add('active');
+            }
+            
+            // Hide sidebar on mobile
+            if (sidebar) {
+                sidebar.classList.add('hidden');
+            }
+            
+            // Re-enable transitions after a short delay
+            setTimeout(() => {
+                chatArea?.classList.remove('no-transition');
+                sidebar?.classList.remove('no-transition');
+            }, 50);
+        } else {
+            // For desktop, just update classes
+            if (chatArea) {
+                chatArea.classList.add('active');
+            }
         }
         
         // Check if conversation is in the list, if not, refresh the list
@@ -642,33 +662,37 @@ export class UIModule extends BaseModule {
         backButton?.addEventListener('click', () => {
             this.logger.info('Back button clicked, returning to sidebar');
             
-            // First reset the conversation state BEFORE changing any UI
-            const previousConversation = this.currentConversation;
-            this.currentConversation = null;
-            this.logger.info(`Current conversation reset from ${previousConversation} to null`);
-            
-            // Then update UI based on this new state
+            // Completely revised approach to handle back button
+            // 1. Immediately disable transitions
             const chatArea = document.querySelector('.chat-area');
             const sidebar = document.querySelector('.sidebar');
             
-            if (chatArea) {
-                // Add a class for transitioning out
-                chatArea.classList.add('transitioning-out');
+            if (chatArea && sidebar) {
+                // Add class to disable transitions
+                chatArea.classList.add('no-transition');
+                sidebar.classList.add('no-transition');
+                
+                // Force browser to acknowledge the class change
+                void chatArea.offsetWidth;
+                
+                // Reset current conversation state
+                const previousConversation = this.currentConversation;
+                this.currentConversation = null;
+                this.logger.info(`Current conversation reset from ${previousConversation} to null`);
+                
+                // Update UI immediately
                 chatArea.classList.remove('active');
-            }
-            
-            if (sidebar) {
                 sidebar.classList.remove('hidden');
-            }
-            
-            // Remove the transitioning class after animation completes
-            setTimeout(() => {
-                if (chatArea) {
-                    chatArea.classList.remove('transitioning-out');
-                }
+                
+                // Re-apply transitions after a short delay
+                setTimeout(() => {
+                    chatArea.classList.remove('no-transition');
+                    sidebar.classList.remove('no-transition');
+                }, 50);
+                
                 // Force a layout adjustment
                 this.adjustLayoutForScreenSize();
-            }, 350); // Allow full 300ms transition to complete plus a bit extra
+            }
         });
         
         // Handle resizing properly
@@ -689,7 +713,7 @@ export class UIModule extends BaseModule {
         this.logger.info(`Adjusting layout for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);
 
         if (!isMobile) {
-            // Desktop layout: both visible
+            // Desktop layout: both visible side by side (controlled by CSS grid)
             sidebar.classList.remove('hidden');
             chatArea.classList.remove('active', 'hidden');
         } else {
