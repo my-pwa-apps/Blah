@@ -981,7 +981,8 @@ body {
 
 .fab:hover {
     box-shadow: var(--elevation-3);
-    transform: translateY(-2px);
+    transform: translateY(-50%);  /* Keep vertical position stable */
+    filter: brightness(1.1);  /* Subtle brightness increase instead */
 }
 
 /* Material Input Fields */
@@ -1001,7 +1002,7 @@ body {
 }
 
 .md-input input:focus {
-    border-bottom-color: var(--md-primary);
+    border-bottom-color: var (--md-primary);
     outline: none;
 }
 
@@ -1058,4 +1059,9 @@ body {
 
 .mobile-only {
     display: none;
+}
+
+/* Chat header back button */
+.chat-header #back-button {
+    color: var(--md-text);  /* Use theme text color instead of white */
 }
