@@ -18,8 +18,56 @@ export class DataModule extends BaseModule {
     _setupConnectionMonitoring() {
         try {
             this._createHeartbeatChannel();
+            
+            // Add automatic fallback check that runs periodically
+            this.connectionCheckInterval = setInterval(() => {
+                if (this.connectionStatus === 'DISCONNECTED') {
+                    this.logger.info('Connection has been down for a while, considering fallback to polling');
+                    this._considerFallbackToPolling();
+                }
+            }, 30000); // Check every 30 seconds
         } catch (error) {
             this.logger.error('Error setting up connection monitoring:', error);
+        }
+    }
+
+    // New method to consider fallback to polling
+    _considerFallbackToPolling() {
+        // Only trigger if we have a current conversation and it's not already polling
+        if (this.app && this.app.state) {
+            const currentConversationId = this.app.state.get('currentConversation');
+            
+            if (currentConversationId && 
+                (!this.pollingSubscriptions || !this.pollingSubscriptions[currentConversationId])) {
+                
+                this.logger.info(`Auto-switching to polling mode for conversation: ${currentConversationId}`);
+                
+                // Notify the UI
+                window.dispatchEvent(new CustomEvent('auto-fallback-to-polling', {
+                    detail: { conversationId: currentConversationId }
+                }));
+                
+                // Get the current callback from the subscription if available
+                let callback = null;
+                if (this.app.modules.get('ui') && this.app.modules.get('ui').currentSubscription) {
+                    const originalCallback = this.app.modules.get('ui').currentSubscription.callback;
+                    if (typeof originalCallback === 'function') {
+                        callback = originalCallback;
+                    }
+                }
+                
+                // Fall back to a generic callback if needed
+                if (!callback) {
+                    callback = (message) => {
+                        window.dispatchEvent(new CustomEvent('message-received', {
+                            detail: { message }
+                        }));
+                    };
+                }
+                
+                // Start polling
+                this._fallbackToPolling(currentConversationId, callback);
+            }
         }
     }
     
@@ -936,6 +984,35 @@ export class DataModule extends BaseModule {
             return {
                 unsubscribe: () => {}
             };
+        }
+    }
+
+    cleanup() {
+        // Clear the connection check interval when cleaning up
+        if (this.connectionCheckInterval) {
+            clearInterval(this.connectionCheckInterval);
+        }
+        
+        // Unsubscribe from heartbeat
+        if (this.heartbeatChannel) {
+            try {
+                this.heartbeatChannel.unsubscribe();
+            } catch (err) {
+                this.logger.warn('Error unsubscribing from heartbeat:', err);
+            }
+        }
+        
+        // Stop all polling subscriptions
+        if (this.pollingSubscriptions) {
+            Object.values(this.pollingSubscriptions).forEach(sub => {
+                if (sub && typeof sub.stop === 'function') {
+                    try {
+                        sub.stop();
+                    } catch (err) {
+                        this.logger.warn('Error stopping polling subscription:', err);
+                    }
+                }
+            });
         }
     }
 }

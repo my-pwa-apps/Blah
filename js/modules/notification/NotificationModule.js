@@ -32,6 +32,9 @@ export class NotificationModule extends BaseModule {
         // Load user preferences from storage
         this._loadPreferences();
         
+        // Listen for connection-related events
+        this._setupConnectionListeners();
+        
         this.logger.info('Notification module initialized', {
             platform: this.platform,
             notificationsEnabled: this.hasNotificationPermission,
@@ -227,5 +230,35 @@ export class NotificationModule extends BaseModule {
             this.logger.error('Error playing sound:', error);
             return false;
         }
+    }
+
+    _setupConnectionListeners() {
+        // Listen for real-time fallback events
+        window.addEventListener('auto-fallback-to-polling', (event) => {
+            const { conversationId } = event.detail;
+            
+            // Show a notification about the fallback
+            if (this.hasNotificationPermission) {
+                this.notify({
+                    title: 'Connection Notice',
+                    message: 'Switched to polling mode due to connection issues',
+                    showNotification: false, // Just show in-app
+                    soundType: 'none'
+                });
+            }
+        });
+        
+        // Listen for connection recovery
+        window.addEventListener('real-time-connection-recovered', () => {
+            // Notify when connection is back
+            if (this.hasNotificationPermission) {
+                this.notify({
+                    title: 'Connection Restored',
+                    message: 'Real-time connection has been restored',
+                    showNotification: false,
+                    soundType: 'notification'
+                });
+            }
+        });
     }
 }

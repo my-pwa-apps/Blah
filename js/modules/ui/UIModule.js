@@ -1274,6 +1274,15 @@ export class UIModule extends BaseModule {
                 }, 2000);
             }
         });
+
+        // Listen for real-time fallback events
+        window.addEventListener('auto-fallback-to-polling', (event) => {
+            const { conversationId } = event.detail;
+            this.logger.warn(`Auto-switched to polling mode for conversation: ${conversationId}`);
+            
+            // Show info message to user
+            this._showConnectionIssueNotice(true);
+        });
     }
 
     _toggleDebugPanel() {
@@ -1439,5 +1448,83 @@ export class UIModule extends BaseModule {
         } catch (error) {
             this.logger.error('Error updating conversation UI:', error);
         }
+    }
+
+    // Add this new method
+    _showConnectionIssueNotice(showFallbackInfo = false) {
+        // Check if notice already exists
+        if (document.getElementById('connection-notice')) {
+            return;
+        }
+        
+        const notice = document.createElement('div');
+        notice.id = 'connection-notice';
+        notice.className = 'connection-notice';
+        notice.innerHTML = `
+            <div class="notice-content">
+                <span class="notice-icon">⚠️</span>
+                <span class="notice-message">
+                    ${showFallbackInfo ? 
+                        'Connection issues detected. Messages still work, but may be delayed.' : 
+                        'Connection issues detected.'
+                    }
+                </span>
+                <a href="connection-diagnostics.html" target="_blank" class="notice-link">Run Diagnostics</a>
+                <button class="notice-close">×</button>
+            </div>
+        `;
+        
+        // Add styles
+        const style = document.createElement('style');
+        style.textContent = `
+            .connection-notice {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: #fff3cd;
+                color: #856404;
+                z-index: 1000;
+                padding: 10px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                animation: slideDown 0.3s ease-out;
+            }
+            .notice-content {
+                display: flex;
+                align-items: center;
+                max-width: 800px;
+                margin: 0 auto;
+            }
+            .notice-icon {
+                margin-right: 10px;
+            }
+            .notice-message {
+                flex: 1;
+            }
+            .notice-link {
+                margin-right: 15px;
+                color: #0366d6;
+                text-decoration: none;
+            }
+            .notice-close {
+                background: none;
+                border: none;
+                font-size: 20px;
+                cursor: pointer;
+                color: #856404;
+            }
+            @keyframes slideDown {
+                from { transform: translateY(-100%); }
+                to { transform: translateY(0); }
+            }
+        `;
+        
+        document.head.appendChild(style);
+        document.body.insertAdjacentElement('afterbegin', notice);
+        
+        // Add close handler
+        notice.querySelector('.notice-close').addEventListener('click', () => {
+            notice.remove();
+        });
     }
 }

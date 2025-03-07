@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Connection Diagnostics Tool</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #4a6741;
+        }
+        .result {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        button {
+            background: #4a6741;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        #results {
+            margin-top: 20px;
+            border: 1px solid #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        pre {
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+        .steps {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Connection Diagnostics Tool</h1>
+    <p>This tool will help diagnose connectivity issues with the Supabase real-time service.</p>
+    
+    <div class="steps">
+        <h3>Diagnostic Steps:</h3>
+        <ol>
+            <li>Click "Run Network Tests" to check basic connectivity</li>
+            <li>Click "Test Web Socket" to verify WebSocket connections work</li>
+            <li>Click "Test Supabase Connection" to test direct connectivity to Supabase</li>
+            <li>If any tests fail, follow the recommended solutions</li>
+        </ol>
+    </div>
+    
+    <div>
+        <button id="network-test">Run Network Tests</button>
+        <button id="websocket-test">Test Web Socket</button>
+        <button id="supabase-test">Test Supabase Connection</button>
+        <button id="auto-fix">Apply Automatic Fix</button>
+        <button id="clear">Clear Results</button>
+    </div>
+    
+    <div id="results">
+        <div class="result warning">Results will appear here after running tests...</div>
+    </div>
+    
+    <script>
+        const SUPABASE_URL = 'https://bcjaxvmwdkxkbkocxhpq.supabase.co';
+        const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjamF4dm13ZGt4a2Jrb2N4aHBxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDEyNTgyMTMsImV4cCI6MjA1NjgzNDIxM30.SicdrlQ3y3v7o3IjE1d0UxXNfa-cT_eJfLQItbBJ-oE';
+        
+        const resultsDiv = document.getElementById('results');
+        
+        function addResult(message, type = 'info') {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = message;
+            resultsDiv.appendChild(div);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+        
+        document.getElementById('clear').addEventListener('click', () => {
+            resultsDiv.innerHTML = '';
+        });
+        
+        document.getElementById('network-test').addEventListener('click', async () => {
+            addResult('Running network tests...', 'info');
+            
+            try {
+                // Test basic internet connectivity
+                const googleResponse = await fetch('https://www.google.com', { mode: 'no-cors' });
+                addResult('✅ Internet connection is working', 'success');
+            } catch (error) {
+                addResult('❌ Internet connection test failed. You may be offline.', 'error');
+                return;
+            }
+            
+            try {
+                // Test Supabase REST API
+                const response = await fetch(`${SUPABASE_URL}/rest/v1/`, {
+                    headers: {
+                        'apikey': SUPABASE_KEY
+                    }
+                });
+                
+                if (response.ok) {
+                    addResult('✅ Supabase REST API is accessible', 'success');
+                } else {
+                    addResult(`❌ Supabase REST API returned status: ${response.status}`, 'error');
+                }
+            } catch (error) {
+                addResult(`❌ Supabase REST API test failed: ${error.message}`, 'error');
+            }
+            
+            // Check for potential proxy or corporate firewall issues
+            if (window.location.protocol === 'https:') {
+                addResult('✅ Using secure HTTPS protocol', 'success');
+            } else {
+                addResult('⚠️ Not using HTTPS. WebSockets might be blocked', 'warning');
+            }
+            
+            // Check if running in a sandboxed environment
+            try {
+                const testWS = new WebSocket('wss://echo.websocket.org');
+                testWS.onopen = () => {
+                    addResult('✅ WebSocket connections are allowed', 'success');
+                    testWS.close();
+                };
+                testWS.onerror = () => {
+                    addResult('❌ WebSocket connections may be blocked by your network', 'error');
+                };
+                
+                // Add timeout for WebSocket connection
+                setTimeout(() => {
+                    if (testWS.readyState !== 1) {
+                        addResult('⚠️ WebSocket connection timed out. Your network may be blocking WebSockets.', 'warning');
+                        testWS.close();
+                    }
+                }, 5000);
+            } catch (error) {
+                addResult(`❌ WebSocket test failed: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('websocket-test').addEventListener('click', () => {
+            addResult('Testing WebSocket connection...', 'info');
+            
+            try {
+                const ws = new WebSocket('wss://ws.postman-echo.com/raw');
+                
+                ws.onopen = () => {
+                    addResult('✅ WebSocket connection established successfully!', 'success');
+                    ws.send('Hello WebSocket');
+                };
+                
+                ws.onmessage = (event) => {
+                    addResult(`✅ WebSocket message received: ${event.data}`, 'success');
+                    ws.close();
+                };
+                
+                ws.onerror = (error) => {
+                    addResult('❌ WebSocket error occurred. Your network may be blocking WebSocket connections.', 'error');
+                };
+                
+                ws.onclose = () => {
+                    addResult('WebSocket connection closed', 'info');
+                };
+                
+                // Add timeout
+                setTimeout(() => {
+                    if (ws.readyState !== 1) {
+                        addResult('⚠️ WebSocket connection timed out. Your network may be blocking WebSockets.', 'warning');
+                        try { ws.close(); } catch(e) {}
+                    }
+                }, 5000);
+            } catch (error) {
+                addResult(`❌ WebSocket test failed: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('supabase-test').addEventListener('click', async () => {
+            addResult('Testing Supabase real-time connection...', 'info');
+            
+            try {
+                const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                
+                // Create a unique channel name
+                const channelName = `test-channel-${Date.now()}`;
+                const channel = supabase.channel(channelName);
+                
+                // Set a timeout to handle connection issues
+                const connectionTimeout = setTimeout(() => {
+                    addResult('❌ Supabase real-time connection timed out after 10 seconds', 'error');
+                    channel.unsubscribe();
+                    
+                    addResult(`
+                        <strong>Recommendation:</strong><br>
+                        1. Your network may be blocking WebSocket connections<br>
+                        2. Try using a different network (e.g., mobile hotspot)<br>
+                        3. If on a corporate network, ask IT to allow WebSocket connections to ${SUPABASE_URL}<br>
+                        4. As a workaround, use the app with polling mode enabled
+                    `, 'warning');
+                }, 10000);
+                
+                channel.subscribe(status => {
+                    clearTimeout(connectionTimeout);
+                    
+                    addResult(`Supabase channel status: ${status}`, 'info');
+                    
+                    if (status === 'SUBSCRIBED') {
+                        addResult('✅ Supabase real-time connection successful!', 'success');
+                        // Clean up after successful test
+                        setTimeout(() => {
+                            channel.unsubscribe();
+                        }, 2000);
+                    } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+                        addResult('❌ Supabase real-time connection failed with status: ' + status, 'error');
+                        
+                        addResult(`
+                            <strong>Recommendation:</strong><br>
+                            1. Your network might be blocking WebSocket connections<br>
+                            2. The Supabase project may need real-time configuration<br>
+                            3. Try clicking the "Apply Automatic Fix" button<br>
+                            4. If that doesn't work, contact support with these results
+                        `, 'warning');
+                    }
+                });
+            } catch (error) {
+                addResult(`❌ Supabase test failed: ${error.message}`, 'error');
+            }
+        });
+        
+        document.getElementById('auto-fix').addEventListener('click', async () => {
+            addResult('Attempting to apply automatic fix...', 'info');
+            
+            const fixButton = document.getElementById('auto-fix');
+            fixButton.disabled = true;
+            
+            try {
+                // Create Supabase client
+                const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+                
+                // Try to authenticate
+                const { data: { session }, error: authError } = await supabase.auth.getSession();
+                
+                if (authError || !session) {
+                    addResult('❌ Authentication required. Please log in to the main application first.', 'error');
+                    fixButton.disabled = false;
+                    return;
+                }
+                
+                // Execute SQL to fix real-time
+                const fixSQL = `
+                    -- Fix real-time configuration
+                    DROP PUBLICATION IF EXISTS supabase_realtime;
+                    CREATE PUBLICATION supabase_realtime FOR TABLE messages, participants, conversations;
+                    
+                    -- Set tables to full replica identity for real-time
+                    ALTER TABLE messages REPLICA IDENTITY FULL;
+                    ALTER TABLE participants REPLICA IDENTITY FULL;
+                    ALTER TABLE conversations REPLICA IDENTITY FULL;
+                `;
+                
+                addResult('Sending fix commands to database...', 'info');
+                
+                // Try to execute the SQL (requires admin rights)
+                const { error: sqlError } = await supabase.rpc('execute_sql', { 
+                    sql: fixSQL 
+                });
+                
+                if (sqlError) {
+                    addResult(`❌ Fix failed: ${sqlError.message}. You may not have admin privileges.`, 'error');
+                    
+                    addResult(`
+                        <strong>Alternative:</strong><br>
+                        1. Contact your administrator<br>
+                        2. Share this diagnostic information<br>
+                        3. Ask them to run the SQL commands in the Supabase dashboard
+                    `, 'warning');
+                } else {
+                    addResult('✅ Database fix applied successfully!', 'success');
+                    
+                    addResult(`
+                        <strong>Next steps:</strong><br>
+                        1. Return to the main application<br>
+                        2. Refresh the page completely (Ctrl+F5 or Cmd+Shift+R)<br>
+                        3. Try connecting to a conversation again
+                    `, 'success');
+                }
+            } catch (error) {
+                addResult(`❌ Error: ${error.message}`, 'error');
+            } finally {
+                fixButton.disabled = false;
+            }
+        });
+        
+        // Run initial network test automatically
+        document.getElementById('network-test').click();
+    </script>
+</body>
+</html>
