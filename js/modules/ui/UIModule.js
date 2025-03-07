@@ -423,6 +423,7 @@ export class UIModule extends BaseModule {
         document.querySelectorAll('.conversation-item').forEach(item => {
             if (item.dataset.conversationId === conversationId) {
                 item.classList.add('active');
+                this.logger.info(`Set active class on conversation ${conversationId}`);
             } else {
                 item.classList.remove('active');
             }
@@ -451,71 +452,42 @@ export class UIModule extends BaseModule {
             sidebar.classList.add('hidden');
         }
         
-        // Continue with the rest of the method...
-        // ...existing code...
-        // Get UI elements
-        const messageContainer = document.getElementById('message-container');
-        const chatArea = document.querySelector('.chat-area');
-        const sidebar = document.querySelector('.sidebar');
-        if (!messageContainer) {
-            this.logger.error('Message container not found');
-            return;
-        }
-        // Update UI to show active conversation
-        document.querySelectorAll('.conversation-item').forEach(item => {
-            if (item.dataset.conversationId === conversationId) {
-                item.classList.add('active');
-                this.logger.info(`Set active class on conversation ${conversationId}`);
-            } else {
-                item.classList.remove('active');
-            }
-        });
         // Check if conversation is in the list, if not, refresh the list
-        const conversationInList = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-        if (!conversationInList) {
+        if (!conversationItem) {
             this.logger.info(`Conversation ${conversationId} not in list, refreshing list`);
             await this.renderConversationsList();
         }
-        // Show chat area (important for mobile)
-        if (chatArea) {
-            chatArea.classList.add('active');
-        }
-        // Hide sidebar on mobile
-        if (window.innerWidth <= 768 && sidebar) {
-            sidebar.classList.add('hidden');
-        }
-        // Update chat header title
-        const chatHeader = document.querySelector('.chat-title');
-        if (chatHeader) {
-            const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-            if (conversationItem) {
-                const nameEl = conversationItem.querySelector('.conversation-name');
-                chatHeader.textContent = nameEl ? nameEl.textContent : 'Chat';
-            }
-        }
+
         try {
             const dataModule = this.getModule('data');
             const messages = await dataModule.fetchMessages(conversationId);
+            
             // Clear existing messages
             messageContainer.innerHTML = '';
+            
             if (messages.length === 0) {
                 // Show empty state
                 messageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
             } else {
                 this._renderMessages(messages);
             }
+            
             // Scroll to bottom
             messageContainer.scrollTop = messageContainer.scrollHeight;
+            
             // Focus the message input
             document.getElementById('message-text')?.focus();
+            
             // Mark conversation as read
             await dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+            
             // Remove unread indicator
             const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
             if (conversationEl) {
                 conversationEl.classList.remove('unread');
                 conversationEl.querySelector('.unread-indicator')?.remove();
             }
+            
             // Setup real-time subscription for new messages
             this._setupMessageSubscription(conversationId);
         } catch (error) {
