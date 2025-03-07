@@ -336,32 +336,51 @@ export class DataModule extends BaseModule {
                 return { ...conv, enrichedParticipants: participants || [] };
             }));
             
-            // Process conversations - keep one self-chat and ALL other chats
-            let processedConversations = [];
-            let selfChat = null;
+            // Group conversations by participant set (self chat or by other participant id)
+            const conversationsByParticipants = new Map();
             
             for (const conv of conversationsWithProfiles) {
+                // Determine if this is a self chat
                 const isSelfChat = conv.is_self_chat || (conv.enrichedParticipants.length === 1);
                 
                 if (isSelfChat) {
-                    // Only keep the most recent self-chat
-                    if (!selfChat || new Date(conv.created_at) > new Date(selfChat.created_at)) {
-                        selfChat = conv;
+                    // Handle self chats - group under 'self' key
+                    const existing = conversationsByParticipants.get('self');
+                    if (!existing || new Date(conv.created_at) > new Date(existing.created_at)) {
+                        conversationsByParticipants.set('self', conv);
                         this.logger.info(`Selected self-chat: ${conv.id}`);
                     }
                 } else {
-                    // Always include regular chats
-                    processedConversations.push(conv);
-                    this.logger.info(`Including regular chat: ${conv.id} with ${conv.enrichedParticipants.length} participants`);
+                    // For chats with others, key by the other person's user ID
+                    const otherParticipant = conv.enrichedParticipants.find(p => 
+                        p.user_id !== userId
+                    );
+                    
+                    if (otherParticipant) {
+                        const otherUserId = otherParticipant.user_id;
+                        const existing = conversationsByParticipants.get(otherUserId);
+                        
+                        // Keep only the most recent conversation with this person
+                        if (!existing || new Date(conv.created_at) > new Date(existing.created_at)) {
+                            conversationsByParticipants.set(otherUserId, conv);
+                            this.logger.info(`Selected newest conversation with user ${otherUserId}: ${conv.id}`);
+                        } else {
+                            this.logger.info(`Skipping older conversation with user ${otherUserId}: ${conv.id}`);
+                        }
+                    }
                 }
             }
             
-            // Add the self-chat at the beginning if we have one
-            if (selfChat) {
-                processedConversations.unshift(selfChat);
-            }
+            // Convert map back to array of conversations
+            const deduplicatedConversations = Array.from(conversationsByParticipants.values());
             
-            return processedConversations;
+            // Sort by created_at (newest first)
+            deduplicatedConversations.sort((a, b) => 
+                new Date(b.created_at) - new Date(a.created_at)
+            );
+            
+            this.logger.info(`Returning ${deduplicatedConversations.length} deduplicated conversations`);
+            return deduplicatedConversations;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
             return [];
