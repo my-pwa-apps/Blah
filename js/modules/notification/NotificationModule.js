@@ -108,61 +108,79 @@ export class NotificationModule extends BaseModule {
     }
     
     async notify(options) {
-        const { title, message, icon, conversationId, soundType = 'notification' } = options;
+        const { title, message, icon, conversationId, soundType = 'notification', showNotification = true } = options;
         
-        this.logger.info(`Sending notification: ${title} - ${message}`);
+        this.logger.info(`Processing notification: ${title}`);
+        let notificationShown = false;
         
-        // Platform-specific notifications
-        if (this.hasNotificationPermission) {
+        // Handle system notification if enabled and permission granted
+        if (showNotification && this.hasNotificationPermission) {
             try {
-                // Create OS notification
                 const notification = new Notification(title, {
                     body: message,
                     icon: icon || 'images/icon-192x192.png',
                     badge: 'images/icon-192x192.png',
                     tag: conversationId ? `conversation-${conversationId}` : undefined,
                     renotify: !!conversationId,
-                    // Add silent option for platform-specific behavior
+                    // Consider platform specifics
                     silent: !this.soundsEnabled && this.platform.os === 'windows'
                 });
                 
-                // Handle notification click
                 notification.onclick = () => {
-                    this.logger.info('Notification clicked');
+                    this.logger.info('Notification clicked for conversation:', conversationId);
                     window.focus();
                     
                     if (conversationId) {
-                        this.app.state.set('currentConversation', conversationId);
-                        window.dispatchEvent(new CustomEvent('open-conversation', { 
-                            detail: { conversationId } 
-                        }));
+                        // Try to open the conversation
+                        this.openConversation(conversationId);
                     }
                     
                     notification.close();
                 };
+                
+                notificationShown = true;
+                this.logger.info('System notification displayed successfully');
             } catch (error) {
-                this.logger.error('Error showing notification:', error);
+                this.logger.error('Error showing system notification:', error);
             }
         }
         
-        // Play sound based on platform and preferences
+        // Play sound if enabled (regardless of notification display)
+        let soundPlayed = false;
         if (this.soundsEnabled) {
-            this._playSound(soundType);
+            soundPlayed = this._playSound(soundType);
         }
         
-        // Use vibration if available (mobile devices)
+        // Use vibration for mobile if enabled
+        let vibrationTriggered = false;
         if (this.vibrationEnabled && this.platform.isMobile && 'vibrate' in navigator) {
             try {
                 navigator.vibrate([200, 100, 200]);
+                vibrationTriggered = true;
                 this.logger.info('Device vibration triggered');
             } catch (error) {
                 this.logger.error('Error triggering vibration:', error);
             }
         }
         
-        // Return true if any notification method was used
-        return this.hasNotificationPermission || this.soundsEnabled || 
-               (this.vibrationEnabled && this.platform.isMobile && 'vibrate' in navigator);
+        return notificationShown || soundPlayed || vibrationTriggered;
+    }
+    
+    // Helper method to open a conversation when notification is clicked
+    openConversation(conversationId) {
+        // Dispatch custom event that UIModule can listen for
+        window.dispatchEvent(new CustomEvent('open-conversation', {
+            detail: { conversationId }
+        }));
+        
+        // Try setting app state if available
+        try {
+            if (this.app && this.app.state) {
+                this.app.state.set('currentConversation', conversationId);
+            }
+        } catch (error) {
+            this.logger.error('Error setting conversation state:', error);
+        }
     }
     
     _playSound(type) {
