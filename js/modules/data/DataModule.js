@@ -281,12 +281,12 @@ export class DataModule extends BaseModule {
     // Modify fetchConversations to deduplicate self-chats in the query
     async fetchConversations(userId, skipCache = false) {
         try {
-            this.logger.info(`Fetching conversations for user: ${userId}`);
+            this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
             
-            // Try to clean up duplicates first (optional - can be removed if causing performance issues)
+            // Try to clean up duplicates first (optional)
             await this.cleanupSelfChats(userId);
             
-            // A more reliable query that returns all conversations
+            // Query to get all conversations for this user
             const query = this.supabase
                 .from('conversations')
                 .select(`
@@ -307,7 +307,6 @@ export class DataModule extends BaseModule {
                 .eq('participants.user_id', userId)
                 .order('created_at', { ascending: false });
             
-            // Skip cache if needed
             if (skipCache) {
                 query.limit(100, { foreignTable: 'participants' });
             }
@@ -319,28 +318,36 @@ export class DataModule extends BaseModule {
                 throw error;
             }
             
-            // Process conversations to handle self-chats
+            // Log raw data for debugging
+            this.logger.info(`Raw data: ${data?.length || 0} conversations fetched`);
+            data?.forEach(conv => {
+                this.logger.info(`  Conv ${conv.id}: self_chat=${conv.is_self_chat}, participants=${conv.participants.length}`);
+            });
+            
+            // Process the conversations - keep one self-chat and ALL other chats
             let processedConversations = [];
-            let foundSelfChat = false;
+            let selfChatFound = false;
             
             for (const conv of data || []) {
-                const isSelfChat = conv.is_self_chat || conv.participants.length === 1;
+                const isSelfChat = conv.is_self_chat || 
+                                  (conv.participants.length === 1 && conv.participants[0].user_id === userId);
                 
                 if (isSelfChat) {
-                    if (!foundSelfChat) {
-                        // Keep only the first (most recent) self chat
+                    if (!selfChatFound) {
                         processedConversations.push(conv);
-                        foundSelfChat = true;
+                        selfChatFound = true;
+                        this.logger.info(`Keeping self-chat: ${conv.id}`);
+                    } else {
+                        this.logger.info(`Skipping duplicate self-chat: ${conv.id}`);
                     }
-                    // Skip other self-chats
                 } else {
-                    // Add all regular conversations
+                    // ALWAYS include non-self chats
                     processedConversations.push(conv);
+                    this.logger.info(`Including regular chat: ${conv.id}`);
                 }
             }
             
-            this.logger.info(`Returning ${processedConversations.length} conversations (filtered from ${data?.length || 0})`);
-            
+            this.logger.info(`Processed ${processedConversations.length} conversations to return`);
             return processedConversations;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
