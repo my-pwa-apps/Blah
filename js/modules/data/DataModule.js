@@ -283,68 +283,84 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
             
-            // Fix the query syntax to properly join with profiles
+            // Use a simpler query that works better with Supabase's structure
             const query = this.supabase
                 .from('conversations')
                 .select(`
-                    *,
+                    id,
+                    created_at,
+                    is_self_chat,
+                    last_message,
                     participants!inner (
-                        user_id,
-                        profiles:user_id(
-                            id,
-                            email,
-                            display_name,
-                            avatar_url
-                        )
+                        user_id
                     )
                 `)
                 .eq('participants.user_id', userId)
                 .order('created_at', { ascending: false });
-            
+                
             if (skipCache) {
-                // Use a safer cache-busting approach
-                const timestamp = new Date().getTime();
                 query.limit(100);
             }
             
-            const { data, error } = await query;
+            // Execute the query to get conversations
+            const { data: conversations, error } = await query;
             
-            if (error) {
-                this.logger.error('Error in fetchConversations query:', error);
-                throw error;
+            if (error) throw error;
+            
+            // If no conversations, return empty array
+            if (!conversations || conversations.length === 0) {
+                return [];
             }
-
-            this.logger.info(`Raw data: Found ${data?.length || 0} conversations for user ${userId}`);
+            
+            // For each conversation, fetch the participants with profile data
+            const conversationsWithProfiles = await Promise.all(conversations.map(async (conv) => {
+                // Get all participants for this conversation
+                const { data: participants, error: participantsError } = await this.supabase
+                    .from('participants')
+                    .select(`
+                        user_id,
+                        profiles:user_id (
+                            id,
+                            email, 
+                            display_name,
+                            avatar_url
+                        )
+                    `)
+                    .eq('conversation_id', conv.id);
+                    
+                if (participantsError) {
+                    this.logger.error(`Error fetching participants for conversation ${conv.id}:`, participantsError);
+                    return { ...conv, enrichedParticipants: [] };
+                }
+                
+                return { ...conv, enrichedParticipants: participants || [] };
+            }));
             
             // Process conversations - keep one self-chat and ALL other chats
             let processedConversations = [];
             let selfChat = null;
             
-            for (const conv of data || []) {
-                // Check if this is a self chat
-                const isSelfChat = conv.is_self_chat || 
-                    (conv.participants.length === 1 && conv.participants[0].user_id === userId);
-                    
+            for (const conv of conversationsWithProfiles) {
+                const isSelfChat = conv.is_self_chat || (conv.enrichedParticipants.length === 1);
+                
                 if (isSelfChat) {
-                    // Keep only the newest self chat
+                    // Only keep the most recent self-chat
                     if (!selfChat || new Date(conv.created_at) > new Date(selfChat.created_at)) {
                         selfChat = conv;
-                        this.logger.info(`Found newer self-chat: ${conv.id}`);
+                        this.logger.info(`Selected self-chat: ${conv.id}`);
                     }
                 } else {
-                    // Always include regular chats with other users
+                    // Always include regular chats
                     processedConversations.push(conv);
-                    this.logger.info(`Including regular chat: ${conv.id}`);
+                    this.logger.info(`Including regular chat: ${conv.id} with ${conv.enrichedParticipants.length} participants`);
                 }
             }
             
-            // Add the self chat to the start if we found one
+            // Add the self-chat at the beginning if we have one
             if (selfChat) {
                 processedConversations.unshift(selfChat);
-                this.logger.info(`Added self-chat ${selfChat.id} to results`);
             }
             
-            this.logger.info(`Returning ${processedConversations.length} processed conversations`);
             return processedConversations;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
