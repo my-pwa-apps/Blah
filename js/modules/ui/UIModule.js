@@ -8,6 +8,7 @@ export class UIModule extends BaseModule {
 
     async init() {
         this.setupEventListeners();
+        this.setupAuthListener();
         this.logger.info('UI module initialized');
     }
 
@@ -56,6 +57,31 @@ export class UIModule extends BaseModule {
                 }
             } catch (error) {
                 this.showError(error.message);
+            }
+        });
+    }
+
+    setupAuthListener() {
+        this.getModule('auth').onAuthStateChange(async (user) => {
+            if (user) {
+                this.logger.info('Auth state changed: User logged in');
+                const dataModule = this.getModule('data');
+                
+                // Get or create user profile
+                let profile = await dataModule.fetchUserProfile(user.id);
+                if (!profile) {
+                    profile = await dataModule.createUserProfile({
+                        id: user.id,
+                        email: user.email,
+                        display_name: user.email.split('@')[0],
+                        status: 'Available'
+                    });
+                }
+                
+                this.showMainApp(profile);
+            } else {
+                this.logger.info('Auth state changed: User logged out');
+                this.showAuthScreen();
             }
         });
     }

@@ -9,11 +9,16 @@ class App {
             // Register service worker with corrected path
             if ('serviceWorker' in navigator) {
                 try {
-                    const registration = await navigator.serviceWorker.register('/service-worker.js', {
-                        scope: '/Blah/'
+                    // Get the base path for GitHub Pages
+                    const basePath = '/Blah';
+                    const swPath = `${basePath}/service-worker.js`;
+                    
+                    const registration = await navigator.serviceWorker.register(swPath, {
+                        scope: basePath
                     });
                     console.log('ServiceWorker registration successful:', registration.scope);
                 } catch (error) {
+                    // Non-critical error - app can still function without SW
                     console.warn('ServiceWorker registration failed:', error);
                 }
             }
