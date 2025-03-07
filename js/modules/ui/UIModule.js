@@ -121,14 +121,6 @@ export class UIModule extends BaseModule {
             document.getElementById('user-search')?.focus();
         });
 
-        // User search with debounce
-        const userSearch = document.getElementById('user-search');
-        userSearch?.addEventListener('input', this.debounce(async (e) => {
-            const query = e.target.value.trim();
-            const users = await this.getModule('data').searchUsers(query);
-            this.renderUserSearchResults(users);
-        }, 300));
-
         // Handle user selection
         document.getElementById('user-search-results')?.addEventListener('click', (e) => {
             const item = e.target.closest('.user-search-item');
@@ -166,10 +158,32 @@ export class UIModule extends BaseModule {
             const dataModule = this.getModule('data');
             const conversations = await dataModule.fetchConversations(this.currentUser.id);
             
-            conversationsList.innerHTML = conversations.map(conv => {
-                const isSelfChat = conv.participants.length === 1;
+            // Filter and deduplicate conversations
+            const processedConversations = [];
+            let selfChat = null;
+            
+            // Find the most recent self chat (if any)
+            conversations.forEach(conv => {
+                if (conv.is_self_chat || conv.participants.length === 1) {
+                    // If we haven't found a self chat yet, or this one is more recent
+                    if (!selfChat || new Date(conv.created_at) > new Date(selfChat.created_at)) {
+                        selfChat = conv;
+                    }
+                } else {
+                    processedConversations.push(conv);
+                }
+            });
+            
+            // Add the self chat at the beginning if it exists
+            if (selfChat) {
+                processedConversations.unshift(selfChat);
+            }
+            
+            // Render the deduplicated conversations
+            conversationsList.innerHTML = processedConversations.map(conv => {
+                const isSelfChat = conv.is_self_chat || conv.participants.length === 1;
                 const otherParticipant = isSelfChat ? null : 
-                    conv.participants.find(p => p.user_id !== this.currentUser.id);
+                    conv.participants.find(p => p.user_id !== this.currentUser.id)?.profiles;
                 
                 const name = isSelfChat ? 'Notes to Self' : 
                     otherParticipant?.display_name || otherParticipant?.email || 'Unknown';
@@ -308,13 +322,6 @@ export class UIModule extends BaseModule {
                 </div>
             </div>
         `).join('');
-
-        // Add click handlers
-        container.querySelectorAll('.user-search-item').forEach(item => {
-            item.addEventListener('click', () => {
-                this.startNewConversation(item.dataset.userId);
-            });
-        });
     }
 
     async startNewConversation(userId) {
@@ -446,30 +453,35 @@ export class UIModule extends BaseModule {
             const chatArea = document.querySelector('.chat-area');
             const sidebar = document.querySelector('.sidebar');
             
-            chatArea?.classList.remove('active');
-            sidebar?.classList.remove('hidden');
-            this.currentConversation = null;
+            if (chatArea) chatArea.classList.remove('active');
+            if (sidebar) sidebar.classList.remove('hidden');
             
-            // Make sure the chat area is visible on desktop
-            if (window.innerWidth > 768) {
-                chatArea?.classList.remove('hidden');
-            }
+            this.logger.info('Back button clicked, returning to sidebar');
         });
         
-        // Reset layout on resize
+        // Handle resizing properly
         window.addEventListener('resize', () => {
-            const chatArea = document.querySelector('.chat-area');
-            const sidebar = document.querySelector('.sidebar');
-            
-            if (window.innerWidth > 768) {
-                chatArea?.classList.remove('active', 'hidden');
-                sidebar?.classList.remove('hidden');
-            } else if (!this.currentConversation) {
-                // On mobile, show sidebar by default if no conversation is selected
-                chatArea?.classList.remove('active');
-                sidebar?.classList.remove('hidden');
-            }
+            this.adjustLayoutForScreenSize();
         });
+        
+        // Initial adjustment
+        this.adjustLayoutForScreenSize();
+    }
+    
+    adjustLayoutForScreenSize() {
+        const chatArea = document.querySelector('.chat-area');
+        const sidebar = document.querySelector('.sidebar');
+        const isMobile = window.innerWidth <= 768;
+        
+        if (!isMobile) {
+            // On desktop, both should be visible
+            if (chatArea) chatArea.classList.remove('active', 'hidden');
+            if (sidebar) sidebar.classList.remove('hidden');
+        } else if (!this.currentConversation) {
+            // On mobile with no conversation selected, show sidebar
+            if (chatArea) chatArea.classList.remove('active');
+            if (sidebar) sidebar.classList.remove('hidden');
+        }
     }
 
     // Add debounce utility method
