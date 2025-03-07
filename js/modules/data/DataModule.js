@@ -46,9 +46,15 @@ export class DataModule extends BaseModule {
 
     async createConversation(participants) {
         try {
+            // Validate participants
+            if (!participants || !participants.length) {
+                throw new Error('No participants provided for conversation');
+            }
+            
             // Check for existing conversation first
             const existingId = await this.findExistingConversation(participants);
             if (existingId) {
+                this.logger.info(`Using existing conversation: ${existingId}`);
                 return { id: existingId };
             }
 
@@ -63,6 +69,8 @@ export class DataModule extends BaseModule {
                 .single();
                 
             if (error) throw error;
+            
+            this.logger.info(`Created new conversation with ID: ${conversation.id}`);
             
             // Create unique participants array
             const uniqueParticipants = [...new Set(participants)];
@@ -79,13 +87,6 @@ export class DataModule extends BaseModule {
             
             return conversation;
         } catch (error) {
-            // Check if error is due to existing conversation
-            if (error.code === '23505') {
-                const existingId = await this.findExistingConversation(participants);
-                if (existingId) {
-                    return { id: existingId };
-                }
-            }
             this.logger.error('Error creating conversation:', error);
             throw error;
         }
@@ -119,7 +120,7 @@ export class DataModule extends BaseModule {
                 return null;
             }
             
-            // For regular chats, find all conversations where first participant exists
+            // For regular chats with 2+ participants, we need to check more carefully
             const { data: conversations, error } = await this.supabase
                 .from('conversations')
                 .select(`
@@ -127,19 +128,23 @@ export class DataModule extends BaseModule {
                     is_self_chat,
                     participants (user_id)
                 `)
-                .eq('is_self_chat', false)
-                .eq('participants.user_id', participants[0]);
+                .eq('is_self_chat', false);
 
             if (error) throw error;
             
-            // Check each conversation to see if all participants are included
+            // Check each conversation to see if all participants exactly match
             for (const conv of conversations) {
+                if (!conv.participants || conv.participants.length !== participants.length) {
+                    continue; // Skip if participant count doesn't match
+                }
+                
                 const participantIds = conv.participants.map(p => p.user_id);
                 
-                // Check if all required participants are present
-                // and no additional participants exist
-                if (participants.every(id => participantIds.includes(id)) && 
-                    participants.length === participantIds.length) {
+                // Check if all participants match exactly (same people, no extras)
+                const allMatch = participants.every(id => participantIds.includes(id)) && 
+                                 participants.length === participantIds.length;
+                                 
+                if (allMatch) {
                     this.logger.info(`Found existing conversation: ${conv.id}`);
                     return conv.id;
                 }

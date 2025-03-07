@@ -152,9 +152,19 @@ export class UIModule extends BaseModule {
         // Handle start conversation
         startConversationBtn?.addEventListener('click', async () => {
             if (selectedUserId) {
-                this.logger.info(`Starting conversation with user: ${selectedUserId}`);
-                await this.startNewConversation(selectedUserId);
-                modal?.classList.add('hidden');
+                this.logger.info(`Starting conversation with selected user: ${selectedUserId}`);
+                try {
+                    startConversationBtn.disabled = true;
+                    startConversationBtn.textContent = "Creating...";
+                    await this.startNewConversation(selectedUserId);
+                    modal?.classList.add('hidden');
+                } catch (error) {
+                    this.logger.error("Error starting conversation:", error);
+                    this.showError("Failed to start conversation");
+                } finally {
+                    startConversationBtn.disabled = false;
+                    startConversationBtn.textContent = "Start Chat";
+                }
             }
         });
 
@@ -349,7 +359,7 @@ export class UIModule extends BaseModule {
 
     async loadConversation(conversationId) {
         if (!conversationId) {
-            this.logger.error('Cannot load conversation: No conversation ID provided');
+            this.logger.error('Cannot load conversation: No ID provided');
             return;
         }
         
@@ -366,19 +376,23 @@ export class UIModule extends BaseModule {
             return;
         }
         
-        // Update UI to show active conversation
+        // Highlight the active conversation
+        this.logger.info('Updating active conversation in UI');
         document.querySelectorAll('.conversation-item').forEach(item => {
             if (item.dataset.conversationId === conversationId) {
                 item.classList.add('active');
+                this.logger.info(`Set active class on conversation ${conversationId}`);
             } else {
                 item.classList.remove('active');
             }
         });
         
-        // Show chat area (important for mobile)
-        if (chatArea) chatArea.classList.add('active');
+        // Show chat area
+        if (chatArea) {
+            chatArea.classList.add('active');
+        }
         
-        // Hide sidebar on mobile
+        // On mobile, hide sidebar
         if (window.innerWidth <= 768 && sidebar) {
             sidebar.classList.add('hidden');
         }
@@ -453,41 +467,47 @@ export class UIModule extends BaseModule {
             
             this.logger.info(`Conversation created with ID: ${conversation.id}`);
             
-            // Close the modal
+            // Close the modal first
             document.getElementById('new-conversation-modal')?.classList.add('hidden');
             
-            // Store the conversation ID
+            // Wait briefly to ensure state is clean
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Set current conversation ID
             this.currentConversation = conversation.id;
             
-            // Update the UI in the correct order
+            // Refresh conversation list first
             await this.renderConversationsList();
             
-            // Small delay to ensure DOM updates are complete
-            setTimeout(() => {
-                // Find the conversation item in the list
-                const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversation.id}"]`);
-                
-                if (conversationItem) {
-                    // Explicitly click the conversation item to load it
-                    conversationItem.click();
-                    this.logger.info(`Conversation ${conversation.id} selected in UI`);
-                } else {
-                    // Fallback to direct loading if item not found in DOM
-                    this.loadConversation(conversation.id);
-                    this.logger.info(`Direct loading conversation ${conversation.id}`);
-                }
-                
-                // Make sure it's visible on mobile
-                if (window.innerWidth <= 768) {
-                    const chatArea = document.querySelector('.chat-area');
-                    const sidebar = document.querySelector('.sidebar');
-                    
-                    if (chatArea) chatArea.classList.add('active');
-                    if (sidebar) sidebar.classList.add('hidden');
-                }
-            }, 100);
+            // Wait for DOM updates to complete
+            await new Promise(resolve => setTimeout(resolve, 100));
             
-            this.logger.info('Conversation successfully initiated');
+            // Force showing the chat area for the new conversation
+            const chatArea = document.querySelector('.chat-area');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (chatArea) {
+                chatArea.classList.add('active');
+            }
+            
+            // On mobile, hide the sidebar
+            if (window.innerWidth <= 768 && sidebar) {
+                sidebar.classList.add('hidden');
+            }
+            
+            // Now load the conversation explicitly, sending a log message before and after
+            this.logger.info(`About to load conversation: ${conversation.id}`);
+            await this.loadConversation(conversation.id);
+            this.logger.info(`Loaded conversation: ${conversation.id}`);
+            
+            // Clear message input and set focus
+            const messageInput = document.getElementById('message-text');
+            if (messageInput) {
+                messageInput.value = '';
+                messageInput.focus();
+            }
+            
+            this.logger.info('Conversation successfully initiated with UI updates');
         } catch (error) {
             this.logger.error('Failed to start conversation:', error);
             this.showError('Failed to create conversation: ' + error.message);
