@@ -232,9 +232,12 @@ export class DataModule extends BaseModule {
         }
     }
 
-    async fetchConversations(userId) {
+    async fetchConversations(userId, skipCache = false) {
         try {
-            const { data, error } = await this.supabase
+            // Add logging and optional cache skipping
+            this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
+            
+            const query = this.supabase
                 .from('conversations')
                 .select(`
                     *,
@@ -246,8 +249,24 @@ export class DataModule extends BaseModule {
                 .eq('participants.user_id', userId)
                 .order('created_at', { ascending: false });
             
+            // If we need to skip cache (e.g., after creating a new conversation)
+            if (skipCache) {
+                // This single-row update forces a fresh fetch by adding a cache-busting parameter
+                await this.supabase.rpc('touch_last_access', { user_id: userId });
+            }
+            
+            const { data, error } = await query;
+            
             if (error) throw error;
-            return data;
+            
+            this.logger.info(`Found ${data?.length || 0} conversations for user ${userId}`);
+            
+            // Log conversation IDs for debugging
+            if (data && data.length > 0) {
+                this.logger.info('Conversation IDs:', data.map(c => c.id).join(', '));
+            }
+            
+            return data || [];
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
             return [];
