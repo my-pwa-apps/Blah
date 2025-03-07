@@ -229,74 +229,60 @@ export class UIModule extends BaseModule {
             this.logger.info('Fetching conversations for current user');
             const dataModule = this.getModule('data');
             
-            // Get conversations (force fresh data)
+            // Get conversations with forced cache refresh
             const conversations = await dataModule.fetchConversations(this.currentUser.id, true);
-            this.logger.info(`Retrieved ${conversations.length} conversations from server`);
             
             // Clear list
             conversationsList.innerHTML = '';
             
-            if (conversations.length === 0) {
+            if (!conversations || conversations.length === 0) {
                 conversationsList.innerHTML = '<div class="no-conversations">No conversations yet. Start a new chat!</div>';
                 return;
             }
             
-            // Track whether we added any items to the list
-            let addedItems = 0;
+            this.logger.info(`Rendering ${conversations.length} conversations`);
             
             // Render each conversation
             for (const conv of conversations) {
                 try {
-                    // Get participants and check if it's a self chat
-                    const participants = conv.enrichedParticipants || [];
-                    this.logger.info(`Processing conv ${conv.id} with ${participants.length} participants`);
+                    const isSelfChat = conv.is_self_chat || 
+                                      (conv.participants.length === 1 && 
+                                       conv.participants[0].user_id === this.currentUser.id);
                     
-                    const isSelfChat = conv.is_self_chat || participants.length === 1;
-                    let name, avatar;
+                    let displayName, avatarUrl;
                     
                     if (isSelfChat) {
-                        // It's a self chat
-                        name = 'Notes to Self';
-                        avatar = this.currentUser.avatar_url;
-                        this.logger.info(`Adding self-chat: ${conv.id}`);
+                        displayName = 'Notes to Self';
+                        avatarUrl = this.currentUser.avatar_url;
+                        this.logger.info(`Rendering self-chat: ${conv.id}`);
                     } else {
-                        // It's a chat with other users - find the other participant(s)
-                        const otherParticipants = participants.filter(p => p.user_id !== this.currentUser.id);
-                        
-                        if (otherParticipants.length > 0) {
-                            const otherParticipant = otherParticipants[0];
-                            const otherProfile = otherParticipant.profiles;
-                            
-                            if (otherProfile) {
-                                name = otherProfile.display_name || otherProfile.email || 'Unknown User';
-                                avatar = otherProfile.avatar_url;
-                                this.logger.info(`Adding chat with: ${name}, id: ${conv.id}`);
-                            } else {
-                                name = 'Unknown User';
-                                avatar = null;
-                                this.logger.info(`Adding chat with unknown user: ${conv.id}`);
-                            }
+                        // Find the other user's profile
+                        const otherUser = conv.participants.find(p => p.user_id !== this.currentUser.id);
+                        if (otherUser && otherUser.profiles) {
+                            displayName = otherUser.profiles.display_name || otherUser.profiles.email || 'Unknown User';
+                            avatarUrl = otherUser.profiles.avatar_url;
+                            this.logger.info(`Rendering chat with: ${displayName}, id: ${conv.id}`);
                         } else {
-                            name = 'Unknown User';
-                            avatar = null;
-                            this.logger.info(`Adding chat with no other participants: ${conv.id}`);
+                            displayName = 'Unknown User';
+                            avatarUrl = null;
+                            this.logger.info(`Rendering chat with unknown user: ${conv.id}`);
                         }
                     }
                     
-                    // Check if there are unread messages
-                    const hasUnread = this.hasUnreadMessages(conv);
+                    // Check if this conversation has unread messages
+                    const hasUnread = this._hasUnreadMessages(conv);
                     
                     // Create conversation element
                     const conversationEl = document.createElement('div');
                     conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
                     conversationEl.dataset.conversationId = conv.id;
-                    conversationEl.dataset.isSelfChat = isSelfChat;
+                    conversationEl.dataset.isSelfChat = isSelfChat ? 'true' : 'false';
                     conversationEl.innerHTML = `
                         <div class="conversation-avatar">
-                            <img src="${avatar || 'images/default-avatar.png'}" alt="Avatar">
+                            <img src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">
                         </div>
                         <div class="conversation-details">
-                            <div class="conversation-name">${name}</div>
+                            <div class="conversation-name">${displayName}</div>
                             <div class="conversation-last-message">
                                 ${conv.last_message?.content || 'No messages yet'}
                             </div>
@@ -309,45 +295,33 @@ export class UIModule extends BaseModule {
                     
                     // Add to list
                     conversationsList.appendChild(conversationEl);
-                    addedItems++;
                 } catch (err) {
-                    this.logger.error(`Error processing conversation ${conv.id}:`, err);
+                    this.logger.error(`Error rendering conversation ${conv.id}:`, err);
                 }
             }
             
-            this.logger.info(`Added ${addedItems} conversations to the list`);
+            // Fix mobile layout issues
+            this.adjustLayoutForScreenSize();
             
-            // If no items were added but we had conversations, show an error
-            if (addedItems === 0 && conversations.length > 0) {
-                conversationsList.innerHTML = '<div class="no-conversations">Error displaying conversations. Please try again.</div>';
-                this.logger.error('Failed to render any conversations despite having data');
-            }
-            
-            // Fix mobile layout - make sure sidebar is visible
-            if (window.innerWidth <= 768) {
-                const sidebar = document.querySelector('.sidebar');
-                if (sidebar && !this.currentConversation) {
-                    sidebar.classList.remove('hidden');
-                }
-            }
         } catch (error) {
             this.logger.error('Failed to render conversations list:', error);
             this.showError('Failed to load conversations');
         }
     }
 
-    // Check if conversation has unread messages
-    hasUnreadMessages(conversation) {
-        if (!conversation.last_message) return false;
+    // Improved method to check for unread messages
+    _hasUnreadMessages(conversation) {
+        if (!conversation.last_message || conversation.last_message.sender_id === this.currentUser.id) {
+            return false;
+        }
         
         const lastMessageTime = new Date(conversation.last_message.created_at);
         const lastRead = conversation.last_read?.[this.currentUser.id];
         
-        if (!lastRead) return conversation.last_message.sender_id !== this.currentUser.id;
+        if (!lastRead) return true; // Unread if no read timestamp
         
         const lastReadTime = new Date(lastRead);
-        return conversation.last_message.sender_id !== this.currentUser.id && 
-               lastMessageTime > lastReadTime;
+        return lastMessageTime > lastReadTime;
     }
 
     setupMessageListeners() {
@@ -475,17 +449,7 @@ export class UIModule extends BaseModule {
                 // Show empty state
                 messageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
             } else {
-                // Render messages
-                messages.forEach(message => {
-                    const isSent = message.sender_id === this.currentUser.id;
-                    const messageEl = document.createElement('div');
-                    messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
-                    messageEl.innerHTML = `
-                        <div class="message-content">${message.content}</div>
-                        <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
-                    `;
-                    messageContainer.appendChild(messageEl);
-                });
+                this._renderMessages(messages);
             }
             
             // Scroll to bottom
@@ -505,7 +469,7 @@ export class UIModule extends BaseModule {
             }
             
             // Setup real-time subscription for new messages
-            this.setupMessageSubscription(conversationId);
+            this._setupMessageSubscription(conversationId);
         } catch (error) {
             this.logger.error('Failed to load conversation messages:', error);
             this.showError('Failed to load messages');
@@ -762,6 +726,7 @@ export class UIModule extends BaseModule {
         
         const messageEl = document.createElement('div');
         messageEl.className = `message received`;
+        messageEl.dataset.messageId = message.id;
         messageEl.innerHTML = `
             <div class="message-content">${message.content}</div>
             <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
@@ -772,130 +737,312 @@ export class UIModule extends BaseModule {
         // Mark as read since we're viewing it
         const dataModule = this.getModule('data');
         dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
-        n sound for active conversation
-        // Play notification soundis.getModule('notification');
-        this.playNotificationSound();   notificationModule.notify({
-    }            title: 'New Message',
-tring(0, 50) + (message.content.length > 50 ? '...' : ''),
-    // Show notification for new messagesubtle sound for active conversation
-    showMessageNotification(message) {alse // Don't show visual notification for active conversation
-        // Browser notification
-        if (Notification.permission === 'granted') {
-            const notification = new Notification('New Message', {
-                body: message.content,
-                icon: 'images/icon-192x192.png'Notification(message) {
-            });se notification module for OS-specific handling
-            tModule('notification');
-            notification.onclick = () => {
-                window.focus();the database
-                this.loadConversation(message.conversation_id);senderName = this.getSenderName(message.sender_id) || 'Someone';
-            };
-        }notificationModule.notify({
-        ew Message from ${senderName}`,
-        // Play soundsubstring(0, 100) + (message.content.length > 100 ? '...' : ''),
-        this.playNotificationSound();       icon: 'images/icon-192x192.png',
-    }            conversationId: message.conversation_id,
-cation'
+        
+        // Play notification sound for active conversation
+        try {
+            const notificationModule = this.getModule('notification');
+            notificationModule.notify({
+                title: 'New Message',
+                message: message.content.substring(0, 50) + (message.content.length > 50 ? '...' : ''),
+                soundType: 'message',
+                showNotification: false
+            });
+        } catch (error) {
+            this.logger.error('Error playing notification sound:', error);
+            // Fallback to simple notification sound
+            this.playNotificationSound();
+        }
+    }
+
+    // Show notification for new messages
+    showMessageNotification(message) {
+        try {
+            // Use notification module for OS-specific handling
+            const notificationModule = this.getModule('notification');
+            
+            // Try to get sender name
+            const senderName = this.getSenderName(message.sender_id) || 'Someone';
+            
+            notificationModule.notify({
+                title: `New Message from ${senderName}`,
+                message: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
+                icon: 'images/icon-192x192.png',
+                conversationId: message.conversation_id,
+                soundType: 'notification'
+            });
+        } catch (error) {
+            this.logger.error('Error showing notification:', error);
+            
+            // Fallback to browser notification
+            if (Notification.permission === 'granted') {
+                const notification = new Notification('New Message', {
+                    body: message.content,
+                    icon: 'images/icon-192x192.png'
+                });
+                
+                notification.onclick = () => {
+                    window.focus();
+                    this.loadConversation(message.conversation_id);
+                };
+            }
+            
+            // Play sound as fallback
+            this.playNotificationSound();
+        }
+    }
+
     // Play notification sound
     playNotificationSound() {
         try {
-            const audio = new Audio('sounds/notification.mp3');e
-            audio.volume = 0.5;d) {
-            audio.play();ion containing this user
-        } catch (error) {a-sender-id="${senderId}"]`);
-            this.logger.error('Failed to play notification sound:', error);f (conversation) {
-        }       const nameEl = conversation.querySelector('.conversation-name');
-    }           return nameEl ? nameEl.textContent : null;
+            const audio = new Audio('sounds/notification.mp3');
+            audio.volume = 0.5;
+            audio.play();
+        } catch (error) {
+            this.logger.error('Failed to play notification sound:', error);
         }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}    }        }            }                }                    });                        notificationModule.savePreferences();                        notificationModule.vibrationEnabled = vibrationToggle.checked;                    vibrationToggle.addEventListener('change', () => {                                        });                        notificationModule.savePreferences();                        notificationModule.soundsEnabled = soundToggle.checked;                    soundToggle.addEventListener('change', () => {                    // Add change handlers                                        vibrationToggle.checked = notificationModule.vibrationEnabled;                    soundToggle.checked = notificationModule.soundsEnabled;                    // Set initial state                                        const notificationModule = this.getModule('notification');                if (soundToggle && vibrationToggle) {                                const vibrationToggle = document.getElementById('enable-vibration');                const soundToggle = document.getElementById('enable-sounds');                // Setup toggle handlers                                }                    }                        permissionBtn.disabled = true;                        permissionBtn.textContent = 'Notifications Enabled';                    if (Notification.permission === 'granted') {                    // Update button state based on current permission                                        });                        }                            this.showError('Notification permission denied');                        } else {                            permissionBtn.disabled = true;                            permissionBtn.textContent = 'Notifications Enabled';                            this.showMessage('Notifications enabled!');                        if (granted) {                                                const granted = await notificationModule.requestPermission();                        const notificationModule = this.getModule('notification');                    permissionBtn.addEventListener('click', async () => {                if (permissionBtn) {                const permissionBtn = document.getElementById('notification-permission');                // Setup notification permission button                                }                    profileModal.querySelector('.profile-form').appendChild(notificationSection);                } else {                    modalButtons.parentNode.insertBefore(notificationSection, modalButtons);                if (modalButtons) {                const modalButtons = profileModal.querySelector('.modal-buttons');                // Insert before modal buttons                                `;                    </div>                        </button>                            Enable Notifications                        <button id="notification-permission" class="md-button">                    <div class="form-group">                    </div>                        </label>                            Enable Vibration (Mobile)                            <input type="checkbox" id="enable-vibration" checked>                        <label for="enable-vibration">                    <div class="form-group">                    </div>                        </label>                            Enable Sounds                            <input type="checkbox" id="enable-sounds" checked>                        <label for="enable-sounds">                    <div class="form-group">                    <h3>Notification Settings</h3>                notificationSection.innerHTML = `                notificationSection.className = 'notification-settings';                notificationSection.id = 'notification-settings';                const notificationSection = document.createElement('div');            if (!document.getElementById('notification-settings')) {            // Check if notification settings section already exists        if (profileModal) {        const profileModal = document.getElementById('profile-modal');        // Add notification settings to profile modal    setupNotificationHandlers() {    // Add a new method for notification settings        return null;
+    }
+
+    // Get sender name from conversation
+    getSenderName(senderId) {
+        const conversation = document.querySelector(`.conversation-item[data-sender-id="${senderId}"]`);
+        if (conversation) {
+            const nameEl = conversation.querySelector('.conversation-name');
+            return nameEl ? nameEl.textContent : null;
+        }
+        return null;
+    }
+
+    setupNotificationHandlers() {
+        const profileModal = document.getElementById('profile-modal');
+        if (profileModal) {
+            // Check if notification settings section already exists
+            if (!document.getElementById('notification-settings')) {
+                const notificationSection = document.createElement('div');
+                notificationSection.className = 'notification-settings';
+                notificationSection.id = 'notification-settings';
+                notificationSection.innerHTML = `
+                    <h3>Notification Settings</h3>
+                    <div class="form-group">
+                        <label for="enable-sounds">
+                            Enable Sounds
+                            <input type="checkbox" id="enable-sounds" checked>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <label for="enable-vibration">
+                            Enable Vibration (Mobile)
+                            <input type="checkbox" id="enable-vibration" checked>
+                        </label>
+                    </div>
+                    <div class="form-group">
+                        <button id="notification-permission" class="md-button">
+                            Enable Notifications
+                        </button>
+                    </div>
+                `;
+                // Insert before modal buttons
+                const modalButtons = profileModal.querySelector('.modal-buttons');
+                if (modalButtons) {
+                    modalButtons.parentNode.insertBefore(notificationSection, modalButtons);
+                } else {
+                    profileModal.querySelector('.profile-form').appendChild(notificationSection);
+                }
+
+                // Setup notification permission button
+                const permissionBtn = document.getElementById('notification-permission');
+                if (permissionBtn) {
+                    permissionBtn.addEventListener('click', async () => {
+                        const notificationModule = this.getModule('notification');
+                        const granted = await notificationModule.requestPermission();
+                        if (granted) {
+                            permissionBtn.disabled = true;
+                            permissionBtn.textContent = 'Notifications Enabled';
+                            this.showMessage('Notifications enabled!');
+                        } else {
+                            this.showError('Notification permission denied');
+                        }
+                    });
+                    // Update button state based on current permission
+                    if (Notification.permission === 'granted') {
+                        permissionBtn.disabled = true;
+                        permissionBtn.textContent = 'Notifications Enabled';
+                    }
+                }
+
+                // Setup toggle handlers
+                const soundToggle = document.getElementById('enable-sounds');
+                const vibrationToggle = document.getElementById('enable-vibration');
+                if (soundToggle && vibrationToggle) {
+                    const notificationModule = this.getModule('notification');
+                    // Set initial state
+                    soundToggle.checked = notificationModule.soundsEnabled;
+                    vibrationToggle.checked = notificationModule.vibrationEnabled;
+                    // Add change handlers
+                    soundToggle.addEventListener('change', () => {
+                        notificationModule.soundsEnabled = soundToggle.checked;
+                        notificationModule.savePreferences();
+                    });
+                    vibrationToggle.addEventListener('change', () => {
+                        notificationModule.vibrationEnabled = vibrationToggle.checked;
+                        notificationModule.savePreferences();
+                    });
+                }
+            }
+        }
+    }
+
+    // Helper method to render messages
+    _renderMessages(messages) {
+        const messageContainer = document.getElementById('message-container');
+        if (!messageContainer) return;
+        
+        messages.forEach(message => {
+            const messageEl = this._createMessageElement(message);
+            if (messageEl) {
+                messageContainer.appendChild(messageEl);
+            }
+        });
+    }
+
+    // Create a message element based on message data
+    _createMessageElement(message) {
+        if (!message) return null;
+        
+        const isSent = message.sender_id === this.currentUser.id;
+        const messageEl = document.createElement('div');
+        messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
+        messageEl.dataset.messageId = message.id;
+        messageEl.innerHTML = `
+            <div class="message-content">${message.content}</div>
+            <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+        `;
+        return messageEl;
+    }
+
+    // Improve real-time message subscription
+    _setupMessageSubscription(conversationId) {
+        // Clean up previous subscription if any
+        if (this.currentSubscription) {
+            this.currentSubscription.unsubscribe();
+            this.currentSubscription = null;
+        }
+        
+        this.logger.info(`Setting up message subscription for conversation ${conversationId}`);
+        
+        const dataModule = this.getModule('data');
+        this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (newMessage) => {
+            this.logger.info(`Received real-time message update for conversation ${conversationId}`);
+            
+            // Only handle if this is still the current conversation
+            if (this.currentConversation === conversationId) {
+                // Don't add our own messages again
+                if (newMessage.sender_id !== this.currentUser.id) {
+                    // Add the message to the UI
+                    this._addMessageToUI(newMessage);
+                    
+                    // Mark as read since we're viewing it
+                    dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+                }
+            } else {
+                // Show notification for messages in other conversations
+                this._showMessageNotification(newMessage);
+                
+                // Update conversations list to show unread indicator
+                this.renderConversationsList();
+            }
+        });
+    }
+
+    // Add a new message to the UI
+    _addMessageToUI(message) {
+        const messageContainer = document.getElementById('message-container');
+        if (!messageContainer) return;
+        
+        // Check if this message already exists in the UI
+        const existingMessage = document.querySelector(`.message[data-message-id="${message.id}"]`);
+        if (existingMessage) return;
+        
+        const messageEl = this._createMessageElement(message);
+        if (messageEl) {
+            // Remove "no messages" indicator if present
+            const noMessagesEl = messageContainer.querySelector('.no-messages');
+            if (noMessagesEl) noMessagesEl.remove();
+            
+            // Add message and scroll into view
+            messageContainer.appendChild(messageEl);
+            messageEl.scrollIntoView({ behavior: 'smooth' });
+            
+            // Play notification sound
+            this._playIncomingMessageSound();
+        }
+    }
+
+    // Play a subtle sound for incoming messages
+    _playIncomingMessageSound() {
+        try {
+            const notificationModule = this.getModule('notification');
+            if (notificationModule) {
+                notificationModule.notify({
+                    title: 'New Message',
+                    message: '',
+                    soundType: 'message',
+                    showNotification: false
+                });
+            }
+        } catch (error) {
+            this.logger.error('Error playing message sound:', error);
+        }
+    }
+
+    // Show notification for messages in other conversations
+    _showMessageNotification(message) {
+        try {
+            const notificationModule = this.getModule('notification');
+            if (notificationModule) {
+                // Try to get sender name
+                let senderName = 'Someone';
+                if (message.profiles) {
+                    senderName = message.profiles.display_name || message.profiles.email || 'Someone';
+                }
+                
+                notificationModule.notify({
+                    title: `New Message from ${senderName}`,
+                    message: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
+                    conversationId: message.conversation_id,
+                    soundType: 'notification'
+                });
+            }
+        } catch (error) {
+            this.logger.error('Error showing message notification:', error);
+        }
+    }
+
+    adjustLayoutForScreenSize() {
+        const isMobile = window.innerWidth <= 768;
+        const sidebar = document.querySelector('.sidebar');
+        const chatArea = document.querySelector('.chat-area');
+
+        if (!sidebar || !chatArea) return;
+
+        if (!isMobile) {
+            // Desktop layout: both visible
+            sidebar.classList.remove('hidden');
+            chatArea.classList.remove('active', 'hidden');
+        } else {
+            // Mobile layout
+            if (this.currentConversation) {
+                // Show chat area when conversation is active
+                sidebar.classList.add('hidden');
+                chatArea.classList.add('active');
+                chatArea.classList.remove('hidden');
+            } else {
+                // Show sidebar when no conversation is selected
+                sidebar.classList.remove('hidden');
+                chatArea.classList.remove('active');
+                chatArea.classList.add('hidden');
+            }
+        }
+        
+        this.logger.info(`Layout adjusted for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);
     }
 }

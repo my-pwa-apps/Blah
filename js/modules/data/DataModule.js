@@ -283,43 +283,40 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
             
-            // First make sure we clean up any duplicate self-chats
-            await this.cleanupSelfChats(userId);
-            
-            // Use a different query approach that's more reliable
-            const { data: conversations, error } = await this.supabase
+            // Use a direct, simpler query to get all conversations the user participates in
+            const { data: participantEntries, error: participantError } = await this.supabase
                 .from('participants')
                 .select(`
                     conversation_id,
-                    user_id,
-                    conversations:conversation_id (
-                        id,
-                        created_at,
-                        is_self_chat,
-                        last_message
-                    ),
-                    profiles:user_id (
-                        id,
-                        email,
-                        display_name,
-                        avatar_url
-                    )
+                    user_id
                 `)
                 .eq('user_id', userId);
+                
+            if (participantError) throw participantError;
             
-            if (error) throw error;
+            // Extract unique conversation IDs
+            const conversationIds = [...new Set(participantEntries.map(p => p.conversation_id))];
+            this.logger.info(`Found ${conversationIds.length} conversations for user ${userId}`);
             
-            this.logger.info(`Found ${conversations?.length || 0} participant entries for user ${userId}`);
+            if (conversationIds.length === 0) return [];
             
-            if (!conversations || conversations.length === 0) return [];
+            // Get all conversations by their IDs
+            const { data: conversations, error: conversationsError } = await this.supabase
+                .from('conversations')
+                .select(`
+                    id, 
+                    created_at,
+                    is_self_chat,
+                    last_message,
+                    last_read
+                `)
+                .in('id', conversationIds)
+                .order('created_at', { ascending: false });
+                
+            if (conversationsError) throw conversationsError;
             
-            // Get all conversation IDs
-            const conversationIds = [...new Set(conversations.map(p => p.conversation_id))];
-            
-            // Now get other participants for each conversation
-            const result = [];
-            
-            for (const convId of conversationIds) {
+            // For each conversation, get all participants with their profiles
+            const conversationsWithDetails = await Promise.all(conversations.map(async (conv) => {
                 const { data: participants, error: participantsError } = await this.supabase
                     .from('participants')
                     .select(`
@@ -331,47 +328,66 @@ export class DataModule extends BaseModule {
                             avatar_url
                         )
                     `)
-                    .eq('conversation_id', convId);
-                
+                    .eq('conversation_id', conv.id);
+                    
                 if (participantsError) {
-                    this.logger.error(`Error fetching participants for conversation ${convId}:`, participantsError);
-                    continue;
+                    this.logger.error(`Error fetching participants for conversation ${conv.id}:`, participantsError);
+                    return { ...conv, participants: [] };
                 }
                 
-                // Find the conversation details
-                const conv = conversations.find(c => c.conversation_id === convId)?.conversations;
-                
-                if (!conv) continue;
-                
-                // Add enriched data
-                result.push({
-                    ...conv,
-                    enrichedParticipants: participants
-                });
-            }
+                return { ...conv, participants };
+            }));
             
-            // Group conversations by participant type
-            const processedConversations = [];
-            let selfChat = null;
+            // Process conversations to eliminate duplicates
+            const selfChats = [];
+            const otherChats = new Map(); // Map of userId -> conversation
             
-            for (const conv of result) {
-                if (conv.is_self_chat || conv.enrichedParticipants.length === 1) {
-                    if (!selfChat || new Date(conv.created_at) > new Date(selfChat.created_at)) {
-                        selfChat = conv;
-                    }
+            for (const conv of conversationsWithDetails) {
+                // Check if it's a self chat
+                if (conv.is_self_chat || (conv.participants.length === 1 && conv.participants[0].user_id === userId)) {
+                    selfChats.push(conv);
                 } else {
-                    processedConversations.push(conv);
+                    // For chats with others, find the other user
+                    const otherParticipant = conv.participants.find(p => p.user_id !== userId);
+                    
+                    if (otherParticipant) {
+                        const otherUserId = otherParticipant.user_id;
+                        const existingConv = otherChats.get(otherUserId);
+                        
+                        // Keep only the most recent conversation with this person
+                        if (!existingConv || new Date(conv.created_at) > new Date(existingConv.created_at)) {
+                            otherChats.set(otherUserId, conv);
+                            this.logger.info(`Added/updated conversation with user ${otherUserId}: ${conv.id}`);
+                        }
+                    }
                 }
             }
             
-            // Add self chat at the beginning if found
-            if (selfChat) {
-                processedConversations.unshift(selfChat);
+            // Get the most recent self-chat
+            let mostRecentSelfChat = null;
+            if (selfChats.length > 0) {
+                mostRecentSelfChat = selfChats.reduce((latest, current) => 
+                    new Date(current.created_at) > new Date(latest.created_at) ? current : latest, 
+                    selfChats[0]
+                );
+                this.logger.info(`Selected most recent self-chat: ${mostRecentSelfChat.id}`);
             }
             
-            this.logger.info(`Returning ${processedConversations.length} conversations after processing`);
+            // Combine all conversations, with self-chat first if it exists
+            const result = Array.from(otherChats.values());
+            if (mostRecentSelfChat) {
+                result.unshift(mostRecentSelfChat);
+            }
             
-            return processedConversations;
+            // Sort by last message time if available, otherwise created_at
+            result.sort((a, b) => {
+                const aTime = a.last_message?.created_at ? new Date(a.last_message.created_at) : new Date(a.created_at);
+                const bTime = b.last_message?.created_at ? new Date(b.last_message.created_at) : new Date(b.created_at);
+                return bTime - aTime; // newest first
+            });
+            
+            this.logger.info(`Returning ${result.length} deduplicated conversations`);
+            return result;
         } catch (error) {
             this.logger.error('Error in fetchConversations:', error);
             return [];
@@ -380,19 +396,51 @@ export class DataModule extends BaseModule {
 
     // Add a method to subscribe to real-time message updates
     subscribeToNewMessages(conversationId, callback) {
-        this.logger.info(`Subscribing to messages for conversation ${conversationId}`);
-        return this.supabase
+        this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
+        
+        const channel = this.supabase
             .channel(`conversation:${conversationId}`)
             .on('postgres_changes', {
-                event: 'INSERT',
+                event: 'INSERT', 
                 schema: 'public',
                 table: 'messages',
                 filter: `conversation_id=eq.${conversationId}`
-            }, payload => {
-                this.logger.info(`New message received in conversation ${conversationId}`);
-                callback(payload.new);
+            }, async (payload) => {
+                this.logger.info(`Received new message in conversation ${conversationId}`);
+                
+                // Fetch the full message details including sender profile
+                try {
+                    const { data, error } = await this.supabase
+                        .from('messages')
+                        .select(`
+                            id,
+                            content,
+                            created_at,
+                            sender_id,
+                            conversation_id,
+                            profiles:sender_id (*)
+                        `)
+                        .eq('id', payload.new.id)
+                        .single();
+                        
+                    if (error) throw error;
+                    
+                    // Call the callback with the complete message data
+                    if (data) {
+                        callback(data);
+                    } else {
+                        callback(payload.new); // Fallback to original payload
+                    }
+                } catch (err) {
+                    this.logger.error('Error fetching complete message:', err);
+                    callback(payload.new); // Fallback to original payload
+                }
             })
-            .subscribe();
+            .subscribe((status) => {
+                this.logger.info(`Subscription status for ${conversationId}: ${status}`);
+            });
+            
+        return channel;
     }
 
     // Add method to mark messages as read
