@@ -1132,17 +1132,34 @@ export class UIModule extends BaseModule {
             const statusDiv = document.createElement('div');
             statusDiv.id = 'rt-status';
             
+            const connectionStatus = document.createElement('div');
+            connectionStatus.id = 'connection-status';
+            
+            // Add connection status display
+            const dataModule = this.getModule('data');
+            const updateStatus = () => {
+                const status = dataModule.getConnectionStatus();
+                const statusColor = status === 'CONNECTED' ? '#0f0' : 
+                                   status === 'CONNECTING' ? '#ff0' : '#f00';
+                connectionStatus.innerHTML = `<span style="color:${statusColor}">●</span> Status: ${status}`;
+            };
+            
+            // Update status now and every 2 seconds
+            updateStatus();
+            const statusInterval = setInterval(updateStatus, 2000);
+            
             const testBtn = document.createElement('button');
             testBtn.textContent = 'Test Connection';
+            testBtn.style.margin = '10px 0';
             testBtn.onclick = async () => {
                 statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Testing connection...</div>`;
                 try {
                     const dataModule = this.getModule('data');
-                    const channel = dataModule.supabase.channel('test-channel');
+                    // Create a test channel to check connection
+                    const uniqueId = new Date().getTime();
+                    const channel = dataModule.supabase.channel(`test-channel-${uniqueId}`);
                     
-                    channel.on('presence', { event: 'sync' }, () => {
-                        statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Presence sync</div>`;
-                    }).subscribe(status => {
+                    channel.subscribe(status => {
                         statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Status: ${status}</div>`;
                         setTimeout(() => channel.unsubscribe(), 2000);
                     });
@@ -1151,10 +1168,34 @@ export class UIModule extends BaseModule {
                 }
             };
             
+            // Add manual polling fallback button
+            const pollBtn = document.createElement('button');
+            pollBtn.textContent = 'Enable Polling Fallback';
+            pollBtn.style.margin = '0 0 0 10px';
+            pollBtn.onclick = () => {
+                if (this.currentConversation) {
+                    const dataModule = this.getModule('data');
+                    dataModule.setupMessagePolling(this.currentConversation, (message) => {
+                        this._addMessageToUI(message);
+                        statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Poll received message: ${message.id}</div>`;
+                    });
+                    statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Polling enabled for conversation ${this.currentConversation}</div>`;
+                } else {
+                    statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] No active conversation for polling</div>`;
+                }
+            };
+            
             debugPanel.appendChild(closeBtn);
             debugPanel.appendChild(heading);
+            debugPanel.appendChild(connectionStatus);
             debugPanel.appendChild(testBtn);
+            debugPanel.appendChild(pollBtn);
             debugPanel.appendChild(statusDiv);
+            
+            // Clean up when panel is removed
+            debugPanel.addEventListener('remove', () => {
+                clearInterval(statusInterval);
+            });
             
             document.body.appendChild(debugPanel);
         } else {

@@ -5,25 +5,55 @@ export class DataModule extends BaseModule {
     constructor(app) {
         super(app);
         this.supabase = null;
+        this.connectionStatus = 'CONNECTING';
     }
 
     async init() {
         this.supabase = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
         
-        // Add real-time connection debugging
-        this.supabase.realtime.onOpen(() => {
-            this.logger.info('Supabase real-time connection established');
-        });
-        
-        this.supabase.realtime.onError((error) => {
-            this.logger.error('Supabase real-time connection error:', error);
-        });
-        
-        this.supabase.realtime.onClose(() => {
-            this.logger.warn('Supabase real-time connection closed');
-        });
+        // Set up a status channel to monitor real-time connection status
+        this._setupConnectionMonitoring();
         
         this.logger.info('Data module initialized');
+    }
+
+    // Add connection status monitoring
+    _setupConnectionMonitoring() {
+        try {
+            // Create a status channel to monitor connection state
+            const statusChannel = this.supabase.channel('status-channel');
+            
+            statusChannel
+                .on('system', { event: 'presence_state' }, () => {
+                    this.connectionStatus = 'CONNECTED';
+                    this.logger.info('Supabase real-time connection established');
+                })
+                .subscribe((status) => {
+                    if (status === 'SUBSCRIBED') {
+                        this.connectionStatus = 'CONNECTED';
+                        this.logger.info('Real-time status channel connected');
+                    } else if (status === 'CHANNEL_ERROR') {
+                        this.connectionStatus = 'ERROR';
+                        this.logger.error('Real-time connection error');
+                    } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
+                        this.connectionStatus = 'DISCONNECTED';
+                        this.logger.warn('Real-time connection closed or timed out');
+                        
+                        // Try to reconnect after 3 seconds
+                        setTimeout(() => {
+                            this.logger.info('Attempting to reconnect status channel');
+                            statusChannel.subscribe();
+                        }, 3000);
+                    }
+                });
+        } catch (error) {
+            this.logger.error('Failed to setup connection monitoring:', error);
+        }
+    }
+
+    // Add a method to get current connection status
+    getConnectionStatus() {
+        return this.connectionStatus;
     }
 
     async fetchUserProfile(userId) {
@@ -461,7 +491,7 @@ export class DataModule extends BaseModule {
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
                 }, async (payload) => {
-                    this.logger.info(`Received real-time event:`, payload);
+                    this.logger.info(`Received real-time event for conversation ${conversationId}`);
                     
                     if (!payload.new || !payload.new.id) {
                         this.logger.warn('Received empty payload', payload);
@@ -478,7 +508,7 @@ export class DataModule extends BaseModule {
                                 created_at,
                                 sender_id,
                                 conversation_id,
-                                profiles!messages_sender_id_fkey (
+                                profiles:sender_id (
                                     id,
                                     email,
                                     display_name,
