@@ -201,14 +201,16 @@ export class DataModule extends BaseModule {
         }
     }
 
-    async sendMessage(conversationId, senderId, content) {
+    // Update the sendMessage method to accept metadata
+    async sendMessage(conversationId, senderId, content, metadata = {}) {
         try {
             const { data, error } = await this.supabase
                 .from('messages')
                 .insert({
                     conversation_id: conversationId,
                     sender_id: senderId,
-                    content
+                    content,
+                    metadata  // Store the metadata (including device_id)
                 })
                 .select()
                 .single();
@@ -472,7 +474,7 @@ export class DataModule extends BaseModule {
         }
     }
 
-    // Add a method to subscribe to real-time message updates
+    // Update the subscription handler to include metadata in the query
     subscribeToNewMessages(conversationId, callback) {
         this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
         
@@ -508,6 +510,7 @@ export class DataModule extends BaseModule {
                                 created_at,
                                 sender_id,
                                 conversation_id,
+                                metadata,  // Make sure to select the metadata field
                                 profiles:sender_id (
                                     id,
                                     email,
