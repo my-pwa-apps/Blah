@@ -340,34 +340,87 @@ export class DataModule extends BaseModule {
                     p.conversation_id === conv.id && p.user_id === userId
                 );
                 
+                // CRITICAL FIX: Properly identify self chats vs. regular chats
+                const isSelfChat = conv.is_self_chat || 
+                                  (participants.length === 1 && participants[0].user_id === userId);
+                
                 return { 
                     ...conv, 
                     participants,
-                    userLastRead: currentUserEntry?.last_read_at || null
+                    userLastRead: currentUserEntry?.last_read_at || null,
+                    isSelfChat // Explicitly store this property
                 };
             }));
             
-            // Process conversations - properly identify self chats vs other chats
-            const result = [];
+            // Separate self-chats and regular chats for different handling
+            const selfChats = [];
+            const regularChats = new Map(); // Use Map to deduplicate by other user ID
             
             for (const conv of conversationsWithDetails) {
-                // Determine if it's a self chat based on database flag OR participant count
-                const isSelfChat = Boolean(conv.is_self_chat) || 
-                                  (conv.participants.length === 1 && conv.participants[0].user_id === userId);
-                
-                // Add our enhanced property to make it explicit
-                conv.isSelfChat = isSelfChat;
-                result.push(conv);
+                if (conv.isSelfChat) {
+                    selfChats.push(conv);
+                } else {
+                    // For regular chats, identify the "other" users
+                    const otherUsers = conv.participants.filter(p => p.user_id !== userId);
+                    
+                    // If there are other users, use the first one as the key for deduplication
+                    if (otherUsers.length > 0) {
+                        const otherUser = otherUsers[0];
+                        const otherUserId = otherUser.user_id;
+                        
+                        // Only keep the most recent conversation with each person
+                        const existingConv = regularChats.get(otherUserId);
+                        const convLastMessageTime = conv.last_message?.created_at 
+                            ? new Date(conv.last_message.created_at) 
+                            : new Date(conv.created_at);
+                        
+                        if (!existingConv) {
+                            regularChats.set(otherUserId, conv);
+                        } else {
+                            // Compare message timestamps and keep the more recent one
+                            const existingLastMessageTime = existingConv.last_message?.created_at 
+                                ? new Date(existingConv.last_message.created_at) 
+                                : new Date(existingConv.created_at);
+                            
+                            if (convLastMessageTime > existingLastMessageTime) {
+                                regularChats.set(otherUserId, conv);
+                            }
+                        }
+                    } else {
+                        // This shouldn't happen, but handle just in case
+                        regularChats.set(`unknown-${conv.id}`, conv);
+                    }
+                }
             }
             
-            // Sort result by most recent message first
+            // Choose only the most recent self-chat
+            let mostRecentSelfChat = null;
+            if (selfChats.length > 0) {
+                mostRecentSelfChat = selfChats.reduce((latest, current) => {
+                    const latestTime = latest.last_message?.created_at 
+                        ? new Date(latest.last_message.created_at) 
+                        : new Date(latest.created_at);
+                    const currentTime = current.last_message?.created_at 
+                        ? new Date(current.last_message.created_at) 
+                        : new Date(current.created_at);
+                    return currentTime > latestTime ? current : latest;
+                }, selfChats[0]);
+            }
+            
+            // Combine results, putting self-chat first if it exists
+            const result = [...regularChats.values()];
+            if (mostRecentSelfChat) {
+                result.unshift(mostRecentSelfChat);
+            }
+            
+            // Sort by most recent message
             result.sort((a, b) => {
                 const aTime = a.last_message?.created_at ? new Date(a.last_message.created_at) : new Date(a.created_at);
                 const bTime = b.last_message?.created_at ? new Date(b.last_message.created_at) : new Date(b.created_at);
-                return bTime - aTime;
+                return bTime - aTime; // newest first
             });
             
-            this.logger.info(`Returning ${result.length} conversations`);
+            this.logger.info(`Returning ${result.length} conversations (${selfChats.length > 0 ? '1 self-chat' : 'no self-chat'}, ${regularChats.size} regular chats)`);
             return result;
         } catch (error) {
             this.logger.error('Error in fetchConversations:', error);

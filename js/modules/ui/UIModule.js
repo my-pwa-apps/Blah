@@ -246,18 +246,16 @@ export class UIModule extends BaseModule {
             // Render each conversation
             for (const conv of conversations) {
                 try {
-                    // Log the conversation data for debugging
-                    this.logger.info(`Processing conversation ${conv.id}:`, {
-                        is_self_chat: conv.is_self_chat,
-                        participantCount: conv.participants?.length,
-                        userIsOnlyParticipant: conv.participants?.length === 1 && 
-                                             conv.participants[0].user_id === this.currentUser.id
-                    });
+                    // CRITICAL FIX: Use the explicit isSelfChat property from DataModule
+                    const isSelfChat = Boolean(conv.isSelfChat);
                     
-                    // Explicitly determine self-chat status
-                    const isSelfChat = Boolean(conv.is_self_chat) || 
-                                     (conv.participants?.length === 1 && 
-                                      conv.participants[0].user_id === this.currentUser.id);
+                    // Debug logging with more details
+                    this.logger.info(`Rendering conversation ${conv.id}:`, {
+                        is_self_chat_flag: conv.is_self_chat,
+                        isSelfChat: isSelfChat,
+                        participantCount: conv.participants?.length,
+                        participants: conv.participants?.map(p => p.user_id)
+                    });
                     
                     let displayName, avatarUrl;
                     
@@ -266,24 +264,25 @@ export class UIModule extends BaseModule {
                         avatarUrl = this.currentUser.avatar_url;
                         this.logger.info(`Rendering self-chat: ${conv.id}`);
                     } else {
-                        // Find the other user's profile - improved to handle multiple participants
-                        const otherUsers = conv.participants?.filter(p => p.user_id !== this.currentUser.id) || [];
+                        // Find the other participants (not the current user)
+                        const otherUsers = conv.participants.filter(p => p.user_id !== this.currentUser.id);
                         
                         if (otherUsers.length > 0) {
                             const otherUser = otherUsers[0];
-                            if (otherUser?.profiles) {
+                            if (otherUser && otherUser.profiles) {
                                 displayName = otherUser.profiles.display_name || otherUser.profiles.email || 'Unknown User';
                                 avatarUrl = otherUser.profiles.avatar_url;
-                                this.logger.info(`Rendering chat with: ${displayName}, id: ${conv.id}`);
+                                this.logger.info(`Rendering chat with: ${displayName} (${otherUser.user_id}), conversation: ${conv.id}`);
                             } else {
                                 displayName = 'Unknown User';
                                 avatarUrl = null;
                                 this.logger.info(`Rendering chat with unknown user: ${conv.id}`);
                             }
                         } else {
-                            displayName = 'Group Chat';
+                            // This shouldn't happen with our improved logic, but just in case
+                            displayName = 'Unknown Chat';
                             avatarUrl = null;
-                            this.logger.info(`Rendering group chat: ${conv.id}`);
+                            this.logger.warn(`No other participants found for non-self chat: ${conv.id}`);
                         }
                     }
                     
@@ -294,11 +293,15 @@ export class UIModule extends BaseModule {
                     const conversationEl = document.createElement('div');
                     conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
                     conversationEl.dataset.conversationId = conv.id;
-                    conversationEl.dataset.isSelfChat = String(isSelfChat); // Explicitly store as string
+                    conversationEl.dataset.isSelfChat = String(isSelfChat); // Store as string
                     
-                    // Add dataset with sender IDs for easier lookup
-                    const participantIds = conv.participants?.map(p => p.user_id).join(',') || '';
-                    conversationEl.dataset.participantIds = participantIds;
+                    // Store other user ID for easier lookups (only for non-self chats)
+                    if (!isSelfChat && conv.participants) {
+                        const otherUsers = conv.participants.filter(p => p.user_id !== this.currentUser.id);
+                        if (otherUsers.length > 0) {
+                            conversationEl.dataset.otherUserId = otherUsers[0].user_id;
+                        }
+                    }
                     
                     conversationEl.innerHTML = `
                         <div class="conversation-avatar">
@@ -393,9 +396,6 @@ export class UIModule extends BaseModule {
             this.logger.info('Message sent successfully');
         } catch (error) {
             this.logger.error('Failed to send message:', error);
-            this.showError('Failed to send message');
-        }
-    }
 
     async loadConversation(conversationId) {
         if (!conversationId) {
