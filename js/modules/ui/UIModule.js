@@ -316,11 +316,14 @@ export class UIModule extends BaseModule {
         }
         
         const lastMessageTime = new Date(conversation.last_message.created_at);
-        const lastRead = conversation.last_read?.[this.currentUser.id];
         
-        if (!lastRead) return true; // Unread if no read timestamp
+        // Find current user's participant record to get last_read_at
+        const userParticipant = conversation.participants?.find(p => p.user_id === this.currentUser.id);
+        if (!userParticipant || !userParticipant.last_read_at) {
+            return true; // Unread if no read timestamp
+        }
         
-        const lastReadTime = new Date(lastRead);
+        const lastReadTime = new Date(userParticipant.last_read_at);
         return lastMessageTime > lastReadTime;
     }
 

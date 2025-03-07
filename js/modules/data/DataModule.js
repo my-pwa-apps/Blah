@@ -300,15 +300,14 @@ export class DataModule extends BaseModule {
             
             if (conversationIds.length === 0) return [];
             
-            // Get all conversations by their IDs
+            // Get all conversations by their IDs - removed last_read column
             const { data: conversations, error: conversationsError } = await this.supabase
                 .from('conversations')
                 .select(`
                     id, 
                     created_at,
                     is_self_chat,
-                    last_message,
-                    last_read
+                    last_message
                 `)
                 .in('id', conversationIds)
                 .order('created_at', { ascending: false });
@@ -321,6 +320,7 @@ export class DataModule extends BaseModule {
                     .from('participants')
                     .select(`
                         user_id,
+                        last_read_at,
                         profiles:user_id (
                             id,
                             email,
@@ -446,14 +446,14 @@ export class DataModule extends BaseModule {
     // Add method to mark messages as read
     async markMessagesAsRead(conversationId, userId) {
         try {
+            // Update the participant's last_read_at field instead of conversation's last_read
             const { error } = await this.supabase
-                .from('conversations')
+                .from('participants')
                 .update({
-                    last_read: {
-                        [userId]: new Date().toISOString()
-                    }
+                    last_read_at: new Date().toISOString()
                 })
-                .eq('id', conversationId);
+                .eq('conversation_id', conversationId)
+                .eq('user_id', userId);
             
             if (error) throw error;
             
