@@ -310,20 +310,106 @@ body {
     position: relative;
 }
 
-.sidebar {
-    display: flex;
-    flex-direction: column;
-    background-color: var(--md-background);
-    z-index: 1;
+/* Unified media queries for desktop */
+@media (min-width: 769px) {
+    .content-container {
+        display: grid;
+        grid-template-columns: 300px 1fr;
+        gap: 1px;
+        background-color: var(--md-divider);
+        height: calc(100vh - 64px);
+        overflow: hidden;
+    }
+
+    .sidebar {
+        position: relative !important;
+        grid-column: 1;
+        height: 100%;
+        overflow-y: auto !important;
+        overscroll-behavior: contain;
+        will-change: transform;
+        transform: translateZ(0);
+    }
+
+    .chat-area {
+        position: relative !important;
+        grid-column: 2;
+        height: 100%;
+        display: flex !important;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    #back-button {
+        display: none !important;
+    }
 }
 
-.sidebar-header {
+/* Unified media queries for mobile */
+@media (max-width: 768px) {
+    .app-container {
+        height: 100dvh;
+        overflow: hidden;
+    }
+
+    .content-container {
+        height: calc(100dvh - 64px);
+    }
+
+    .sidebar,
+    .chat-area {
+        position: absolute !important;
+        width: 100%;
+        height: 100%;
+        transition: transform 0.3s ease-out;
+        will-change: transform;
+        transform: translateZ(0);
+    }
+
+    .sidebar {
+        transform: translateX(0);
+        z-index: 5;
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%);
+    }
+
+    .chat-area {
+        transform: translateX(100%);
+        z-index: 6;
+    }
+
+    .chat-area.active {
+        transform: translateX(0);
+    }
+
+    #back-button {
+        display: flex !important;
+    }
+}
+
+/* Optimize scrolling performance */
+.message-container {
+    flex: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    will-change: transform;
+    transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
     padding: 1rem;
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid var(--md-divider);
-    position: relative;  /* For proper button positioning */
+    flex-direction: column;
+    gap: 0.5rem;
+    min-height: 0;
+}
+
+.conversations-list {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    will-change: transform;
+    transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
 }
 
 @media (min-width: 1024px) {
@@ -661,6 +747,10 @@ body {
 .conversations-list {
     flex: 1;
     overflow-y: auto;
+    overscroll-behavior: contain;
+    will-change: transform;
+    transform: translateZ(0);
+    -webkit-overflow-scrolling: touch;
 }
 
 .conversation-item {
