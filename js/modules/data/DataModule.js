@@ -439,15 +439,12 @@ export class DataModule extends BaseModule {
             const channel = this.supabase
                 .channel(channelName)
                 .on('postgres_changes', {
-                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+                    event: 'INSERT', // Listen to INSERT events only
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
                 }, async (payload) => {
                     this.logger.info(`Received real-time event for conversation ${conversationId}:`, payload);
-                    
-                    // Only process new messages
-                    if (payload.eventType !== 'INSERT') return;
                     
                     try {
                         // Get complete message data with sender profile
@@ -486,11 +483,8 @@ export class DataModule extends BaseModule {
             channel.subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
                     this.logger.info(`Successfully subscribed to conversation ${conversationId}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    this.logger.error(`Channel error for ${conversationId}:`, err);
-                    await this._handleSubscriptionError(channel, conversationId);
-                } else if (status === 'TIMED_OUT') {
-                    this.logger.error(`Subscription timed out for ${conversationId}`);
+                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                    this.logger.error(`Subscription error for ${conversationId}:`, err);
                     await this._handleSubscriptionError(channel, conversationId);
                 }
             });
