@@ -1,6 +1,7 @@
 import { AuthModule } from '../modules/auth/AuthModule.js';
 import { DataModule } from '../modules/data/DataModule.js';
 import { UIModule } from '../modules/ui/UIModule.js';
+import { NotificationModule } from '../modules/notification/NotificationModule.js';
 
 export class ModuleManager {
     constructor(app) {
@@ -9,7 +10,8 @@ export class ModuleManager {
         this.moduleDefinitions = [
             { name: 'auth', Class: AuthModule },
             { name: 'data', Class: DataModule },
-            { name: 'ui', Class: UIModule }
+            { name: 'notification', Class: NotificationModule }, // Add notification module
+            { name: 'ui', Class: UIModule } // UI should be initialized last
         ];
     }
 

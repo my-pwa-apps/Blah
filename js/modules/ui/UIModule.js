@@ -15,6 +15,7 @@ export class UIModule extends BaseModule {
         this.setupThemeToggle();
         this.setupProfileHandlers();
         this.setupMobileHandlers();
+        this.setupNotificationHandlers(); // Add this line
         this.logger.info('UI module initialized');
     }
 
@@ -771,38 +772,130 @@ export class UIModule extends BaseModule {
         // Mark as read since we're viewing it
         const dataModule = this.getModule('data');
         dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
-        
-        // Play notification sound
-        this.playNotificationSound();
-    }
-
-    // Show notification for new messages
-    showMessageNotification(message) {
+        n sound for active conversation
+        // Play notification soundis.getModule('notification');
+        this.playNotificationSound();   notificationModule.notify({
+    }            title: 'New Message',
+tring(0, 50) + (message.content.length > 50 ? '...' : ''),
+    // Show notification for new messagesubtle sound for active conversation
+    showMessageNotification(message) {alse // Don't show visual notification for active conversation
         // Browser notification
         if (Notification.permission === 'granted') {
             const notification = new Notification('New Message', {
                 body: message.content,
-                icon: 'images/icon-192x192.png'
-            });
-            
+                icon: 'images/icon-192x192.png'Notification(message) {
+            });se notification module for OS-specific handling
+            tModule('notification');
             notification.onclick = () => {
-                window.focus();
-                this.loadConversation(message.conversation_id);
+                window.focus();the database
+                this.loadConversation(message.conversation_id);senderName = this.getSenderName(message.sender_id) || 'Someone';
             };
-        }
-        
-        // Play sound
-        this.playNotificationSound();
-    }
-
+        }notificationModule.notify({
+        ew Message from ${senderName}`,
+        // Play soundsubstring(0, 100) + (message.content.length > 100 ? '...' : ''),
+        this.playNotificationSound();       icon: 'images/icon-192x192.png',
+    }            conversationId: message.conversation_id,
+cation'
     // Play notification sound
     playNotificationSound() {
         try {
-            const audio = new Audio('sounds/notification.mp3');
-            audio.volume = 0.5;
-            audio.play();
-        } catch (error) {
-            this.logger.error('Failed to play notification sound:', error);
+            const audio = new Audio('sounds/notification.mp3');e
+            audio.volume = 0.5;d) {
+            audio.play();ion containing this user
+        } catch (error) {a-sender-id="${senderId}"]`);
+            this.logger.error('Failed to play notification sound:', error);f (conversation) {
+        }       const nameEl = conversation.querySelector('.conversation-name');
+    }           return nameEl ? nameEl.textContent : null;
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+}    }        }            }                }                    });                        notificationModule.savePreferences();                        notificationModule.vibrationEnabled = vibrationToggle.checked;                    vibrationToggle.addEventListener('change', () => {                                        });                        notificationModule.savePreferences();                        notificationModule.soundsEnabled = soundToggle.checked;                    soundToggle.addEventListener('change', () => {                    // Add change handlers                                        vibrationToggle.checked = notificationModule.vibrationEnabled;                    soundToggle.checked = notificationModule.soundsEnabled;                    // Set initial state                                        const notificationModule = this.getModule('notification');                if (soundToggle && vibrationToggle) {                                const vibrationToggle = document.getElementById('enable-vibration');                const soundToggle = document.getElementById('enable-sounds');                // Setup toggle handlers                                }                    }                        permissionBtn.disabled = true;                        permissionBtn.textContent = 'Notifications Enabled';                    if (Notification.permission === 'granted') {                    // Update button state based on current permission                                        });                        }                            this.showError('Notification permission denied');                        } else {                            permissionBtn.disabled = true;                            permissionBtn.textContent = 'Notifications Enabled';                            this.showMessage('Notifications enabled!');                        if (granted) {                                                const granted = await notificationModule.requestPermission();                        const notificationModule = this.getModule('notification');                    permissionBtn.addEventListener('click', async () => {                if (permissionBtn) {                const permissionBtn = document.getElementById('notification-permission');                // Setup notification permission button                                }                    profileModal.querySelector('.profile-form').appendChild(notificationSection);                } else {                    modalButtons.parentNode.insertBefore(notificationSection, modalButtons);                if (modalButtons) {                const modalButtons = profileModal.querySelector('.modal-buttons');                // Insert before modal buttons                                `;                    </div>                        </button>                            Enable Notifications                        <button id="notification-permission" class="md-button">                    <div class="form-group">                    </div>                        </label>                            Enable Vibration (Mobile)                            <input type="checkbox" id="enable-vibration" checked>                        <label for="enable-vibration">                    <div class="form-group">                    </div>                        </label>                            Enable Sounds                            <input type="checkbox" id="enable-sounds" checked>                        <label for="enable-sounds">                    <div class="form-group">                    <h3>Notification Settings</h3>                notificationSection.innerHTML = `                notificationSection.className = 'notification-settings';                notificationSection.id = 'notification-settings';                const notificationSection = document.createElement('div');            if (!document.getElementById('notification-settings')) {            // Check if notification settings section already exists        if (profileModal) {        const profileModal = document.getElementById('profile-modal');        // Add notification settings to profile modal    setupNotificationHandlers() {    // Add a new method for notification settings        return null;
     }
 }
