@@ -133,6 +133,7 @@ export class UIModule extends BaseModule {
     async handleSendMessage() {
         const messageInput = document.getElementById('message-text');
         const content = messageInput?.value.trim();
+        const messageContainer = document.getElementById('message-container');
 
         if (!content || !this.currentUser) return;
 
@@ -152,6 +153,19 @@ export class UIModule extends BaseModule {
                 content
             );
 
+            // Add message to UI
+            const messageEl = document.createElement('div');
+            messageEl.className = 'message sent';
+            messageEl.innerHTML = `
+                <div class="message-content">${content}</div>
+                <div class="message-info">
+                    ${new Date().toLocaleTimeString()}
+                </div>
+            `;
+            messageContainer.appendChild(messageEl);
+            messageEl.scrollIntoView({ behavior: 'smooth' });
+
+            // Clear input
             messageInput.value = '';
             this.logger.info('Message sent successfully');
         } catch (error) {
@@ -276,7 +290,7 @@ export class UIModule extends BaseModule {
     setupProfileHandlers() {
         const userProfile = document.getElementById('user-profile');
         const profileModal = document.getElementById('profile-modal');
-        const closeProfile = document.getElementById('close-profile');
+        const closeProfileBtn = document.querySelectorAll('#close-profile, #cancel-profile');  // Get both close buttons
         
         userProfile?.addEventListener('click', () => {
             profileModal?.classList.remove('hidden');
@@ -288,8 +302,11 @@ export class UIModule extends BaseModule {
             }
         });
 
-        closeProfile?.addEventListener('click', () => {
-            profileModal?.classList.add('hidden');
+        // Add click handler to all close buttons
+        closeProfileBtn?.forEach(btn => {
+            btn.addEventListener('click', () => {
+                profileModal?.classList.add('hidden');
+            });
         });
 
         // Close when clicking outside
