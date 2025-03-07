@@ -245,9 +245,18 @@ export class UIModule extends BaseModule {
             // Render each conversation
             for (const conv of conversations) {
                 try {
-                    const isSelfChat = conv.is_self_chat || 
-                                      (conv.participants.length === 1 && 
-                                       conv.participants[0].user_id === this.currentUser.id);
+                    // Log the conversation data for debugging
+                    this.logger.info(`Processing conversation ${conv.id}:`, {
+                        is_self_chat: conv.is_self_chat,
+                        participantCount: conv.participants?.length,
+                        userIsOnlyParticipant: conv.participants?.length === 1 && 
+                                             conv.participants[0].user_id === this.currentUser.id
+                    });
+                    
+                    // Explicitly determine self-chat status
+                    const isSelfChat = Boolean(conv.is_self_chat) || 
+                                     (conv.participants?.length === 1 && 
+                                      conv.participants[0].user_id === this.currentUser.id);
                     
                     let displayName, avatarUrl;
                     
@@ -256,16 +265,24 @@ export class UIModule extends BaseModule {
                         avatarUrl = this.currentUser.avatar_url;
                         this.logger.info(`Rendering self-chat: ${conv.id}`);
                     } else {
-                        // Find the other user's profile
-                        const otherUser = conv.participants.find(p => p.user_id !== this.currentUser.id);
-                        if (otherUser && otherUser.profiles) {
-                            displayName = otherUser.profiles.display_name || otherUser.profiles.email || 'Unknown User';
-                            avatarUrl = otherUser.profiles.avatar_url;
-                            this.logger.info(`Rendering chat with: ${displayName}, id: ${conv.id}`);
+                        // Find the other user's profile - improved to handle multiple participants
+                        const otherUsers = conv.participants?.filter(p => p.user_id !== this.currentUser.id) || [];
+                        
+                        if (otherUsers.length > 0) {
+                            const otherUser = otherUsers[0];
+                            if (otherUser?.profiles) {
+                                displayName = otherUser.profiles.display_name || otherUser.profiles.email || 'Unknown User';
+                                avatarUrl = otherUser.profiles.avatar_url;
+                                this.logger.info(`Rendering chat with: ${displayName}, id: ${conv.id}`);
+                            } else {
+                                displayName = 'Unknown User';
+                                avatarUrl = null;
+                                this.logger.info(`Rendering chat with unknown user: ${conv.id}`);
+                            }
                         } else {
-                            displayName = 'Unknown User';
+                            displayName = 'Group Chat';
                             avatarUrl = null;
-                            this.logger.info(`Rendering chat with unknown user: ${conv.id}`);
+                            this.logger.info(`Rendering group chat: ${conv.id}`);
                         }
                     }
                     
@@ -276,7 +293,12 @@ export class UIModule extends BaseModule {
                     const conversationEl = document.createElement('div');
                     conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
                     conversationEl.dataset.conversationId = conv.id;
-                    conversationEl.dataset.isSelfChat = isSelfChat ? 'true' : 'false';
+                    conversationEl.dataset.isSelfChat = String(isSelfChat); // Explicitly store as string
+                    
+                    // Add dataset with sender IDs for easier lookup
+                    const participantIds = conv.participants?.map(p => p.user_id).join(',') || '';
+                    conversationEl.dataset.participantIds = participantIds;
+                    
                     conversationEl.innerHTML = `
                         <div class="conversation-avatar">
                             <img src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">

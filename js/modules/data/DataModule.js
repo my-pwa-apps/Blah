@@ -398,49 +398,72 @@ export class DataModule extends BaseModule {
     subscribeToNewMessages(conversationId, callback) {
         this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
         
-        const channel = this.supabase
-            .channel(`conversation:${conversationId}`)
-            .on('postgres_changes', {
-                event: 'INSERT', 
-                schema: 'public',
-                table: 'messages',
-                filter: `conversation_id=eq.${conversationId}`
-            }, async (payload) => {
-                this.logger.info(`Received new message in conversation ${conversationId}`);
-                
-                // Fetch the full message details including sender profile
-                try {
-                    const { data, error } = await this.supabase
-                        .from('messages')
-                        .select(`
-                            id,
-                            content,
-                            created_at,
-                            sender_id,
-                            conversation_id,
-                            profiles:sender_id (*)
-                        `)
-                        .eq('id', payload.new.id)
-                        .single();
-                        
-                    if (error) throw error;
-                    
-                    // Call the callback with the complete message data
-                    if (data) {
-                        callback(data);
-                    } else {
-                        callback(payload.new); // Fallback to original payload
-                    }
-                } catch (err) {
-                    this.logger.error('Error fetching complete message:', err);
-                    callback(payload.new); // Fallback to original payload
-                }
-            })
-            .subscribe((status) => {
-                this.logger.info(`Subscription status for ${conversationId}: ${status}`);
-            });
+        try {
+            // Create a more reliable channel identifier
+            const channelName = `messages-${conversationId}-${Date.now()}`;
             
-        return channel;
+            const channel = this.supabase
+                .channel(channelName)
+                .on('postgres_changes', 
+                    {
+                        event: 'INSERT', 
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `conversation_id=eq.${conversationId}`
+                    }, 
+                    async (payload) => {
+                        this.logger.info(`Received new message in conversation ${conversationId}:`, payload.new.id);
+                        
+                        // Fetch complete message data with profiles
+                        try {
+                            const { data, error } = await this.supabase
+                                .from('messages')
+                                .select(`
+                                    id,
+                                    content,
+                                    created_at,
+                                    sender_id,
+                                    conversation_id,
+                                    profiles:sender_id (*)
+                                `)
+                                .eq('id', payload.new.id)
+                                .single();
+                                
+                            if (error) {
+                                this.logger.error('Error fetching complete message:', error);
+                                callback(payload.new); // Fall back to original payload
+                            } else if (data) {
+                                this.logger.info(`Fetched complete data for message ${data.id}`);
+                                callback(data);
+                            }
+                        } catch (err) {
+                            this.logger.error('Error processing new message:', err);
+                            callback(payload.new); // Fall back to original payload
+                        }
+                    }
+                )
+                .subscribe((status, err) => {
+                    if (status === 'SUBSCRIBED') {
+                        this.logger.info(`Successfully subscribed to changes in conversation ${conversationId}`);
+                    } else if (status === 'CHANNEL_ERROR') {
+                        this.logger.error(`Error subscribing to conversation ${conversationId}:`, err);
+                        // Try to resubscribe after a delay
+                        setTimeout(() => {
+                            this.logger.info(`Attempting to resubscribe to conversation ${conversationId}`);
+                            channel.subscribe();
+                        }, 5000);
+                    } else {
+                        this.logger.info(`Subscription status for ${conversationId}: ${status}`);
+                    }
+                });
+            
+            return channel;
+        } catch (error) {
+            this.logger.error(`Error setting up subscription for conversation ${conversationId}:`, error);
+            return {
+                unsubscribe: () => this.logger.info('Unsubscribing from dummy channel')
+            };
+        }
     }
 
     // Add method to mark messages as read
