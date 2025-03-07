@@ -1367,4 +1367,77 @@ export class UIModule extends BaseModule {
             debugPanel.remove();
         }
     }
+
+    // Add the missing method to update conversation UI
+    _updateConversationUI(conversationId) {
+        this.logger.info(`Updating UI for conversation: ${conversationId}`);
+        
+        try {
+            // Update the active class on conversation items in the sidebar
+            const conversations = document.querySelectorAll('.conversation-item');
+            conversations.forEach(conv => {
+                if (conv.dataset.conversationId === conversationId) {
+                    conv.classList.add('active');
+                    // Also remove unread indicator if present
+                    conv.classList.remove('unread');
+                    const indicator = conv.querySelector('.unread-indicator');
+                    if (indicator) indicator.remove();
+                } else {
+                    conv.classList.remove('active');
+                }
+            });
+            
+            // Get the conversation data to show in header
+            const activeConv = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            if (activeConv) {
+                // Update chat header with conversation name
+                const headerTitle = document.querySelector('.chat-title');
+                if (headerTitle) {
+                    headerTitle.textContent = activeConv.querySelector('.conversation-name')?.textContent || 'Chat';
+                }
+                
+                // Update chat avatar if present
+                const headerAvatar = document.querySelector('.chat-avatar img');
+                const convAvatar = activeConv.querySelector('.conversation-avatar img');
+                if (headerAvatar && convAvatar) {
+                    headerAvatar.src = convAvatar.src;
+                }
+            }
+            
+            // Ensure chat area is visible (especially important for mobile)
+            const chatArea = document.querySelector('.chat-area');
+            const sidebar = document.querySelector('.sidebar');
+            const backButton = document.getElementById('back-button');
+            
+            if (chatArea && sidebar) {
+                const isMobile = window.innerWidth <= 768;
+                
+                if (isMobile) {
+                    // On mobile, hide sidebar and show chat area
+                    sidebar.classList.add('hidden');
+                    chatArea.classList.add('active');
+                    chatArea.classList.remove('hidden');
+                    
+                    // Show back button on mobile
+                    if (backButton) backButton.style.display = 'flex';
+                } else {
+                    // On desktop, both should be visible
+                    sidebar.classList.remove('hidden');
+                    chatArea.classList.remove('hidden');
+                    
+                    // Hide back button on desktop
+                    if (backButton) backButton.style.display = 'none';
+                }
+            }
+            
+            // Clear any "no conversation" placeholder
+            const messageContainer = document.getElementById('message-container');
+            if (messageContainer) {
+                const placeholder = messageContainer.querySelector('.no-conversation');
+                if (placeholder) placeholder.remove();
+            }
+        } catch (error) {
+            this.logger.error('Error updating conversation UI:', error);
+        }
+    }
 }
