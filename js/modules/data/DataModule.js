@@ -9,6 +9,20 @@ export class DataModule extends BaseModule {
 
     async init() {
         this.supabase = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
+        
+        // Add real-time connection debugging
+        this.supabase.realtime.onOpen(() => {
+            this.logger.info('Supabase real-time connection established');
+        });
+        
+        this.supabase.realtime.onError((error) => {
+            this.logger.error('Supabase real-time connection error:', error);
+        });
+        
+        this.supabase.realtime.onClose(() => {
+            this.logger.warn('Supabase real-time connection closed');
+        });
+        
         this.logger.info('Data module initialized');
     }
 
@@ -433,18 +447,26 @@ export class DataModule extends BaseModule {
         this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
         
         try {
-            // Use unique channel name with conversation ID only
-            const channelName = `messages_${conversationId}`;
+            // Create truly unique channel name using timestamp
+            const uniqueId = new Date().getTime();
+            const channelName = `message_updates:${conversationId}:${uniqueId}`;
+            
+            this.logger.info(`Creating channel: ${channelName}`);
             
             const channel = this.supabase
                 .channel(channelName)
                 .on('postgres_changes', {
-                    event: 'INSERT', // Listen to INSERT events only
+                    event: 'INSERT',
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
                 }, async (payload) => {
-                    this.logger.info(`Received real-time event for conversation ${conversationId}:`, payload);
+                    this.logger.info(`Received real-time event:`, payload);
+                    
+                    if (!payload.new || !payload.new.id) {
+                        this.logger.warn('Received empty payload', payload);
+                        return;
+                    }
                     
                     try {
                         // Get complete message data with sender profile
@@ -467,25 +489,31 @@ export class DataModule extends BaseModule {
                             .single();
                         
                         if (error) {
-                            this.logger.error(`Error fetching complete message ${payload.new.id}:`, error);
+                            this.logger.error(`Error fetching message details:`, error);
                             callback(payload.new);
-                        } else if (data) {
-                            this.logger.info(`Processing complete message:`, data);
+                        } else {
                             callback(data);
                         }
                     } catch (err) {
-                        this.logger.error('Error handling real-time message:', err);
+                        this.logger.error('Error processing real-time message:', err);
                         callback(payload.new);
                     }
                 });
             
-            // Subscribe with better error handling and reconnection logic
+            // Add detailed connection state handling
             channel.subscribe(async (status, err) => {
+                this.logger.info(`Channel ${channelName} status: ${status}`);
+                
                 if (status === 'SUBSCRIBED') {
                     this.logger.info(`Successfully subscribed to conversation ${conversationId}`);
-                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                    this.logger.error(`Subscription error for ${conversationId}:`, err);
+                } else if (status === 'CHANNEL_ERROR') {
+                    this.logger.error(`Channel error for ${conversationId}:`, err);
                     await this._handleSubscriptionError(channel, conversationId);
+                } else if (status === 'TIMED_OUT') {
+                    this.logger.error(`Subscription timed out for ${conversationId}`);
+                    await this._handleSubscriptionError(channel, conversationId);
+                } else if (status === 'CLOSED') {
+                    this.logger.warn(`Channel closed for conversation ${conversationId}`);
                 }
             });
             
@@ -496,13 +524,13 @@ export class DataModule extends BaseModule {
                     try {
                         channel.unsubscribe();
                     } catch (err) {
-                        this.logger.error(`Error unsubscribing from conversation ${conversationId}:`, err);
+                        this.logger.error(`Error unsubscribing:`, err);
                     }
                 },
                 conversationId
             };
         } catch (error) {
-            this.logger.error(`Failed to create subscription for ${conversationId}:`, error);
+            this.logger.error(`Failed to create subscription:`, error);
             return {
                 unsubscribe: () => {},
                 conversationId
@@ -541,5 +569,62 @@ export class DataModule extends BaseModule {
             this.logger.error('Error marking messages as read:', error);
             return false;
         }
+    }
+
+    // Add polling fallback for when real-time fails
+    async setupMessagePolling(conversationId, callback, interval = 3000) {
+        this.logger.info(`Setting up message polling for conversation: ${conversationId}`);
+        
+        let lastTimestamp = new Date().toISOString();
+        let timerId = null;
+        
+        const checkForNewMessages = async () => {
+            try {
+                const { data, error } = await this.supabase
+                    .from('messages')
+                    .select(`
+                        id,
+                        content,
+                        created_at,
+                        sender_id,
+                        conversation_id,
+                        profiles:sender_id (
+                            id,
+                            email,
+                            display_name,
+                            avatar_url
+                        )
+                    `)
+                    .eq('conversation_id', conversationId)
+                    .gt('created_at', lastTimestamp)
+                    .order('created_at', { ascending: true });
+                    
+                if (error) throw error;
+                
+                if (data && data.length > 0) {
+                    // Update timestamp for next poll
+                    lastTimestamp = data[data.length - 1].created_at;
+                    
+                    // Process each new message
+                    data.forEach(message => {
+                        callback(message);
+                    });
+                }
+            } catch (error) {
+                this.logger.error('Error during message polling:', error);
+            }
+        };
+        
+        timerId = setInterval(checkForNewMessages, interval);
+        
+        return {
+            stop: () => {
+                if (timerId) {
+                    clearInterval(timerId);
+                    this.logger.info(`Stopped polling for conversation: ${conversationId}`);
+                }
+            },
+            conversationId
+        };
     }
 }

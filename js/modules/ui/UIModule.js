@@ -1038,6 +1038,14 @@ export class UIModule extends BaseModule {
         });
         
         // Could add more special events here as needed
+
+        // Add debug panel for real-time connections
+        window.addEventListener('keydown', (event) => {
+            // Press Ctrl+Shift+D to toggle debug panel
+            if (event.ctrlKey && event.shiftKey && event.key === 'D') {
+                this._toggleDebugPanel();
+            }
+        });
     }
 
     // Improve subscription handling
@@ -1100,6 +1108,57 @@ export class UIModule extends BaseModule {
             });
         } catch (error) {
             this.logger.error('Error showing message notification:', error);
+        }
+    }
+
+    _toggleDebugPanel() {
+        let debugPanel = document.getElementById('debug-panel');
+        
+        if (!debugPanel) {
+            // Create debug panel
+            debugPanel = document.createElement('div');
+            debugPanel.id = 'debug-panel';
+            debugPanel.style.cssText = 'position:fixed;bottom:0;right:0;width:300px;height:200px;background:#000;color:#0f0;z-index:9999;overflow:auto;padding:10px;font-family:monospace;font-size:12px;opacity:0.8;';
+            
+            const closeBtn = document.createElement('button');
+            closeBtn.textContent = 'Close';
+            closeBtn.style.cssText = 'position:absolute;top:5px;right:5px;';
+            closeBtn.onclick = () => debugPanel.remove();
+            
+            const heading = document.createElement('h3');
+            heading.textContent = 'Real-Time Debug';
+            heading.style.margin = '0 0 10px 0';
+            
+            const statusDiv = document.createElement('div');
+            statusDiv.id = 'rt-status';
+            
+            const testBtn = document.createElement('button');
+            testBtn.textContent = 'Test Connection';
+            testBtn.onclick = async () => {
+                statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Testing connection...</div>`;
+                try {
+                    const dataModule = this.getModule('data');
+                    const channel = dataModule.supabase.channel('test-channel');
+                    
+                    channel.on('presence', { event: 'sync' }, () => {
+                        statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Presence sync</div>`;
+                    }).subscribe(status => {
+                        statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Status: ${status}</div>`;
+                        setTimeout(() => channel.unsubscribe(), 2000);
+                    });
+                } catch (error) {
+                    statusDiv.innerHTML += `<div>[${new Date().toLocaleTimeString()}] Error: ${error.message}</div>`;
+                }
+            };
+            
+            debugPanel.appendChild(closeBtn);
+            debugPanel.appendChild(heading);
+            debugPanel.appendChild(testBtn);
+            debugPanel.appendChild(statusDiv);
+            
+            document.body.appendChild(debugPanel);
+        } else {
+            debugPanel.remove();
         }
     }
 }
