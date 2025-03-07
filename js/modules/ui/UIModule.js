@@ -396,14 +396,63 @@ export class UIModule extends BaseModule {
             this.logger.info('Message sent successfully');
         } catch (error) {
             this.logger.error('Failed to send message:', error);
+            this.showError('Failed to send message');
+        }
+    }
 
     async loadConversation(conversationId) {
         if (!conversationId) {
             this.logger.error('Cannot load conversation: No ID provided');
             return;
         }
+        
         this.logger.info(`Loading conversation: ${conversationId}`);
         this.currentConversation = conversationId;
+        
+        // Get UI elements
+        const messageContainer = document.getElementById('message-container');
+        const chatArea = document.querySelector('.chat-area');
+        const sidebar = document.querySelector('.sidebar');
+        
+        if (!messageContainer) {
+            this.logger.error('Message container not found');
+            return;
+        }
+        
+        // Update UI to show active conversation
+        document.querySelectorAll('.conversation-item').forEach(item => {
+            if (item.dataset.conversationId === conversationId) {
+                item.classList.add('active');
+            } else {
+                item.classList.remove('active');
+            }
+        });
+        
+        // Find the conversation item to get its name and other data
+        const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+        
+        // Update chat header title with correct name
+        const chatHeader = document.querySelector('.chat-title');
+        if (chatHeader && conversationItem) {
+            const nameEl = conversationItem.querySelector('.conversation-name');
+            chatHeader.textContent = nameEl ? nameEl.textContent : 'Chat';
+            
+            // Add data attribute to header to identify chat type
+            chatHeader.dataset.isSelfChat = conversationItem.dataset.isSelfChat || 'false';
+        }
+        
+        // Show chat area (especially important on mobile)
+        if (chatArea) {
+            chatArea.classList.add('active');
+        }
+        
+        // Hide sidebar on mobile
+        if (window.innerWidth <= 768 && sidebar) {
+            sidebar.classList.add('hidden');
+        }
+        
+        // Continue with the rest of the method...
+        // ...existing code...
         // Get UI elements
         const messageContainer = document.getElementById('message-container');
         const chatArea = document.querySelector('.chat-area');
