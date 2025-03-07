@@ -659,41 +659,66 @@ export class UIModule extends BaseModule {
 
     setupMobileHandlers() {
         const backButton = document.getElementById('back-button');
-        backButton?.addEventListener('click', () => {
-            this.logger.info('Back button clicked, returning to sidebar');
+        if (backButton) {
+            // Remove any existing event listeners to prevent conflicts
+            backButton.replaceWith(backButton.cloneNode(true));
             
-            // Completely revised approach to handle back button
-            // 1. Immediately disable transitions
-            const chatArea = document.querySelector('.chat-area');
-            const sidebar = document.querySelector('.sidebar');
+            // Get the fresh element after replacement
+            const newBackButton = document.getElementById('back-button');
             
-            if (chatArea && sidebar) {
-                // Add class to disable transitions
-                chatArea.classList.add('no-transition');
-                sidebar.classList.add('no-transition');
+            // Add a new clean event listener
+            newBackButton.addEventListener('click', (e) => {
+                // Prevent any default behavior or event propagation
+                e.preventDefault();
+                e.stopPropagation();
                 
-                // Force browser to acknowledge the class change
-                void chatArea.offsetWidth;
+                this.logger.info('Back button clicked - handling navigation');
                 
-                // Reset current conversation state
-                const previousConversation = this.currentConversation;
+                // CRITICAL: First reset conversation state before any UI changes
                 this.currentConversation = null;
-                this.logger.info(`Current conversation reset from ${previousConversation} to null`);
                 
-                // Update UI immediately
-                chatArea.classList.remove('active');
-                sidebar.classList.remove('hidden');
+                // Get UI elements
+                const chatArea = document.querySelector('.chat-area');
+                const sidebar = document.querySelector('.sidebar');
                 
-                // Re-apply transitions after a short delay
-                setTimeout(() => {
-                    chatArea.classList.remove('no-transition');
-                    sidebar.classList.remove('no-transition');
-                }, 50);
+                if (!chatArea || !sidebar) {
+                    this.logger.error('Required UI elements not found');
+                    return;
+                }
                 
-                // Force a layout adjustment
-                this.adjustLayoutForScreenSize();
-            }
-        });
+                // Apply all changes synchronously and directly
+                try {
+                    // Disable all transitions temporarily
+                    chatArea.style.transition = 'none';
+                    sidebar.style.transition = 'none';
+                    
+                    // Force browser to process the style changes
+                    void chatArea.offsetWidth;
+                    void sidebar.offsetWidth;
+                    
+                    // Update classes immediately
+                    chatArea.classList.remove('active');
+                    sidebar.classList.remove('hidden');
+                    
+                    // Log the state to confirm changes
+                    this.logger.info('UI state updated: chat inactive, sidebar visible');
+                    
+                    // Re-enable transitions after a short delay
+                    setTimeout(() => {
+                        chatArea.style.transition = '';
+                        sidebar.style.transition = '';
+                        this.adjustLayoutForScreenSize();
+                        this.logger.info('Transitions restored and layout adjusted');
+                    }, 50);
+                } catch (error) {
+                    this.logger.error('Error during back button handling:', error);
+                }
+                
+                return false;
+            }, { passive: false });
+            
+            this.logger.info('Back button handler replaced with improved version');
+        }
         
         // Handle resizing properly
         window.addEventListener('resize', () => {

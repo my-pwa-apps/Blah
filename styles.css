@@ -1506,3 +1506,29 @@ body {
         background-color: rgba(255, 255, 255, 0.2);
     }
 }
+
+/* Improve back button styling and hitbox */
+#back-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px !important; /* Larger clickable area */
+    height: 48px !important;
+    margin-right: 8px;
+    color: white !important;
+    font-size: 24px;
+    cursor: pointer;
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
+    -webkit-tap-highlight-color: rgba(255, 255, 255, 0.3); /* Visual feedback on tap */
+    touch-action: manipulation; /* Optimize for touch */
+}
+
+#back-button:active {
+    background-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Make clicking the material icon work reliably */
+#back-button .material-icons {
+    pointer-events: none; /* Ensure clicks pass through to button */
+}
