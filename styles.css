@@ -1655,4 +1655,6 @@ body {
 /* Make clicking the material icon work reliably */
 #back-button .material-icons {
     pointer-events: none;
+    color: white !important;
+    font-size: 24px !important;
 }

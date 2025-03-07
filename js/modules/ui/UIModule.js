@@ -1156,35 +1156,39 @@ export class UIModule extends BaseModule {
 
     // New method to update conversation list with a new message without full re-render
     _updateConversationWithNewMessage(message) {
-        const conversationId = message.conversation_id;
-        const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-        
-        if (!conversationEl) {
-            requestAnimationFrame(() => this.renderConversationsList());
-            return;
-        }
+        if (!message?.conversation_id) return;
 
-        // Update using requestAnimationFrame for better performance
         requestAnimationFrame(() => {
-            // Update last message text
+            const conversationEl = document.querySelector(
+                `.conversation-item[data-conversation-id="${message.conversation_id}"]`
+            );
+            
+            if (!conversationEl) {
+                this.renderConversationsList();
+                return;
+            }
+
             const lastMessageEl = conversationEl.querySelector('.conversation-last-message');
             if (lastMessageEl) {
                 lastMessageEl.textContent = message.content;
             }
 
-            // Handle unread state
-            if (conversationId !== this.currentConversation && message.sender_id !== this.currentUser.id) {
+            // Update unread state
+            if (message.sender_id !== this.currentUser.id && 
+                message.conversation_id !== this.currentConversation) {
                 conversationEl.classList.add('unread');
                 if (!conversationEl.querySelector('.unread-indicator')) {
-                    const indicator = document.createElement('div');
-                    indicator.className = 'unread-indicator';
-                    conversationEl.appendChild(indicator);
+                    conversationEl.appendChild(
+                        Object.assign(document.createElement('div'), {
+                            className: 'unread-indicator'
+                        })
+                    );
                 }
             }
 
-            // Move to top if needed
+            // Move to top
             const list = conversationEl.parentElement;
-            if (list && list.firstChild !== conversationEl) {
+            if (list?.firstChild !== conversationEl) {
                 list.insertBefore(conversationEl, list.firstChild);
             }
         });
