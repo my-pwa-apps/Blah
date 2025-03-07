@@ -178,14 +178,18 @@ export class DataModule extends BaseModule {
 
     async searchUsers(query) {
         try {
+            // Improved search using ilike for case-insensitive searching
             const { data, error } = await this.supabase
                 .from('profiles')
                 .select('id, email, display_name, avatar_url')
                 .or(`email.ilike.%${query}%,display_name.ilike.%${query}%`)
+                .order('display_name', { ascending: true })
                 .limit(10);
             
             if (error) throw error;
-            return data;
+            
+            this.logger.info(`Found ${data?.length || 0} users matching query: ${query}`);
+            return data || [];
         } catch (error) {
             this.logger.error('Error searching users:', error);
             return [];

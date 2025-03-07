@@ -96,6 +96,7 @@ export class UIModule extends BaseModule {
         const newConversationBtn = document.getElementById('new-conversation');
         const modal = document.getElementById('new-conversation-modal');
         const startConversationBtn = document.getElementById('start-conversation');
+        const userSearch = document.getElementById('user-search');
         let selectedUserId = null;
 
         newConversationBtn?.addEventListener('click', () => {
@@ -118,8 +119,18 @@ export class UIModule extends BaseModule {
                 </div>
             `;
             
-            document.getElementById('user-search')?.focus();
+            // Clear search input
+            if (userSearch) {
+                userSearch.value = '';
+                userSearch.focus();
+            }
         });
+
+        // User search input handler with debounce
+        userSearch?.addEventListener('input', this.debounce(async (e) => {
+            const query = e.target.value.trim();
+            await this.handleUserSearch(query);
+        }, 300));
 
         // Handle user selection
         document.getElementById('user-search-results')?.addEventListener('click', (e) => {
@@ -148,6 +159,52 @@ export class UIModule extends BaseModule {
         document.getElementById('close-new-conversation')?.addEventListener('click', () => {
             modal?.classList.add('hidden');
         });
+    }
+
+    async handleUserSearch(query) {
+        const resultsContainer = document.getElementById('user-search-results');
+        if (!resultsContainer) return;
+        
+        // Always start with self-chat option
+        let html = `
+            <div class="user-search-item" data-user-id="${this.currentUser.id}">
+                <div class="user-avatar">
+                    <img src="${this.currentUser.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+                </div>
+                <div class="user-info">
+                    <div class="user-name">Notes to Self</div>
+                    <div class="user-email">${this.currentUser.email}</div>
+                </div>
+            </div>
+        `;
+
+        try {
+            if (query && query.length >= 2) { // Only search if query has at least 2 characters
+                this.logger.info('Searching users with query:', query);
+                const users = await this.getModule('data').searchUsers(query);
+                
+                // Add other users, excluding current user
+                const otherUsersHtml = users
+                    .filter(user => user.id !== this.currentUser.id)
+                    .map(user => `
+                        <div class="user-search-item" data-user-id="${user.id}">
+                            <div class="user-avatar">
+                                <img src="${user.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+                            </div>
+                            <div class="user-info">
+                                <div class="user-name">${user.display_name || user.email}</div>
+                                <div class="user-email">${user.email}</div>
+                            </div>
+                        </div>
+                    `).join('');
+                
+                html += otherUsersHtml;
+            }
+        } catch (error) {
+            this.logger.error('Error searching users:', error);
+        } finally {
+            resultsContainer.innerHTML = html;
+        }
     }
 
     async renderConversationsList() {
