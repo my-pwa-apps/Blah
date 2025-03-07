@@ -93,23 +93,54 @@ export class DataModule extends BaseModule {
 
     async findExistingConversation(participants) {
         try {
+            // Don't search if no participants
+            if (!participants || !participants.length) return null;
+            
+            this.logger.info(`Finding existing conversation for participants: ${participants.join(', ')}`);
+            
+            // For self-chats, search by is_self_chat flag
+            if (participants.length === 1) {
+                const { data, error } = await this.supabase
+                    .from('conversations')
+                    .select(`
+                        id,
+                        participants!inner (user_id)
+                    `)
+                    .eq('is_self_chat', true)
+                    .eq('participants.user_id', participants[0]);
+                    
+                if (error) throw error;
+                
+                if (data && data.length > 0) {
+                    this.logger.info(`Found existing self-chat: ${data[0].id}`);
+                    return data[0].id;
+                }
+                
+                return null;
+            }
+            
+            // For regular chats, find all conversations where first participant exists
             const { data: conversations, error } = await this.supabase
                 .from('conversations')
                 .select(`
                     id,
-                    participants!inner (user_id)
+                    is_self_chat,
+                    participants (user_id)
                 `)
+                .eq('is_self_chat', false)
                 .eq('participants.user_id', participants[0]);
 
             if (error) throw error;
-
+            
+            // Check each conversation to see if all participants are included
             for (const conv of conversations) {
                 const participantIds = conv.participants.map(p => p.user_id);
-                const allParticipantsPresent = participants.every(id => 
-                    participantIds.includes(id)
-                ) && participantIds.length === participants.length;
-
-                if (allParticipantsPresent) {
+                
+                // Check if all required participants are present
+                // and no additional participants exist
+                if (participants.every(id => participantIds.includes(id)) && 
+                    participants.length === participantIds.length) {
+                    this.logger.info(`Found existing conversation: ${conv.id}`);
                     return conv.id;
                 }
             }

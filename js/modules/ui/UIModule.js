@@ -217,6 +217,7 @@ export class UIModule extends BaseModule {
         try {
             const dataModule = this.getModule('data');
             const conversations = await dataModule.fetchConversations(this.currentUser.id);
+            this.logger.info(`Fetched ${conversations.length} conversations`);
             
             // Filter and deduplicate conversations
             const processedConversations = [];
@@ -237,21 +238,32 @@ export class UIModule extends BaseModule {
             // Add the self chat at the beginning if it exists
             if (selfChat) {
                 processedConversations.unshift(selfChat);
+                this.logger.info('Added self chat to conversations list');
             }
             
-            // Render the deduplicated conversations
+            // Debug output processed conversations
+            this.logger.info(`Rendering ${processedConversations.length} conversations`);
+            
+            // Render the conversations
             conversationsList.innerHTML = processedConversations.map(conv => {
                 const isSelfChat = conv.is_self_chat || conv.participants.length === 1;
+                
+                // Handle both data structures: profiles directly on participants or nested
                 const otherParticipant = isSelfChat ? null : 
-                    conv.participants.find(p => p.user_id !== this.currentUser.id)?.profiles;
+                    conv.participants.find(p => p.user_id !== this.currentUser.id);
+                
+                const otherProfile = otherParticipant?.profiles || 
+                                    (otherParticipant && typeof otherParticipant.profiles === 'undefined' ? otherParticipant : null);
                 
                 const name = isSelfChat ? 'Notes to Self' : 
-                    otherParticipant?.display_name || otherParticipant?.email || 'Unknown';
+                    otherProfile?.display_name || otherProfile?.email || 'Unknown User';
+                    
                 const avatar = isSelfChat ? this.currentUser.avatar_url : 
-                    otherParticipant?.avatar_url;
-
+                    otherProfile?.avatar_url;
+                
                 return `
-                    <div class="conversation-item" data-conversation-id="${conv.id}">
+                    <div class="conversation-item${conv.id === this.currentConversation ? ' active' : ''}" 
+                         data-conversation-id="${conv.id}">
                         <div class="conversation-avatar">
                             <img src="${avatar || 'images/default-avatar.png'}" alt="Avatar">
                         </div>
@@ -269,6 +281,8 @@ export class UIModule extends BaseModule {
             conversationsList.querySelectorAll('.conversation-item').forEach(item => {
                 item.addEventListener('click', () => this.loadConversation(item.dataset.conversationId));
             });
+            
+            this.logger.info('Conversation list rendering complete');
         } catch (error) {
             this.logger.error('Failed to render conversations:', error);
             this.showError('Failed to load conversations');
@@ -341,16 +355,18 @@ export class UIModule extends BaseModule {
         
         this.logger.info(`Loading conversation: ${conversationId}`);
         this.currentConversation = conversationId;
+        
+        // Get UI elements
         const messageContainer = document.getElementById('message-container');
+        const chatArea = document.querySelector('.chat-area');
+        const sidebar = document.querySelector('.sidebar');
+        
         if (!messageContainer) {
             this.logger.error('Message container not found');
             return;
         }
         
-        const chatArea = document.querySelector('.chat-area');
-        const sidebar = document.querySelector('.sidebar');
-        
-        // Set active conversation in list
+        // Update UI to show active conversation
         document.querySelectorAll('.conversation-item').forEach(item => {
             if (item.dataset.conversationId === conversationId) {
                 item.classList.add('active');
@@ -359,19 +375,21 @@ export class UIModule extends BaseModule {
             }
         });
         
-        // Update UI visibility - make sure chat area is shown
+        // Show chat area (important for mobile)
         if (chatArea) chatArea.classList.add('active');
+        
+        // Hide sidebar on mobile
         if (window.innerWidth <= 768 && sidebar) {
             sidebar.classList.add('hidden');
         }
         
-        // Update chat header to show conversation name
+        // Update chat header title
         const chatHeader = document.querySelector('.chat-title');
         if (chatHeader) {
             const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
             if (conversationItem) {
-                const name = conversationItem.querySelector('.conversation-name')?.textContent || 'Conversation';
-                chatHeader.textContent = name;
+                const nameEl = conversationItem.querySelector('.conversation-name');
+                chatHeader.textContent = nameEl ? nameEl.textContent : 'Chat';
             }
         }
 
@@ -379,11 +397,14 @@ export class UIModule extends BaseModule {
             const dataModule = this.getModule('data');
             const messages = await dataModule.fetchMessages(conversationId);
             
+            // Clear existing messages
             messageContainer.innerHTML = '';
             
             if (messages.length === 0) {
+                // Show empty state
                 messageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
             } else {
+                // Render messages
                 messages.forEach(message => {
                     const isSent = message.sender_id === this.currentUser.id;
                     const messageEl = document.createElement('div');
@@ -396,14 +417,15 @@ export class UIModule extends BaseModule {
                 });
             }
             
-            // Scroll to bottom of message container
+            // Scroll to bottom
             messageContainer.scrollTop = messageContainer.scrollHeight;
             
             // Focus the message input
             document.getElementById('message-text')?.focus();
+            
         } catch (error) {
-            this.logger.error('Failed to load conversation:', error);
-            this.showError('Failed to load conversation');
+            this.logger.error('Failed to load conversation messages:', error);
+            this.showError('Failed to load messages');
         }
     }
 
@@ -412,55 +434,63 @@ export class UIModule extends BaseModule {
             this.logger.info(`Creating conversation with user ID: ${userId}`);
             
             // Create proper participants array based on userId
-            let participants = [this.currentUser.id];
+            const participants = [this.currentUser.id];
             
             // Only add the other user if it's not a self-chat
             if (userId !== this.currentUser.id) {
                 participants.push(userId);
+                this.logger.info(`Adding participant: ${userId}`);
+            } else {
+                this.logger.info('Creating self-chat conversation');
             }
             
             const dataModule = this.getModule('data');
             const conversation = await dataModule.createConversation(participants);
             
             if (!conversation || !conversation.id) {
-                throw new Error('Failed to create conversation - no conversation ID returned');
+                throw new Error('Failed to create conversation - no ID returned');
             }
             
-            this.currentConversation = conversation.id;
             this.logger.info(`Conversation created with ID: ${conversation.id}`);
             
-            // Close the modal first
+            // Close the modal
             document.getElementById('new-conversation-modal')?.classList.add('hidden');
             
-            // Force reload of conversations list
+            // Store the conversation ID
+            this.currentConversation = conversation.id;
+            
+            // Update the UI in the correct order
             await this.renderConversationsList();
             
-            // Ensure UI state is properly set
-            const chatArea = document.querySelector('.chat-area');
-            const sidebar = document.querySelector('.sidebar');
-            
-            // Make sure we're showing the conversation area
-            chatArea?.classList.add('active');
-            
-            // On mobile, hide sidebar
-            if (window.innerWidth <= 768) {
-                sidebar?.classList.add('hidden');
-            }
-            
-            // Clear the message container before loading the new conversation
-            const messageContainer = document.getElementById('message-container');
-            if (messageContainer) messageContainer.innerHTML = '';
-            
-            // Then load the conversation with slight delay to ensure DOM updates
+            // Small delay to ensure DOM updates are complete
             setTimeout(() => {
-                this.loadConversation(conversation.id);
-                this.logger.info('Conversation UI updated');
+                // Find the conversation item in the list
+                const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversation.id}"]`);
+                
+                if (conversationItem) {
+                    // Explicitly click the conversation item to load it
+                    conversationItem.click();
+                    this.logger.info(`Conversation ${conversation.id} selected in UI`);
+                } else {
+                    // Fallback to direct loading if item not found in DOM
+                    this.loadConversation(conversation.id);
+                    this.logger.info(`Direct loading conversation ${conversation.id}`);
+                }
+                
+                // Make sure it's visible on mobile
+                if (window.innerWidth <= 768) {
+                    const chatArea = document.querySelector('.chat-area');
+                    const sidebar = document.querySelector('.sidebar');
+                    
+                    if (chatArea) chatArea.classList.add('active');
+                    if (sidebar) sidebar.classList.add('hidden');
+                }
             }, 100);
             
-            this.logger.info('Conversation started successfully');
+            this.logger.info('Conversation successfully initiated');
         } catch (error) {
             this.logger.error('Failed to start conversation:', error);
-            this.showError('Failed to start conversation: ' + error.message);
+            this.showError('Failed to create conversation: ' + error.message);
         }
     }
 
