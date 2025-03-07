@@ -509,8 +509,12 @@ export class UIModule extends BaseModule {
                 conversationEl.querySelector('.unread-indicator')?.remove();
             }
             
-            // Setup real-time subscription for new messages
+            // CRITICAL FIX: Always set up the real-time message subscription
+            // Make sure we only have the one method for subscription handling
             this._setupMessageSubscription(conversationId);
+            
+            // Log that we've successfully loaded the conversation
+            this.logger.info(`Conversation ${conversationId} loaded successfully with ${messages.length} messages`);
         } catch (error) {
             this.logger.error('Failed to load conversation messages:', error);
             this.showError('Failed to load messages');
