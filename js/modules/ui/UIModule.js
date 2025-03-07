@@ -14,6 +14,7 @@ export class UIModule extends BaseModule {
         this.setupMessageListeners();
         this.setupThemeToggle();
         this.setupProfileHandlers();
+        this.setupMobileHandlers();
         this.logger.info('UI module initialized');
     }
 
@@ -258,6 +259,40 @@ export class UIModule extends BaseModule {
         }
     }
 
+    async loadConversation(conversationId) {
+        this.currentConversation = conversationId;
+        const messageContainer = document.getElementById('message-container');
+        const chatArea = document.querySelector('.chat-area');
+        const sidebar = document.querySelector('.sidebar');
+        
+        if (window.innerWidth <= 768) {
+            chatArea?.classList.add('active');
+            sidebar?.classList.add('hidden');
+        }
+
+        try {
+            const dataModule = this.getModule('data');
+            const messages = await dataModule.fetchMessages(conversationId);
+            
+            messageContainer.innerHTML = '';
+            messages.forEach(message => {
+                const isSent = message.sender_id === this.currentUser.id;
+                const messageEl = document.createElement('div');
+                messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
+                messageEl.innerHTML = `
+                    <div class="message-content">${message.content}</div>
+                    <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+                `;
+                messageContainer.appendChild(messageEl);
+            });
+            
+            messageContainer.scrollTop = messageContainer.scrollHeight;
+        } catch (error) {
+            this.logger.error('Failed to load conversation:', error);
+            this.showError('Failed to load conversation');
+        }
+    }
+
     renderUserSearchResults(users) {
         const container = document.getElementById('user-search-results');
         if (!container) return;
@@ -398,6 +433,19 @@ export class UIModule extends BaseModule {
             if (e.target === profileModal) {
                 profileModal.classList.add('hidden');
             }
+        });
+    }
+
+    setupMobileHandlers() {
+        const backButton = document.getElementById('back-button');
+        
+        backButton?.addEventListener('click', () => {
+            const chatArea = document.querySelector('.chat-area');
+            const sidebar = document.querySelector('.sidebar');
+            
+            chatArea?.classList.remove('active');
+            sidebar?.classList.remove('hidden');
+            this.currentConversation = null;
         });
     }
 

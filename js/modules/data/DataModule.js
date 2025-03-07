@@ -56,15 +56,17 @@ export class DataModule extends BaseModule {
             const { data: conversation, error } = await this.supabase
                 .from('conversations')
                 .insert({
-                    is_self_chat: participants.length === 1
+                    is_self_chat: participants.length === 1,
+                    created_at: new Date().toISOString()
                 })
                 .select()
                 .single();
                 
             if (error) throw error;
             
-            // Create participants
-            const participantsToInsert = participants.map(userId => ({
+            // Create unique participants array
+            const uniqueParticipants = [...new Set(participants)];
+            const participantsToInsert = uniqueParticipants.map(userId => ({
                 conversation_id: conversation.id,
                 user_id: userId
             }));
@@ -77,6 +79,13 @@ export class DataModule extends BaseModule {
             
             return conversation;
         } catch (error) {
+            // Check if error is due to existing conversation
+            if (error.code === '23505') {
+                const existingId = await this.findExistingConversation(participants);
+                if (existingId) {
+                    return { id: existingId };
+                }
+            }
             this.logger.error('Error creating conversation:', error);
             throw error;
         }
@@ -157,6 +166,28 @@ export class DataModule extends BaseModule {
             return data;
         } catch (error) {
             this.logger.error('Error searching users:', error);
+            return [];
+        }
+    }
+
+    async fetchConversations(userId) {
+        try {
+            const { data, error } = await this.supabase
+                .from('conversations')
+                .select(`
+                    *,
+                    participants!inner (
+                        user_id,
+                        profiles (*)
+                    )
+                `)
+                .eq('participants.user_id', userId)
+                .order('created_at', { ascending: false });
+            
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            this.logger.error('Error fetching conversations:', error);
             return [];
         }
     }

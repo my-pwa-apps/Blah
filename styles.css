@@ -386,11 +386,19 @@ body {
     .app-container {
         height: 100vh;
         height: 100dvh;
+        overflow: hidden;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
     }
 
     .content-container {
         height: calc(100vh - 64px);
         height: calc(100dvh - 64px);
+        position: relative;
+        overflow: hidden;
     }
 
     .sidebar {
@@ -399,6 +407,8 @@ body {
         height: 100%;
         transform: translateX(0);  /* Show by default on mobile */
         transition: transform 0.3s ease;
+        background-color: var(--md-background);
+        z-index: 1;
     }
 
     .chat-area {
@@ -407,6 +417,22 @@ body {
         height: 100%;
         transform: translateX(100%);
         transition: transform 0.3s ease;
+        background-color: var(--md-background);
+        display: flex;
+        flex-direction: column;
+    }
+
+    .chat-header {
+        flex-shrink: 0;
+    }
+
+    .message-container {
+        flex: 1;
+        overflow-y: auto;
+    }
+
+    .message-input {
+        flex-shrink: 0;
         background-color: var(--md-background);
     }
 
