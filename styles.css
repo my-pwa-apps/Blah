@@ -918,6 +918,24 @@ body {
     align-items: center;
     gap: 0.8rem;
     cursor: pointer;
+    transition: background-color var(--animation-standard);
+}
+
+.user-search-item:hover {
+    background-color: rgba(74, 103, 65, 0.05);
+}
+
+.user-search-item.selected {
+    background-color: rgba(74, 103, 65, 0.15);
+    position: relative;
+}
+
+.user-search-item.selected::after {
+    content: "check";
+    font-family: "Material Icons";
+    position: absolute;
+    right: 1rem;
+    color: var(--md-primary);
 }
 
 .user-search-item:hover {

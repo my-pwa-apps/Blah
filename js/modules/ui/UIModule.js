@@ -132,7 +132,7 @@ export class UIModule extends BaseModule {
             await this.handleUserSearch(query);
         }, 300));
 
-        // Handle user selection
+        // Handle user selection - Fix by updating the event delegation handler
         document.getElementById('user-search-results')?.addEventListener('click', (e) => {
             const item = e.target.closest('.user-search-item');
             if (!item) return;
@@ -145,6 +145,8 @@ export class UIModule extends BaseModule {
             item.classList.add('selected');
             selectedUserId = item.dataset.userId;
             startConversationBtn.disabled = false;
+            
+            this.logger.info(`User selected: ${selectedUserId}`);
         });
 
         // Handle start conversation
@@ -362,23 +364,6 @@ export class UIModule extends BaseModule {
             this.logger.error('Failed to load conversation:', error);
             this.showError('Failed to load conversation');
         }
-    }
-
-    renderUserSearchResults(users) {
-        const container = document.getElementById('user-search-results');
-        if (!container) return;
-
-        container.innerHTML = users.map(user => `
-            <div class="user-search-item" data-user-id="${user.id}">
-                <div class="user-avatar">
-                    <img src="${user.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
-                </div>
-                <div class="user-info">
-                    <div class="user-name">${user.display_name || user.email}</div>
-                    <div class="user-email">${user.email}</div>
-                </div>
-            </div>
-        `).join('');
     }
 
     async startNewConversation(userId) {
