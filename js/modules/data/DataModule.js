@@ -568,8 +568,9 @@ export class DataModule extends BaseModule {
             
             this.logger.info(`Creating channel with unique name: ${channelName}`);
             
-            // Create channel first without subscribing
-            const channel = this.supabase.channel(channelName);
+            // CRITICAL FIX: Change from const to let so it can be reassigned during retries
+            let channel = this.supabase.channel(channelName);
+            let subscriptionInitiated = false;
             let isSubscribed = false;
             
             // Configure retry mechanism
