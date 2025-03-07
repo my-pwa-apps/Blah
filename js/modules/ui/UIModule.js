@@ -1251,6 +1251,29 @@ export class UIModule extends BaseModule {
                 this._toggleDebugPanel();
             }
         });
+
+        // Listen for subscription error events
+        window.addEventListener('subscription-error', (event) => {
+            const { conversationId, status } = event.detail;
+            this.logger.warn(`Received subscription error event for ${conversationId}: ${status}`);
+            
+            if (conversationId === this.currentConversation) {
+                this._showConnectionWarning();
+            }
+        });
+        
+        // Listen for subscription reconnect events
+        window.addEventListener('subscription-reconnect-needed', (event) => {
+            const { conversationId } = event.detail;
+            this.logger.info(`Received subscription reconnect event for ${conversationId}`);
+            
+            if (conversationId === this.currentConversation) {
+                // Recreate subscription after a delay
+                setTimeout(() => {
+                    this._recreateSubscription();
+                }, 2000);
+            }
+        });
     }
 
     _toggleDebugPanel() {
