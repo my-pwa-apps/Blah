@@ -28,11 +28,13 @@ export class AuthModule extends BaseModule {
 
     async signIn(email, password) {
         try {
+            this.logger.info('Attempting sign in for:', email);
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email,
                 password
             });
             if (error) throw error;
+            this.logger.info('Sign in successful');
             return data;
         } catch (error) {
             this.logger.error('Sign in failed:', error);

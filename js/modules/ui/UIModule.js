@@ -18,6 +18,7 @@ export class UIModule extends BaseModule {
         const passwordInput = document.getElementById('password-input');
 
         loginBtn?.addEventListener('click', async () => {
+            this.logger.info('Login button clicked');
             const email = emailInput.value.trim();
             const password = passwordInput.value.trim();
 
@@ -27,8 +28,12 @@ export class UIModule extends BaseModule {
             }
 
             try {
-                await this.getModule('auth').signIn(email, password);
+                this.logger.info('Attempting to get auth module');
+                const authModule = this.getModule('auth');
+                this.logger.info('Auth module retrieved, attempting sign in');
+                await authModule.signIn(email, password);
             } catch (error) {
+                this.logger.error('Login error:', error);
                 this.showError(error.message);
             }
         });
