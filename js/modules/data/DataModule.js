@@ -530,11 +530,79 @@ export class DataModule extends BaseModule {
         }
     }
 
+    async _handleSubscriptionError(channel, conversationId, callback) {
+        try {
+            this.logger.info(`Handling subscription error for conversation ${conversationId}`);
+            
+            // First, ensure the old channel is properly unsubscribed
+            if (channel) {
+                try {
+                    channel.unsubscribe();
+                } catch (err) {
+                    this.logger.warn(`Error unsubscribing from old channel: ${err}`);
+                    // Continue anyway - we need to create a new channel
+                }
+            }
+            
+            // Wait to avoid rapid reconnection attempts
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // Create an entirely new channel with unique name
+            const newChannelId = `messages:${conversationId}:${Date.now()}`;
+            this.logger.info(`Creating new channel: ${newChannelId}`);
+            
+            const newChannel = this.supabase.channel(newChannelId);
+            
+            newChannel
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `conversation_id=eq.${conversationId}`
+                    },
+                    (payload) => {
+                        if (payload.new && callback) {
+                            callback(payload.new);
+                        }
+                    }
+                )
+                .subscribe((status) => {
+                    this.logger.info(`New subscription status for ${conversationId}: ${status}`);
+                    
+                    if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                        this.logger.warn(`New channel also experienced issues: ${status}`);
+                        // Don't recursively retry - just log the issue
+                    }
+                });
+            
+            return {
+                unsubscribe: () => {
+                    try {
+                        newChannel.unsubscribe();
+                    } catch (e) {
+                        this.logger.warn(`Error unsubscribing from new channel: ${e}`);
+                    }
+                },
+                conversationId
+            };
+        } catch (error) {
+            this.logger.error(`Error during subscription recovery: ${error.message}`);
+            return {
+                unsubscribe: () => {},
+                conversationId
+            };
+        }
+    }
+
     subscribeToNewMessages(conversationId, callback) {
         this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
         
         try {
             const channelName = `messages:${conversationId}:${Date.now()}`; // Add timestamp to make unique
+            this.logger.info(`Creating channel: ${channelName}`);
+            
             const channel = this.supabase.channel(channelName)
                 .on(
                     'postgres_changes',
@@ -556,7 +624,8 @@ export class DataModule extends BaseModule {
                     
                     if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
                         this.logger.warn(`Subscription status changed to ${status}, attempting reconnect...`);
-                        this._handleSubscriptionError(channel, conversationId);
+                        // Pass the callback here to ensure messages continue to flow after reconnection
+                        this._handleSubscriptionError(channel, conversationId, callback);
                     }
                 });
 
