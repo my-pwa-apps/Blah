@@ -509,9 +509,16 @@ export class UIModule extends BaseModule {
                 conversationEl.querySelector('.unread-indicator')?.remove();
             }
             
-            // CRITICAL FIX: Always set up the real-time message subscription
-            // Make sure we only have the one method for subscription handling
+            // CRITICAL FIX: Setup real-time subscription with event dispatcher
             this._setupMessageSubscription(conversationId);
+            
+            // CRITICAL FIX: After a short delay, check for missed messages
+            setTimeout(() => this._checkForMissedMessages(), 1000);
+            
+            // Dispatch event that conversation is loaded
+            window.dispatchEvent(new CustomEvent('conversation-loaded', {
+                detail: { conversationId }
+            }));
             
             // Log that we've successfully loaded the conversation
             this.logger.info(`Conversation ${conversationId} loaded successfully with ${messages.length} messages`);
@@ -1416,6 +1423,254 @@ export class UIModule extends BaseModule {
             this.logger.info('Conversation monitor initialized');
         } catch (error) {
             this.logger.error('Failed to setup conversation monitor:', error);
+        }
+    }
+
+    // CRITICAL FIX: Improve real-time message subscription handling
+    _setupMessageSubscription(conversationId) {
+        try {
+            // Clean up existing subscription
+            if (this.currentSubscription) {
+                this.logger.info(`Cleaning up previous subscription: ${this.currentSubscription.conversationId}`);
+                try {
+                    this.currentSubscription.unsubscribe();
+                } catch (err) {
+                    this.logger.error('Error cleaning up previous subscription:', err);
+                }
+                this.currentSubscription = null;
+            }
+            
+            this.logger.info(`Setting up new subscription for conversation: ${conversationId}`);
+            const dataModule = this.getModule('data');
+            
+            // Set up new subscription with explicit error handling
+            this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (message) => {
+                // Log all received messages for debugging
+                this.logger.info(`⚡ RECEIVED REAL-TIME MESSAGE for ${conversationId}:`, message);
+                
+                if (!message || !message.id) {
+                    this.logger.warn(`Received invalid message:`, message);
+                    return;
+                }
+                
+                // CRITICAL FIX: Always update conversation in the list first
+                this._updateConversationWithNewMessage(message);
+                
+                // Skip processing if not for current conversation
+                if (this.currentConversation !== conversationId) {
+                    this.logger.info(`Message ${message.id} is for a different conversation (${message.conversation_id}), current: ${this.currentConversation}`);
+                    this._showMessageNotification(message);
+                    return;
+                }
+                
+                // Don't show own messages twice
+                if (message.sender_id === this.currentUser.id) {
+                    this.logger.info(`Ignoring own message ${message.id} from subscription`);
+                    return;
+                }
+                
+                // CRITICAL FIX: Add message to conversation view with proper logging
+                this.logger.info(`Adding message ${message.id} to current conversation view`);
+                this._addMessageToUI(message);
+                
+                // Mark as read since we're viewing it
+                dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+            });
+            
+            this.logger.info(`Subscription setup complete for conversation: ${conversationId}`);
+            
+        } catch (error) {
+            this.logger.error('Error setting up message subscription:', error);
+            this._setupFallbackPolling(conversationId);
+        }
+    }
+
+    // FIX: Improve _addMessageToUI to handle message rendering properly
+    _addMessageToUI(message) {
+        try {
+            if (!message || !message.id) {
+                this.logger.error('Invalid message passed to _addMessageToUI');
+                return;
+            }
+
+            this.logger.info(`Adding message ${message.id} to UI`);
+            const messageContainer = document.getElementById('message-container');
+            
+            if (!messageContainer) {
+                this.logger.error('Message container not found');
+                return;
+            }
+            
+            // Check if message already exists to avoid duplicates
+            const existingMessage = messageContainer.querySelector(`.message[data-message-id="${message.id}"]`);
+            if (existingMessage) {
+                this.logger.info(`Message ${message.id} already exists in UI, skipping`);
+                return;
+            }
+            
+            // Remove "no messages" placeholder if present
+            const noMessagesEl = messageContainer.querySelector('.no-messages');
+            if (noMessagesEl) {
+                noMessagesEl.remove();
+            }
+            
+            // Create message element with proper dataset attribute
+            const isSent = message.sender_id === this.currentUser.id;
+            const messageEl = document.createElement('div');
+            messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
+            messageEl.dataset.messageId = message.id; // IMPORTANT: Set the message ID in the dataset
+            
+            // Format content and time
+            const messageTime = new Date(message.created_at).toLocaleTimeString();
+            messageEl.innerHTML = `
+                <div class="message-content">${message.content}</div>
+                <div class="message-info">${messageTime}</div>
+            `;
+            
+            // Add to container
+            messageContainer.appendChild(messageEl);
+            
+            // Scroll to make new message visible
+            setTimeout(() => {
+                messageEl.scrollIntoView({ behavior: 'smooth' });
+            }, 50);
+            
+            this.logger.info(`Message ${message.id} successfully added to UI`);
+            
+            // Play sound for received messages
+            if (!isSent) {
+                this._playIncomingMessageSound();
+            }
+        } catch (error) {
+            this.logger.error('Error in _addMessageToUI:', error);
+        }
+    }
+
+    // FIX: Improve conversation list updates to properly show unread indicators
+    _updateConversationWithNewMessage(message) {
+        if (!message || !message.conversation_id) {
+            this.logger.warn('Invalid message in _updateConversationWithNewMessage');
+            return;
+        }
+        
+        const conversationId = message.conversation_id;
+        this.logger.info(`Updating conversation list for message in ${conversationId}`);
+        
+        try {
+            // Find the conversation element in the list
+            const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            
+            if (!conversationEl) {
+                this.logger.info(`Conversation ${conversationId} not found in list, refreshing all conversations`);
+                this.renderConversationsList();
+                return;
+            }
+            
+            // Update the last message text
+            const lastMessageEl = conversationEl.querySelector('.conversation-last-message');
+            if (lastMessageEl) {
+                lastMessageEl.textContent = message.content || 'New message';
+                this.logger.info(`Updated last message text for conversation ${conversationId}`);
+            }
+            
+            // CRITICAL FIX: Add unread indicator if this is not the current conversation
+            // and the message is from someone else
+            if (conversationId !== this.currentConversation && message.sender_id !== this.currentUser.id) {
+                this.logger.info(`Adding unread indicator for conversation ${conversationId}`);
+                
+                // Add unread class
+                conversationEl.classList.add('unread');
+                
+                // Add unread indicator element if not already present
+                if (!conversationEl.querySelector('.unread-indicator')) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'unread-indicator';
+                    conversationEl.appendChild(indicator);
+                    this.logger.info(`Added unread indicator element to conversation ${conversationId}`);
+                }
+            }
+            
+            // Move conversation to top of list (newest first)
+            const conversationsList = document.getElementById('conversations-list');
+            if (conversationsList && conversationsList.firstChild !== conversationEl) {
+                conversationsList.removeChild(conversationEl);
+                conversationsList.insertBefore(conversationEl, conversationsList.firstChild);
+                this.logger.info(`Moved conversation ${conversationId} to top of list`);
+            }
+        } catch (error) {
+            this.logger.error(`Error updating conversation in list: ${error.message}`);
+            // Fall back to full refresh on error
+            this.renderConversationsList();
+        }
+    }
+
+    // Add a fallback polling method in case real-time subscription fails
+    _setupFallbackPolling(conversationId) {
+        this.logger.info(`Setting up fallback polling for conversation ${conversationId}`);
+        
+        try {
+            const dataModule = this.getModule('data');
+            const pollingInterval = 3000; // Poll every 3 seconds
+            
+            this.pollingSubscription = dataModule.setupMessagePolling(conversationId, (message) => {
+                // Use the same handler as the real-time subscription
+                if (this.currentConversation !== conversationId) {
+                    this._updateConversationWithNewMessage(message);
+                    this._showMessageNotification(message);
+                    return;
+                }
+                
+                if (message.sender_id !== this.currentUser.id) {
+                    this._addMessageToUI(message);
+                    dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+                }
+            }, pollingInterval);
+            
+            this.logger.info(`Fallback polling set up for conversation ${conversationId}`);
+        } catch (error) {
+            this.logger.error(`Error setting up fallback polling: ${error.message}`);
+        }
+    }
+
+    // Add debug method to show all unread messages for the current conversation
+    _checkForMissedMessages() {
+        if (!this.currentConversation || !this.currentUser) return;
+        
+        this.logger.info(`Checking for missed messages in conversation ${this.currentConversation}`);
+        
+        try {
+            const dataModule = this.getModule('data');
+            const lastHour = new Date();
+            lastHour.setHours(lastHour.getHours() - 1);
+            
+            dataModule.fetchMessages(this.currentConversation, lastHour.toISOString())
+                .then(messages => {
+                    // Get all message IDs currently in the UI
+                    const messageContainer = document.getElementById('message-container');
+                    if (!messageContainer) return;
+                    
+                    const existingMessageIds = Array.from(
+                        messageContainer.querySelectorAll('.message[data-message-id]')
+                    ).map(el => el.dataset.messageId);
+                    
+                    // Find messages that aren't in the UI yet
+                    const missingMessages = messages.filter(msg => 
+                        !existingMessageIds.includes(msg.id) && 
+                        msg.sender_id !== this.currentUser.id
+                    );
+                    
+                    if (missingMessages.length > 0) {
+                        this.logger.info(`Found ${missingMessages.length} missed messages, adding to UI`);
+                        missingMessages.forEach(msg => this._addMessageToUI(msg));
+                    } else {
+                        this.logger.info('No missed messages found');
+                    }
+                })
+                .catch(error => {
+                    this.logger.error(`Error checking for missed messages: ${error.message}`);
+                });
+        } catch (error) {
+            this.logger.error(`Error in _checkForMissedMessages: ${error.message}`);
         }
     }
 }
