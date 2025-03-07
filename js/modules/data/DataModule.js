@@ -496,149 +496,45 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Handling subscription error for conversation ${conversationId}`);
             
-            // Ensure we don't have reference issues
-            const localCallback = callback;
-            if (!localCallback) {
-                this.logger.warn('No callback provided for reconnected channel');
-                return null;
-            }
-            
-            // Clean up old channel first with more careful error handling
+            // CRITICAL: Always unsubscribe from old channel first
             if (channel) {
                 try {
-                    channel.unsubscribe();
+                    await channel.unsubscribe();
                     this.logger.info('Successfully unsubscribed from old channel');
                 } catch (err) {
                     this.logger.warn('Failed to unsubscribe from old channel:', err);
+                    // Continue regardless of error
                 }
             }
             
-            // Wait to avoid rapid reconnections
+            // Wait before attempting to create a new channel
             await new Promise(resolve => setTimeout(resolve, 3000));
             
-            // Create unique channel name with enough entropy to avoid collisions
-            const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-            const channelName = `messages:${conversationId}:${uniqueId}`;
+            // Generate a truly unique channel name with timestamp AND random string
+            const random = Math.random().toString(36).substring(2, 10);
+            const uniqueChannelId = `messages:${conversationId}:${Date.now()}_${random}`;
             
-            this.logger.info(`Creating new channel: ${channelName}`);
+            this.logger.info(`Creating completely new channel with ID: ${uniqueChannelId}`);
             
-            // Create a new channel instance
-            const newChannel = this.supabase.channel(channelName);
-            
-            // Set up event handler before subscribing
-            newChannel.on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `conversation_id=eq.${conversationId}`
-                },
-                (payload) => {
-                    if (payload.new) {
-                        this.logger.info(`Received message on new channel for ${conversationId}`);
-                        localCallback(payload.new);
-                    }
-                }
-            );
-            
-            // Create a wrapper for subscription to avoid errors
-            let subscribed = false;
-            
+            // Create an entirely new channel
             try {
-                await new Promise((resolve, reject) => {
-                    const timeoutId = setTimeout(() => {
-                        reject(new Error('Subscription timed out'));
-                    }, 5000);
-                    
-                    newChannel.subscribe((status) => {
-                        clearTimeout(timeoutId);
-                        this.logger.info(`New channel ${channelName} status: ${status}`);
-                        
-                        if (status === 'SUBSCRIBED') {
-                            subscribed = true;
-                            resolve();
-                        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                            reject(new Error(`Bad subscription status: ${status}`));
-                        }
-                    });
-                });
+                const newChannel = this.supabase.channel(uniqueChannelId);
                 
-                return {
-                    unsubscribe: () => {
-                        try {
-                            if (subscribed) {
-                                newChannel.unsubscribe();
-                            }
-                            this.logger.info(`Unsubscribed from channel ${channelName}`);
-                        } catch (err) {
-                            this.logger.error(`Error unsubscribing:`, err);
-                        }
-                    },
-                    conversationId,
-                    channelName
-                };
-            } catch (err) {
-                this.logger.error(`Error handling subscription: ${err.message}`);
-                return {
-                    unsubscribe: () => {},
-                    conversationId
-                };
-            }
-        } catch (error) {
-            this.logger.error('Error in subscription recovery process:', error);
-            return {
-                unsubscribe: () => {},
-                conversationId
-            };
-        }
-    }
-
-    subscribeToNewMessages(conversationId, callback) {
-        // Ensure we have a valid callback
-        if (!callback || typeof callback !== 'function') {
-            this.logger.error('Invalid callback provided to subscribeToNewMessages');
-            return {
-                unsubscribe: () => {},
-                conversationId
-            };
-        }
-        
-        this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
-        
-        try {
-            // Create a truly unique channel name
-            const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-            const channelName = `messages:${conversationId}:${uniqueId}`;
-            
-            this.logger.info(`Creating new channel: ${channelName}`);
-            
-            const channel = this.supabase.channel(channelName);
-            
-            // Keep a reference to the original callback to avoid closure issues
-            const localCallback = callback;
-            
-            // Set up channel before subscribing
-            channel.on(
-                'postgres_changes',
-                {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `conversation_id=eq.${conversationId}`
-                },
-                (payload) => {
-                    this.logger.info(`Received message for conversation ${conversationId}`);
-                    if (payload.new && localCallback) {
-                        localCallback(payload.new);
-                    }
+                if (!callback) {
+                    this.logger.warn('No callback provided for reconnected channel');
+                    return null;
                 }
-            );
-            
-            // Now subscribe
-            channel.subscribe((status) => {
-                this.logger.info(`Subscription status for ${conversationId}: ${status}`);
                 
+                // Set up the new channel with the same configuration
+                newChannel.on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `conversation_id=eq.${conversationId}`
+                    },
+                    (payload) => {
                         this.logger.info(`Message received on reconnected channel for ${conversationId}`);
                         if (payload.new) {
                             callback(payload.new);
@@ -695,71 +591,30 @@ export class DataModule extends BaseModule {
     }
 
     subscribeToNewMessages(conversationId, callback) {
-        this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
-        
-        try {
-            const channelName = `messages:${conversationId}:${Date.now()}`; // Add timestamp to make unique
-            this.logger.info(`Creating channel: ${channelName}`);
-            
-            const channel = this.supabase.channel(channelName)
-                .on(
-                    'postgres_changes',
-                    {
-                        event: 'INSERT',
-                        schema: 'public',
-                        table: 'messages',
-                        filter: `conversation_id=eq.${conversationId}`
-                    },
-                    (payload) => {
-                        this.logger.info(`New message received for conversation ${conversationId}`);
-                        if (payload.new) {
-                            callback(payload.new);
-                        }
-                    }
-                )
-                .subscribe((status) => {
-                    this.logger.info(`Subscription status for ${conversationId}: ${status}`);
-                    
-                    if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-                        this.logger.warn(`Subscription status changed to ${status}, attempting reconnect...`);
-                        // Pass the callback here to ensure messages continue to flow after reconnection
-                        this._handleSubscriptionError(channel, conversationId, callback);
-                    }
-                });
-
-            return {
-                unsubscribe: () => {
-                    this.logger.info(`Unsubscribing from conversation ${conversationId}`);
-                    try {
-                        channel.unsubscribe();
-                    } catch (err) {
-                        this.logger.warn('Error during unsubscribe:', err);
-                    }
-                },
-                conversationId
-            };
-        } catch (error) {
-            this.logger.error('Error setting up message subscription:', error);
+        // Ensure we have a valid callback
+        if (!callback || typeof callback !== 'function') {
+            this.logger.error('Invalid callback provided to subscribeToNewMessages');
             return {
                 unsubscribe: () => {},
                 conversationId
             };
         }
-    }
-
-    subscribeToNewMessages(conversationId, callback) {
+        
         this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
         
         try {
-            // Generate a unique channel name with timestamp and random string
-            const random = Math.random().toString(36).substring(2, 10);
-            const channelName = `messages:${conversationId}:${Date.now()}_${random}`;
+            // Create a truly unique channel name
+            const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
+            const channelName = `messages:${conversationId}:${uniqueId}`;
             
-            this.logger.info(`Creating channel: ${channelName}`);
+            this.logger.info(`Creating new channel: ${channelName}`);
             
             const channel = this.supabase.channel(channelName);
             
-            // Configure channel before subscribing
+            // Keep a reference to the original callback to avoid closure issues
+            const localCallback = callback;
+            
+            // Set up channel before subscribing
             channel.on(
                 'postgres_changes',
                 {
@@ -769,39 +624,38 @@ export class DataModule extends BaseModule {
                     filter: `conversation_id=eq.${conversationId}`
                 },
                 (payload) => {
-                    this.logger.info(`New message received for conversation ${conversationId}`);
-                    if (payload.new) {
-                        callback(payload.new);
+                    this.logger.info(`Received message for conversation ${conversationId}`);
+                    if (payload.new && localCallback) {
+                        localCallback(payload.new);
                     }
                 }
             );
             
-            // Subscribe with better error handling
+            // Now subscribe
             channel.subscribe((status) => {
-                this.logger.info(`Subscription status for ${conversationId} (${channelName}): ${status}`);
+                this.logger.info(`Subscription status for ${conversationId}: ${status}`);
                 
                 if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
                     this.logger.warn(`Channel ${channelName} has error status: ${status}`);
-                    
-                    // Don't use the current subscription for reconnection
-                    this._recreateSubscription(conversationId, callback);
+                    // Don't recreate subscription here - let the calling code handle it
+                    this._recreateSubscription(conversationId, localCallback);
                 }
             });
-
+            
             return {
                 unsubscribe: () => {
-                    this.logger.info(`Unsubscribing from conversation ${conversationId} (${channelName})`);
+                    this.logger.info(`Unsubscribing from ${channelName}`);
                     try {
                         channel.unsubscribe();
                     } catch (err) {
-                        this.logger.warn(`Error during unsubscribe for ${channelName}:`, err);
+                        this.logger.warn(`Error during unsubscribe: ${err.message}`);
                     }
                 },
-                conversationId,
-                channelName
+                channelName,
+                conversationId
             };
         } catch (error) {
-            this.logger.error('Error setting up message subscription:', error);
+            this.logger.error('Error in subscribeToNewMessages:', error);
             return {
                 unsubscribe: () => {},
                 conversationId
@@ -809,7 +663,6 @@ export class DataModule extends BaseModule {
         }
     }
 
-    // New method to safely recreate subscription after failure
     async _recreateSubscription(conversationId, callback) {
         this.logger.info(`Recreating subscription for conversation ${conversationId}`);
         
