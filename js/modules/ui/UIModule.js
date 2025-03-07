@@ -228,90 +228,103 @@ export class UIModule extends BaseModule {
             this.logger.info('Fetching conversations for user:', this.currentUser.id);
             const dataModule = this.getModule('data');
             
-            // Get conversations with improved debug logging
+            // Get all conversations
             const conversations = await dataModule.fetchConversations(this.currentUser.id, true);
-            this.logger.info(`Got ${conversations.length} conversations to render`);
+            this.logger.info(`DataModule returned ${conversations.length} conversations to render`);
             
             // Reset list
             conversationsList.innerHTML = '';
             
-            if (conversations.length === 0) {
+            if (!conversations || conversations.length === 0) {
                 conversationsList.innerHTML = '<div class="no-conversations">No conversations yet. Start a new chat!</div>';
                 return;
             }
-            
-            // Debug each conversation
+
+            // Debug each conversation before processing
             conversations.forEach(conv => {
-                this.logger.info(`Processing conversation ${conv.id} for UI:`);
-                this.logger.info(`  - is_self_chat: ${conv.is_self_chat}`);
-                this.logger.info(`  - participants: ${conv.participants.length}`);
-                conv.participants.forEach(p => this.logger.info(`    - user_id: ${p.user_id}`));
+                this.logger.info(`Conv ${conv.id}: is_self_chat=${conv.is_self_chat}, participants=${conv.participants?.length || 0}`);
+                
+                // Check for participants data
+                if (!conv.participants || conv.participants.length === 0) {
+                    this.logger.warn(`Conversation ${conv.id} has no participants data`);
+                } else {
+                    conv.participants.forEach(p => {
+                        if (p.profiles) {
+                            this.logger.info(`Participant ${p.user_id}: ${p.profiles.display_name || p.profiles.email || 'unknown'}`);
+                        } else {
+                            this.logger.warn(`Participant ${p.user_id} has no profile data`);
+                        }
+                    });
+                }
             });
             
             // Loop through conversations and render each one
             for (const conv of conversations) {
-                // Determine if this is a self-chat
-                const isSelfChat = conv.is_self_chat || 
-                                  (conv.participants.length === 1 && 
-                                   conv.participants[0].user_id === this.currentUser.id);
+                try {
+                    // Determine if this is a self-chat
+                    const isSelfChat = conv.is_self_chat || 
+                                    (conv.participants.length === 1 && 
+                                    conv.participants[0].user_id === this.currentUser.id);
                     
-                this.logger.info(`Conversation ${conv.id} is ${isSelfChat ? 'a self-chat' : 'with another user'}`);
-                
-                // Determine display name and avatar
-                let name, avatar;
-                
-                if (isSelfChat) {
-                    // Self chat
-                    name = 'Notes to Self';
-                    avatar = this.currentUser.avatar_url;
-                    this.logger.info(`Rendering self-chat ${conv.id}`);
-                } else {
-                    // Find the other participant in the conversation
-                    const otherParticipant = conv.participants.find(p => 
-                        p.user_id !== this.currentUser.id
-                    );
+                    // Initialize variables for conversation display
+                    let name = 'Unknown User';
+                    let avatar = null;
                     
-                    this.logger.info(`Other participant found: ${otherParticipant ? 'yes' : 'no'}`);
-                    
-                    if (otherParticipant && otherParticipant.profiles) {
-                        // Get profile data
-                        name = otherParticipant.profiles.display_name || 
-                               otherParticipant.profiles.email || 
-                               'Unknown User';
-                        avatar = otherParticipant.profiles.avatar_url;
-                        this.logger.info(`Rendering chat with: ${name}`);
+                    if (isSelfChat) {
+                        // Self chat
+                        name = 'Notes to Self';
+                        avatar = this.currentUser.avatar_url;
+                        this.logger.info(`Rendering self-chat: ${conv.id}`);
                     } else {
-                        name = 'Unknown User';
-                        avatar = null;
-                        this.logger.info(`Could not find profile for other participant in conversation ${conv.id}`);
+                        // Chat with another person - find other participant
+                        const otherParticipants = conv.participants.filter(p => 
+                            p.user_id !== this.currentUser.id
+                        );
+                        
+                        if (otherParticipants && otherParticipants.length > 0) {
+                            const otherParticipant = otherParticipants[0];
+                            
+                            if (otherParticipant.profiles) {
+                                name = otherParticipant.profiles.display_name || 
+                                    otherParticipant.profiles.email || 'Unknown User';
+                                avatar = otherParticipant.profiles.avatar_url;
+                                this.logger.info(`Rendering chat with: ${name}, ID: ${conv.id}`);
+                            } else {
+                                this.logger.warn(`No profile data for participant in conv ${conv.id}`);
+                            }
+                        } else {
+                            this.logger.warn(`Could not find other participant in conv ${conv.id}`);
+                        }
                     }
-                }
-                
-                // Create conversation element
-                const conversationEl = document.createElement('div');
-                conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}`;
-                conversationEl.dataset.conversationId = conv.id;
-                conversationEl.dataset.isSelfChat = isSelfChat;
-                conversationEl.innerHTML = `
-                    <div class="conversation-avatar">
-                        <img src="${avatar || 'images/default-avatar.png'}" alt="Avatar">
-                    </div>
-                    <div class="conversation-details">
-                        <div class="conversation-name">${name}</div>
-                        <div class="conversation-last-message">
-                            ${conv.last_message?.content || 'No messages yet'}
+                    
+                    // Create the conversation element
+                    const conversationEl = document.createElement('div');
+                    conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}`;
+                    conversationEl.dataset.conversationId = conv.id;
+                    conversationEl.dataset.isSelfChat = isSelfChat;
+                    conversationEl.innerHTML = `
+                        <div class="conversation-avatar">
+                            <img src="${avatar || 'images/default-avatar.png'}" alt="Avatar">
                         </div>
-                    </div>
-                `;
-                
-                // Add click handler
-                conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
-                
-                // Add to list
-                conversationsList.appendChild(conversationEl);
+                        <div class="conversation-details">
+                            <div class="conversation-name">${name}</div>
+                            <div class="conversation-last-message">
+                                ${conv.last_message?.content || 'No messages yet'}
+                            </div>
+                        </div>
+                    `;
+                    
+                    // Add click handler
+                    conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
+                    
+                    // Add to list
+                    conversationsList.appendChild(conversationEl);
+                } catch (convError) {
+                    this.logger.error(`Error processing conversation ${conv.id}:`, convError);
+                }
             }
             
-            this.logger.info('Conversation list rendered successfully');
+            this.logger.info('Conversation list rendering complete');
         } catch (error) {
             this.logger.error('Failed to render conversations list:', error);
             this.showError('Failed to load conversations');
@@ -471,16 +484,18 @@ export class UIModule extends BaseModule {
         try {
             this.logger.info(`Starting conversation with user ID: ${userId}`);
             
-            // Create participants array, always include current user
-            const participants = [this.currentUser.id];
+            // Create participants array with correct order and structure
+            const participants = [];
             
-            // For chats with other users, add their ID
-            const isSelfChat = userId === this.currentUser.id;
-            if (!isSelfChat) {
+            // Always include current user first
+            participants.push(this.currentUser.id);
+            
+            // Check if this is a self-chat or chat with another user
+            if (userId !== this.currentUser.id) {
                 participants.push(userId);
-                this.logger.info(`Adding participant: ${userId}`);
+                this.logger.info(`Creating chat with other user: ${userId}`);
             } else {
-                this.logger.info('Creating self-chat (no additional participants)');
+                this.logger.info('Creating self-chat conversation');
             }
             
             const dataModule = this.getModule('data');
@@ -491,22 +506,25 @@ export class UIModule extends BaseModule {
                 throw new Error('Failed to create conversation');
             }
             
-            // Close the modal
-            document.getElementById('new-conversation-modal')?.classList.add('hidden');
+            this.logger.info(`Created conversation with ID: ${conversation.id}`);
             
-            this.logger.info(`Successfully created conversation with ID: ${conversation.id}`);
+            // Close the conversation modal
+            const modal = document.getElementById('new-conversation-modal');
+            if (modal) modal.classList.add('hidden');
+            
+            // Set as current conversation
             this.currentConversation = conversation.id;
             
-            // Force a reload of the conversations list
+            // Update UI in correct sequence
             await this.renderConversationsList();
             
-            // Wait to ensure DOM updates are complete
+            // Wait for DOM updates to complete
             await new Promise(resolve => setTimeout(resolve, 300));
             
-            // Load the conversation UI
+            // Now load the conversation
             await this.loadConversation(conversation.id);
             
-            this.logger.info('Conversation created and opened successfully');
+            this.logger.info('New conversation created and loaded successfully');
         } catch (error) {
             this.logger.error('Failed to start conversation:', error);
             this.showError('Failed to create conversation: ' + error.message);
