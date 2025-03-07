@@ -543,79 +543,189 @@ export class DataModule extends BaseModule {
         this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
         
         try {
-            // Create a truly unique channel name with enough entropy
-            const uniqueId = `${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-            const channelName = `messages:${conversationId}:${uniqueId}`;
+            // Create a truly unique channel name with timestamp to avoid conflicts
+            const timestamp = Date.now();
+            const random = Math.random().toString(36).substring(2, 10);
+            const channelName = `messages:${conversationId}:${timestamp}_${random}`;
             
-            this.logger.info(`Creating channel: ${channelName}`);
+            this.logger.info(`Creating channel with unique name: ${channelName}`);
             
-            // Create channel but don't subscribe yet
+            // Create channel first without subscribing
             const channel = this.supabase.channel(channelName);
+            let subscriptionInitiated = false;
+            let subscriptionTimedOut = false;
+            let isSubscribed = false;
             
-            // Save callback reference for later use
-            const localCallback = callback;
+            // Configure retry mechanism
+            const maxRetries = 3;
+            let retryCount = 0;
+            let retryTimer = null;
             
-            // Configure event handler
-            channel.on(
-                'postgres_changes',
+            // Keep a local reference to the callback
+            const safeCallback = payload => {
+                try {
+                    if (payload && payload.new) {
+                        callback(payload.new);
+                    }
+                } catch (err) {
+                    this.logger.error('Error in message callback:', err);
+                }
+            };
+            
+            // Configure the channel to listen for changes
+            channel.on('postgres_changes', 
                 {
                     event: 'INSERT',
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
                 },
-                (payload) => {
-                    this.logger.info(`Message received for conversation ${conversationId}`);
-                    if (payload.new && localCallback) {
-                        localCallback(payload.new);
-                    }
+                payload => {
+                    this.logger.info(`Received message for conversation ${conversationId}`);
+                    safeCallback(payload);
                 }
             );
             
-            // Now subscribe with proper error handling
-            let isSubscribed = false;
-            
-            const subscription = {
-                unsubscribe: () => {
-                    this.logger.info(`Unsubscribing from ${channelName}`);
-                    try {
-                        if (isSubscribed) {
-                            channel.unsubscribe();
-                            isSubscribed = false;
-                        }
-                    } catch (err) {
-                        this.logger.warn(`Error during unsubscribe: ${err.message}`);
-                    }
-                },
-                channelName,
-                conversationId
-            };
-            
-            // Add status handler and subscribe
-            channel.subscribe((status) => {
+            // Handle subscription status
+            const handleStatus = (status) => {
                 this.logger.info(`Subscription status for ${conversationId}: ${status}`);
                 
                 if (status === 'SUBSCRIBED') {
                     isSubscribed = true;
-                } else if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
-                    this.logger.warn(`Channel ${channelName} has error status: ${status}`);
-                    isSubscribed = false;
+                    subscriptionTimedOut = false;
+                    retryCount = 0; // Reset retry counter on success
                     
-                    // Dispatch event for UI to handle
-                    window.dispatchEvent(new CustomEvent('subscription-error', { 
-                        detail: { conversationId, status } 
+                    // Clear any pending retry
+                    if (retryTimer) {
+                        clearTimeout(retryTimer);
+                        retryTimer = null;
+                    }
+                    
+                } else if (status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+                    isSubscribed = false;
+                    subscriptionTimedOut = true;
+                    
+                    // Update UI about the issue
+                    window.dispatchEvent(new CustomEvent('subscription-error', {
+                        detail: { conversationId, status }
                     }));
+                    
+                    // Try to reconnect if we haven't exceeded max retries
+                    if (retryCount < maxRetries) {
+                        this.logger.warn(`Subscription failed (${status}). Retry ${retryCount + 1}/${maxRetries} in 5 seconds...`);
+                        
+                        retryTimer = setTimeout(() => {
+                            retryCount++;
+                            
+                            // Try to unsubscribe first
+                            try {
+                                channel.unsubscribe();
+                            } catch (err) {
+                                this.logger.warn('Error unsubscribing before retry:', err);
+                            }
+                            
+                            // Resubscribe after a delay
+                            try {
+                                channel.subscribe(handleStatus);
+                            } catch (err) {
+                                this.logger.error('Error resubscribing:', err);
+                                
+                                // Fall back to polling if subscription fails repeatedly
+                                if (retryCount >= maxRetries) {
+                                    this.logger.warn('Max retries exceeded, falling back to polling');
+                                    this._fallbackToPolling(conversationId, safeCallback);
+                                }
+                            }
+                        }, 5000);
+                    } else {
+                        // We've exceeded max retries, fall back to polling
+                        this.logger.warn('Max retries exceeded, falling back to polling');
+                        this._fallbackToPolling(conversationId, safeCallback);
+                    }
                 }
-            });
+            };
             
-            return subscription;
-        } catch (error) {
-            this.logger.error('Error in subscribeToNewMessages:', error);
+            // Now subscribe and get the initial status
+            try {
+                subscriptionInitiated = true;
+                channel.subscribe(handleStatus);
+            } catch (err) {
+                this.logger.error('Error during initial subscription:', err);
+                // Try polling as immediate fallback
+                this._fallbackToPolling(conversationId, safeCallback);
+            }
+            
+            // Return a custom subscription object with additional info
             return {
-                unsubscribe: () => {},
+                unsubscribe: () => {
+                    this.logger.info(`Unsubscribing from ${channelName}`);
+                    
+                    // Clear any pending retry
+                    if (retryTimer) {
+                        clearTimeout(retryTimer);
+                        retryTimer = null;
+                    }
+                    
+                    // Stop polling if it was started
+                    if (this.pollingSubscriptions && this.pollingSubscriptions[conversationId]) {
+                        this.pollingSubscriptions[conversationId].stop();
+                        delete this.pollingSubscriptions[conversationId];
+                    }
+                    
+                    // Try to unsubscribe if we actually subscribed
+                    if (subscriptionInitiated) {
+                        try {
+                            channel.unsubscribe();
+                        } catch (err) {
+                            this.logger.warn('Error during unsubscribe:', err);
+                        }
+                    }
+                },
+                checkStatus: () => ({ 
+                    isSubscribed, 
+                    subscriptionTimedOut,
+                    retryCount
+                }),
+                channelName,
                 conversationId
             };
+        } catch (error) {
+            this.logger.error('Error setting up subscription:', error);
+            return {
+                unsubscribe: () => {},
+                conversationId,
+                checkStatus: () => ({ 
+                    isSubscribed: false,
+                    subscriptionTimedOut: true,
+                    retryCount: 0
+                })
+            };
         }
+    }
+    
+    // Add a new method for polling fallback
+    _fallbackToPolling(conversationId, callback) {
+        // Initialize polling subscriptions store if needed
+        if (!this.pollingSubscriptions) {
+            this.pollingSubscriptions = {};
+        }
+        
+        // Stop existing polling if any
+        if (this.pollingSubscriptions[conversationId]) {
+            this.pollingSubscriptions[conversationId].stop();
+        }
+        
+        // Set up new polling
+        this.logger.info(`Setting up polling fallback for conversation ${conversationId}`);
+        const pollingSubscription = this.setupMessagePolling(conversationId, callback);
+        this.pollingSubscriptions[conversationId] = pollingSubscription;
+        
+        // Notify that we're using polling
+        window.dispatchEvent(new CustomEvent('polling-fallback-enabled', {
+            detail: { conversationId }
+        }));
+        
+        return pollingSubscription;
     }
 
     // Add method to mark messages as read

@@ -2,7 +2,7 @@
 
 ## 1. Fixing Database Policies
 
-The application is experiencing infinite recursion in the participants policy. Follow these steps:
+The application is experiencing infinite recursion in both the participants and messages policies. Follow these steps:
 
 1. **Manual Fix via Supabase Dashboard:**
    - Go to the [Supabase Dashboard](https://app.supabase.com/)
@@ -11,19 +11,33 @@ The application is experiencing infinite recursion in the participants policy. F
    - Copy and execute this SQL:
 
 ```sql
--- CRITICAL: Drop all existing policies on participants table
+-- CRITICAL: Fix participants table
 DROP POLICY IF EXISTS "Users can read participants" ON participants;
 DROP POLICY IF EXISTS "Users can add participants" ON participants;
 
--- Create simplified policies without recursion
 CREATE POLICY "Users can read participants" 
 ON participants FOR SELECT
 TO authenticated
 USING (user_id = auth.uid() OR true);
 
--- Simple insert policy 
 CREATE POLICY "Users can add participants" 
 ON participants FOR INSERT
+TO authenticated
+WITH CHECK (true);
+
+-- CRITICAL: Fix messages table
+DROP POLICY IF EXISTS "Users can read messages" ON messages;
+DROP POLICY IF EXISTS "Users can send messages" ON messages;
+DROP POLICY IF EXISTS "Enable read access for authenticated users" ON messages;
+DROP POLICY IF EXISTS "Enable insert access for participants" ON messages;
+
+CREATE POLICY "temp_messages_select" 
+ON messages FOR SELECT
+TO authenticated
+USING (true);
+
+CREATE POLICY "temp_messages_insert"
+ON messages FOR INSERT
 TO authenticated
 WITH CHECK (true);
 ```
