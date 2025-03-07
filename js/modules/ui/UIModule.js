@@ -403,6 +403,13 @@ export class UIModule extends BaseModule {
                 { device_id: this.deviceId }  // Add this metadata
             );
 
+            // CRITICAL FIX: Remove "no messages" placeholder if present
+            const noMessagesEl = messageContainer.querySelector('.no-messages');
+            if (noMessagesEl) {
+                this.logger.info('Removing "no messages" placeholder');
+                noMessagesEl.remove();
+            }
+
             // Add message to UI
             const messageEl = document.createElement('div');
             messageEl.className = 'message sent';
