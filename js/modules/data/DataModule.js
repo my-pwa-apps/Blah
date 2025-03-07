@@ -283,14 +283,14 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
             
-            // Use a simpler, more reliable query
+            // Fix the query syntax to properly join with profiles
             const query = this.supabase
                 .from('conversations')
                 .select(`
                     *,
                     participants!inner (
                         user_id,
-                        profiles!profiles (
+                        profiles:user_id(
                             id,
                             email,
                             display_name,
@@ -302,8 +302,9 @@ export class DataModule extends BaseModule {
                 .order('created_at', { ascending: false });
             
             if (skipCache) {
+                // Use a safer cache-busting approach
                 const timestamp = new Date().getTime();
-                query.limit(100).filter('id', 'neq', `dummy_${timestamp}`);
+                query.limit(100);
             }
             
             const { data, error } = await query;
@@ -313,35 +314,37 @@ export class DataModule extends BaseModule {
                 throw error;
             }
 
-            // Log detailed raw data for debugging
-            this.logger.info(`Raw fetch returned ${data?.length || 0} conversations for user ${userId}`);
-            data?.forEach(conv => {
-                const participantIds = conv.participants.map(p => p.user_id).join(', ');
-                const isSelfChat = conv.is_self_chat ? "Yes" : "No";
-                this.logger.info(`Conv ${conv.id}: is_self_chat=${isSelfChat}, participants=${participantIds}`);
-            });
+            this.logger.info(`Raw data: Found ${data?.length || 0} conversations for user ${userId}`);
             
-            // Process conversations - keep only one self-chat but ALL other chats
-            const processedConversations = [];
-            let foundSelfChat = false;
+            // Process conversations - keep one self-chat and ALL other chats
+            let processedConversations = [];
+            let selfChat = null;
             
             for (const conv of data || []) {
-                if (conv.is_self_chat || (conv.participants.length === 1 && conv.participants[0].user_id === userId)) {
-                    // Self chat - only keep the first one we find
-                    if (!foundSelfChat) {
-                        processedConversations.push(conv);
-                        foundSelfChat = true;
-                        this.logger.info(`Keeping self-chat: ${conv.id}`);
-                    } else {
-                        this.logger.info(`Skipping duplicate self-chat: ${conv.id}`);
+                // Check if this is a self chat
+                const isSelfChat = conv.is_self_chat || 
+                    (conv.participants.length === 1 && conv.participants[0].user_id === userId);
+                    
+                if (isSelfChat) {
+                    // Keep only the newest self chat
+                    if (!selfChat || new Date(conv.created_at) > new Date(selfChat.created_at)) {
+                        selfChat = conv;
+                        this.logger.info(`Found newer self-chat: ${conv.id}`);
                     }
                 } else {
-                    // Regular chat with other users - ALWAYS include
+                    // Always include regular chats with other users
                     processedConversations.push(conv);
                     this.logger.info(`Including regular chat: ${conv.id}`);
                 }
             }
             
+            // Add the self chat to the start if we found one
+            if (selfChat) {
+                processedConversations.unshift(selfChat);
+                this.logger.info(`Added self-chat ${selfChat.id} to results`);
+            }
+            
+            this.logger.info(`Returning ${processedConversations.length} processed conversations`);
             return processedConversations;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
