@@ -643,13 +643,24 @@ export class UIModule extends BaseModule {
             this.logger.info('Back button clicked, returning to sidebar');
             const chatArea = document.querySelector('.chat-area');
             const sidebar = document.querySelector('.sidebar');
+            
+            // First update the UI classes
             if (chatArea) chatArea.classList.remove('active');
             if (sidebar) sidebar.classList.remove('hidden');
+            
+            // Add a slight delay before resetting conversation to allow CSS transitions to complete
+            setTimeout(() => {
+                // Reset current conversation state
+                this.currentConversation = null;
+                this.logger.info('Current conversation reset to null after back button click');
+            }, 50);
         });
+        
         // Handle resizing properly
         window.addEventListener('resize', () => {
             this.adjustLayoutForScreenSize();
         });
+        
         // Initial adjustment
         this.adjustLayoutForScreenSize();
     }
@@ -659,6 +670,8 @@ export class UIModule extends BaseModule {
         const sidebar = document.querySelector('.sidebar');
         const chatArea = document.querySelector('.chat-area');
         if (!sidebar || !chatArea) return;
+
+        this.logger.info(`Adjusting layout for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);
 
         if (!isMobile) {
             // Desktop layout: both visible
@@ -671,15 +684,15 @@ export class UIModule extends BaseModule {
                 sidebar.classList.add('hidden');
                 chatArea.classList.add('active');
                 chatArea.classList.remove('hidden');
+                this.logger.info('Mobile layout: showing chat area');
             } else {
                 // Show sidebar when no conversation is selected
                 sidebar.classList.remove('hidden');
                 chatArea.classList.remove('active');
                 chatArea.classList.add('hidden');
+                this.logger.info('Mobile layout: showing conversation list');
             }
         }
-        
-        this.logger.info(`Layout adjusted for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);
     }
 
     debounce(func, wait) {
