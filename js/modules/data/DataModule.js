@@ -596,6 +596,104 @@ export class DataModule extends BaseModule {
         }
     }
 
+    async _handleSubscriptionError(channel, conversationId, callback) {
+        try {
+            this.logger.info(`Handling subscription error for conversation ${conversationId}`);
+            
+            // CRITICAL: Always unsubscribe from old channel first
+            if (channel) {
+                try {
+                    await channel.unsubscribe();
+                    this.logger.info('Successfully unsubscribed from old channel');
+                } catch (err) {
+                    this.logger.warn('Failed to unsubscribe from old channel:', err);
+                    // Continue regardless of error
+                }
+            }
+            
+            // Wait before attempting to create a new channel
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // Generate a truly unique channel name with timestamp AND random string
+            const random = Math.random().toString(36).substring(2, 10);
+            const uniqueChannelId = `messages:${conversationId}:${Date.now()}_${random}`;
+            
+            this.logger.info(`Creating completely new channel with ID: ${uniqueChannelId}`);
+            
+            // Create an entirely new channel
+            try {
+                const newChannel = this.supabase.channel(uniqueChannelId);
+                
+                if (!callback) {
+                    this.logger.warn('No callback provided for reconnected channel');
+                    return null;
+                }
+                
+                // Set up the new channel with the same configuration
+                newChannel.on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `conversation_id=eq.${conversationId}`
+                    },
+                    (payload) => {
+                        this.logger.info(`Message received on reconnected channel for ${conversationId}`);
+                        if (payload.new) {
+                            callback(payload.new);
+                        }
+                    }
+                );
+                
+                // Subscribe to the new channel
+                await new Promise((resolve, reject) => {
+                    let hasReturned = false;
+                    
+                    newChannel.subscribe((status) => {
+                        this.logger.info(`New channel ${uniqueChannelId} status: ${status}`);
+                        
+                        if (!hasReturned) {
+                            if (status === 'SUBSCRIBED') {
+                                hasReturned = true;
+                                resolve();
+                            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+                                hasReturned = true;
+                                reject(new Error(`Failed to subscribe: ${status}`));
+                            }
+                        }
+                    });
+                    
+                    // Add timeout to prevent hanging
+                    setTimeout(() => {
+                        if (!hasReturned) {
+                            hasReturned = true;
+                            reject(new Error('Subscription timeout'));
+                        }
+                    }, 5000);
+                });
+                
+                return {
+                    unsubscribe: () => {
+                        try {
+                            newChannel.unsubscribe();
+                            this.logger.info(`Unsubscribed from channel ${uniqueChannelId}`);
+                        } catch (e) {
+                            this.logger.warn(`Error unsubscribing from channel ${uniqueChannelId}:`, e);
+                        }
+                    },
+                    conversationId
+                };
+            } catch (err) {
+                this.logger.error('Error creating new channel:', err);
+                return null;
+            }
+        } catch (error) {
+            this.logger.error('Error in subscription recovery process:', error);
+            return null;
+        }
+    }
+
     subscribeToNewMessages(conversationId, callback) {
         this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
         
@@ -646,6 +744,97 @@ export class DataModule extends BaseModule {
                 unsubscribe: () => {},
                 conversationId
             };
+        }
+    }
+
+    subscribeToNewMessages(conversationId, callback) {
+        this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
+        
+        try {
+            // Generate a unique channel name with timestamp and random string
+            const random = Math.random().toString(36).substring(2, 10);
+            const channelName = `messages:${conversationId}:${Date.now()}_${random}`;
+            
+            this.logger.info(`Creating channel: ${channelName}`);
+            
+            const channel = this.supabase.channel(channelName);
+            
+            // Configure channel before subscribing
+            channel.on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages',
+                    filter: `conversation_id=eq.${conversationId}`
+                },
+                (payload) => {
+                    this.logger.info(`New message received for conversation ${conversationId}`);
+                    if (payload.new) {
+                        callback(payload.new);
+                    }
+                }
+            );
+            
+            // Subscribe with better error handling
+            channel.subscribe((status) => {
+                this.logger.info(`Subscription status for ${conversationId} (${channelName}): ${status}`);
+                
+                if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+                    this.logger.warn(`Channel ${channelName} has error status: ${status}`);
+                    
+                    // Don't use the current subscription for reconnection
+                    this._recreateSubscription(conversationId, callback);
+                }
+            });
+
+            return {
+                unsubscribe: () => {
+                    this.logger.info(`Unsubscribing from conversation ${conversationId} (${channelName})`);
+                    try {
+                        channel.unsubscribe();
+                    } catch (err) {
+                        this.logger.warn(`Error during unsubscribe for ${channelName}:`, err);
+                    }
+                },
+                conversationId,
+                channelName
+            };
+        } catch (error) {
+            this.logger.error('Error setting up message subscription:', error);
+            return {
+                unsubscribe: () => {},
+                conversationId
+            };
+        }
+    }
+
+    // New method to safely recreate subscription after failure
+    async _recreateSubscription(conversationId, callback) {
+        this.logger.info(`Recreating subscription for conversation ${conversationId}`);
+        
+        // Wait a bit before attempting reconnect
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        
+        try {
+            // Create a completely new subscription
+            const newSubscription = this.subscribeToNewMessages(conversationId, callback);
+            
+            // Signal that we've recreated the subscription
+            window.dispatchEvent(new CustomEvent('subscription-recreated', { 
+                detail: { conversationId, success: true } 
+            }));
+            
+            this.logger.info(`Successfully recreated subscription for ${conversationId}`);
+            return newSubscription;
+        } catch (error) {
+            this.logger.error(`Failed to recreate subscription for ${conversationId}:`, error);
+            
+            window.dispatchEvent(new CustomEvent('subscription-recreated', { 
+                detail: { conversationId, success: false, error: error.message } 
+            }));
+            
+            return null;
         }
     }
 

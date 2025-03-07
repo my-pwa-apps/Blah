@@ -407,33 +407,110 @@ export class UIModule extends BaseModule {
         this.logger.info(`Loading conversation: ${conversationId}`);
         
         try {
-            // Clean up existing subscription first
+            // Clean up existing subscription with better error handling
             if (this.currentSubscription) {
                 this.logger.info('Cleaning up existing subscription');
-                this.currentSubscription.unsubscribe();
+                try {
+                    this.currentSubscription.unsubscribe();
+                } catch (err) {
+                    this.logger.warn('Error cleaning up subscription:', err);
+                }
                 this.currentSubscription = null;
             }
             
             this.currentConversation = conversationId;
             
-            // Set up new subscription before loading messages
-            this.logger.info('Setting up new message subscription');
+            // Update UI state first
+            this._updateConversationUI(conversationId);
+            
+            // Load existing messages
             const dataModule = this.getModule('data');
+            const messages = await dataModule.fetchMessages(conversationId);
+            this._renderMessages(messages);
+            
+            // Set up new subscription after messages are loaded
+            this.logger.info('Setting up new message subscription');
             this.currentSubscription = dataModule.subscribeToNewMessages(
                 conversationId,
                 (message) => this._handleNewMessage(message)
             );
             
-            // Load existing messages
-            const messages = await dataModule.fetchMessages(conversationId);
-            this._renderMessages(messages);
+            // Listen for subscription recreation events
+            window.addEventListener('subscription-recreated', this._handleSubscriptionRecreated.bind(this));
             
-            // Update UI
-            this._updateConversationUI(conversationId);
+            // Mark messages as read
+            await dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
             
         } catch (error) {
             this.logger.error('Error loading conversation:', error);
             this.showError('Failed to load conversation');
+        }
+    }
+
+    _handleSubscriptionRecreated(event) {
+        const { conversationId, success } = event.detail;
+        
+        // Only handle events for the current conversation
+        if (conversationId !== this.currentConversation) return;
+        
+        if (success) {
+            this.logger.info(`Subscription successfully recreated for ${conversationId}`);
+        } else {
+            this.logger.warn(`Subscription recreation failed for ${conversationId}`);
+            // Optionally show a connection warning to the user
+            this._showConnectionWarning();
+        }
+    }
+
+    _showConnectionWarning() {
+        const messageContainer = document.getElementById('message-container');
+        if (!messageContainer) return;
+        
+        // Check if warning already exists
+        if (document.getElementById('connection-warning')) return;
+        
+        const warning = document.createElement('div');
+        warning.id = 'connection-warning';
+        warning.className = 'connection-warning';
+        warning.innerHTML = `
+            <span class="warning-icon">⚠️</span>
+            <span>Connection issues detected. Messages may be delayed.</span>
+            <button class="retry-button">Retry</button>
+        `;
+        
+        // Add retry handler
+        warning.querySelector('.retry-button').addEventListener('click', () => {
+            this._recreateSubscription();
+            warning.remove();
+        });
+        
+        messageContainer.appendChild(warning);
+    }
+
+    _recreateSubscription() {
+        if (!this.currentConversation) return;
+        
+        try {
+            // Clean up existing subscription
+            if (this.currentSubscription) {
+                try {
+                    this.currentSubscription.unsubscribe();
+                } catch (err) {
+                    this.logger.warn('Error cleaning up subscription:', err);
+                }
+                this.currentSubscription = null;
+            }
+            
+            // Create new subscription
+            const dataModule = this.getModule('data');
+            this.currentSubscription = dataModule.subscribeToNewMessages(
+                this.currentConversation,
+                (message) => this._handleNewMessage(message)
+            );
+            
+            this.logger.info('Manually recreated subscription');
+        } catch (error) {
+            this.logger.error('Error recreating subscription:', error);
         }
     }
 
