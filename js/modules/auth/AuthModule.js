@@ -30,15 +30,22 @@ export class AuthModule extends BaseModule {
         try {
             // Add rate limiting check
             if (this._isRateLimited('signin')) {
-                throw new Error('Too many sign in attempts. Please try again later.');
+                throw new Error('Too many sign in attempts. Please wait before trying again.');
             }
 
-            // Validate input
-            if (!this._validateEmail(email) || !this._validatePassword(password)) {
-                throw new Error('Invalid email or password format');
+            // Improved validation with better error messages
+            if (!email || !password) {
+                throw new Error('Email and password are required');
             }
 
-            this.logger.info('Attempting sign in for:', email);
+            if (!this._validateEmail(email)) {
+                throw new Error('Please enter a valid email address');
+            }
+
+            if (!this._validatePassword(password)) {
+                throw new Error('Password must be at least 6 characters long');
+            }
+
             const { data, error } = await this.supabase.auth.signInWithPassword({
                 email,
                 password
@@ -99,11 +106,17 @@ export class AuthModule extends BaseModule {
     }
 
     _validateEmail(email) {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+        // Using a more permissive but secure email validation
+        return email && 
+               email.includes('@') && 
+               email.includes('.') && 
+               email.length >= 5 && 
+               email.length <= 254;  // RFC 5321
     }
 
     _validatePassword(password) {
-        return password && password.length >= 8;
+        // Allow any password that's at least 6 characters
+        return password && password.length >= 6;
     }
 
     // Add CSRF token handling
