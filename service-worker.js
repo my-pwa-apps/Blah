@@ -45,11 +45,12 @@ self.addEventListener('activate', event => {
 
 // Fetch event - serve from cache if available, otherwise fetch from network
 self.addEventListener('fetch', event => {
+    // Add security headers to all responses
     event.respondWith(
         caches.match(event.request)
             .then(response => {
                 if (response) {
-                    return response;
+                    return addSecurityHeaders(response);
                 }
                 
                 return fetch(event.request).then(
@@ -58,15 +59,29 @@ self.addEventListener('fetch', event => {
                             return response;
                         }
                         
-                        const responseToCache = response.clone();
+                        const secureResponse = addSecurityHeaders(response.clone());
                         caches.open(CACHE_NAME)
                             .then(cache => {
-                                cache.put(event.request, responseToCache);
+                                cache.put(event.request, secureResponse);
                             });
                         
-                        return response;
+                        return secureResponse;
                     }
                 );
             })
     );
 });
+
+function addSecurityHeaders(response) {
+    const headers = new Headers(response.headers);
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('X-Frame-Options', 'DENY');
+    headers.set('X-XSS-Protection', '1; mode=block');
+    headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    
+    return new Response(response.body, {
+        status: response.status,
+        statusText: response.statusText,
+        headers
+    });
+}

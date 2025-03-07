@@ -203,6 +203,17 @@ export class DataModule extends BaseModule {
 
     async sendMessage(conversationId, senderId, content) {
         try {
+            // Sanitize and validate input
+            content = this._sanitizeInput(content);
+            if (!this._validateMessageContent(content)) {
+                throw new Error('Invalid message content');
+            }
+
+            // Add rate limiting for messages
+            if (this._isRateLimited('message_send')) {
+                throw new Error('Please wait before sending more messages');
+            }
+
             const { data, error } = await this.supabase
                 .from('messages')
                 .insert({
@@ -212,26 +223,49 @@ export class DataModule extends BaseModule {
                 })
                 .select()
                 .single();
-            
+
             if (error) throw error;
-            
-            // Update conversation's last message
-            await this.supabase
-                .from('conversations')
-                .update({
-                    last_message: {
-                        content,
-                        sender_id: senderId,
-                        created_at: new Date().toISOString()
-                    }
-                })
-                .eq('id', conversationId);
-            
+            this._updateRateLimit('message_send');
             return data;
         } catch (error) {
             this.logger.error('Error sending message:', error);
             throw error;
         }
+    }
+
+    _sanitizeInput(content) {
+        // Basic XSS prevention
+        return content
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#x27;')
+            .trim();
+    }
+
+    _validateMessageContent(content) {
+        return content && 
+               content.length > 0 && 
+               content.length <= 2000 && // reasonable message length limit
+               !/^\s*$/.test(content);    // not just whitespace
+    }
+
+    _isRateLimited(action) {
+        const key = `rate_limit_${action}`;
+        const limit = JSON.parse(sessionStorage.getItem(key) || '[]');
+        const now = Date.now();
+        // Keep only recent attempts (last 60 seconds)
+        const recent = limit.filter(time => now - time < 60000);
+        // Allow 10 messages per minute
+        return recent.length >= 10;
+    }
+
+    _updateRateLimit(action) {
+        const key = `rate_limit_${action}`;
+        const limit = JSON.parse(sessionStorage.getItem(key) || '[]');
+        limit.push(Date.now());
+        sessionStorage.setItem(key, JSON.stringify(limit));
     }
 
     async fetchMessages(conversationId) {
