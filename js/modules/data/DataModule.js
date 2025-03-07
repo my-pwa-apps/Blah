@@ -686,10 +686,17 @@ export class DataModule extends BaseModule {
                         retryTimer = null;
                     }
                     
-                    // Stop polling if it was started
-                    if (this.pollingSubscriptions && this.pollingSubscriptions[conversationId]) {
-                        this.pollingSubscriptions[conversationId].stop();
-                        delete this.pollingSubscriptions[conversationId];
+                    // Stop polling if it was started - WITH PROPER VALIDATION
+                    if (this.pollingSubscriptions && 
+                        this.pollingSubscriptions[conversationId] && 
+                        typeof this.pollingSubscriptions[conversationId].stop === 'function') {
+                        try {
+                            this.pollingSubscriptions[conversationId].stop();
+                            delete this.pollingSubscriptions[conversationId];
+                            this.logger.info(`Stopped polling fallback for ${conversationId}`);
+                        } catch (err) {
+                            this.logger.warn(`Error stopping polling for ${conversationId}:`, err);
+                        }
                     }
                     
                     // Try to unsubscribe if we actually subscribed
@@ -730,9 +737,15 @@ export class DataModule extends BaseModule {
             this.pollingSubscriptions = {};
         }
         
-        // Stop existing polling if any
-        if (this.pollingSubscriptions[conversationId]) {
-            this.pollingSubscriptions[conversationId].stop();
+        // Stop existing polling if any - WITH PROPER VALIDATION
+        if (this.pollingSubscriptions[conversationId] && 
+            typeof this.pollingSubscriptions[conversationId].stop === 'function') {
+            try {
+                this.pollingSubscriptions[conversationId].stop();
+                this.logger.info(`Stopped existing polling for conversation ${conversationId}`);
+            } catch (err) {
+                this.logger.warn(`Error stopping existing polling for ${conversationId}:`, err);
+            }
         }
         
         // Set up new polling
@@ -748,36 +761,17 @@ export class DataModule extends BaseModule {
         return pollingSubscription;
     }
 
-    // Add method to mark messages as read
-    async markMessagesAsRead(conversationId, userId) {
-        try {
-            // Update the participant's last_read_at field instead of conversation's last_read
-            const { error } = await this.supabase
-                .from('participants')
-                .update({
-                    last_read_at: new Date().toISOString()
-                })
-                .eq('conversation_id', conversationId)
-                .eq('user_id', userId);
-            
-            if (error) throw error;
-            
-            this.logger.info(`Marked conversation ${conversationId} as read for user ${userId}`);
-            return true;
-        } catch (error) {
-            this.logger.error('Error marking messages as read:', error);
-            return false;
-        }
-    }
-
-    // Add polling fallback for when real-time fails
+    // Add polling fallback for when real-time fails - WITH PROPER ERROR HANDLING
     async setupMessagePolling(conversationId, callback, interval = 3000) {
         this.logger.info(`Setting up message polling for conversation: ${conversationId}`);
         
         let lastTimestamp = new Date().toISOString();
         let timerId = null;
+        let isActive = true;
         
         const checkForNewMessages = async () => {
+            if (!isActive) return;
+            
             try {
                 const { data, error } = await this.supabase
                     .from('messages')
@@ -806,25 +800,59 @@ export class DataModule extends BaseModule {
                     
                     // Process each new message
                     data.forEach(message => {
-                        callback(message);
+                        if (isActive && typeof callback === 'function') {
+                            callback(message);
+                        }
                     });
                 }
             } catch (error) {
                 this.logger.error('Error during message polling:', error);
             }
+            
+            // Schedule next check if still active
+            if (isActive) {
+                timerId = setTimeout(checkForNewMessages, interval);
+            }
         };
         
-        timerId = setInterval(checkForNewMessages, interval);
+        // Start the polling process
+        timerId = setTimeout(checkForNewMessages, 0);
         
+        // Always return a properly structured object with a stop method
         return {
             stop: () => {
+                this.logger.info(`Stopping polling for conversation: ${conversationId}`);
+                isActive = false;
                 if (timerId) {
-                    clearInterval(timerId);
-                    this.logger.info(`Stopped polling for conversation: ${conversationId}`);
+                    clearTimeout(timerId);
+                    timerId = null;
                 }
             },
+            isActive: () => isActive,
             conversationId
         };
+    }
+
+    // Add method to mark messages as read
+    async markMessagesAsRead(conversationId, userId) {
+        try {
+            // Update the participant's last_read_at field instead of conversation's last_read
+            const { error } = await this.supabase
+                .from('participants')
+                .update({
+                    last_read_at: new Date().toISOString()
+                })
+                .eq('conversation_id', conversationId)
+                .eq('user_id', userId);
+            
+            if (error) throw error;
+            
+            this.logger.info(`Marked conversation ${conversationId} as read for user ${userId}`);
+            return true;
+        } catch (error) {
+            this.logger.error('Error marking messages as read:', error);
+            return false;
+        }
     }
 
     // Add a method to subscribe to all new messages (global updates)
