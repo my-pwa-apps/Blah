@@ -1055,11 +1055,49 @@ export class UIModule extends BaseModule {
         const messageEl = document.createElement('div');
         messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
         messageEl.dataset.messageId = message.id;
+
+        // Add delete button for sent messages
+        const deleteButton = isSent ? `
+            <button class="message-delete" aria-label="Delete message">
+                <span class="material-icons">delete</span>
+            </button>
+        ` : '';
+        
         messageEl.innerHTML = `
             <div class="message-content">${message.content}</div>
-            <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+            <div class="message-info">
+                ${new Date(message.created_at).toLocaleTimeString()}
+                ${deleteButton}
+            </div>
         `;
+
+        // Add delete handler
+        if (isSent) {
+            const deleteBtn = messageEl.querySelector('.message-delete');
+            deleteBtn?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._handleMessageDelete(message.id);
+            });
+        }
+
         return messageEl;
+    }
+
+    async _handleMessageDelete(messageId) {
+        try {
+            if (!confirm('Are you sure you want to delete this message?')) {
+                return;
+            }
+
+            const dataModule = this.getModule('data');
+            await dataModule.deleteMessage(messageId, this.currentUser.id);
+
+            // Message will be removed by real-time event handler
+            this.logger.info(`Message ${messageId} deletion requested`);
+        } catch (error) {
+            this.logger.error('Failed to delete message:', error);
+            this.showError('Failed to delete message');
+        }
     }
 
     // Improve real-time message subscription

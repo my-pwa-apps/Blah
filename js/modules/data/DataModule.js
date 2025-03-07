@@ -488,13 +488,23 @@ export class DataModule extends BaseModule {
             const channel = this.supabase
                 .channel(channelName)
                 .on('postgres_changes', {
-                    event: 'INSERT',
+                    event: '*', // Changed from 'INSERT' to '*' to catch all events
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
                 }, async (payload) => {
-                    this.logger.info(`Received real-time event for conversation ${conversationId}`);
+                    this.logger.info(`Received real-time event for conversation ${conversationId}:`, payload);
                     
+                    // Handle deletion events
+                    if (payload.eventType === 'DELETE') {
+                        callback({
+                            type: 'DELETE',
+                            id: payload.old.id
+                        });
+                        return;
+                    }
+                    
+                    // Handle inserts and updates
                     if (!payload.new || !payload.new.id) {
                         this.logger.warn('Received empty payload', payload);
                         return;
@@ -740,6 +750,36 @@ export class DataModule extends BaseModule {
             return {
                 unsubscribe: () => {}
             };
+        }
+    }
+
+    async deleteMessage(messageId, userId) {
+        try {
+            // Verify user owns the message first
+            const { data: message, error: fetchError } = await this.supabase
+                .from('messages')
+                .select('sender_id')
+                .eq('id', messageId)
+                .single();
+
+            if (fetchError) throw fetchError;
+            if (!message || message.sender_id !== userId) {
+                throw new Error('Cannot delete message: Not the sender');
+            }
+
+            // Delete the message
+            const { error: deleteError } = await this.supabase
+                .from('messages')
+                .delete()
+                .eq('id', messageId);
+
+            if (deleteError) throw deleteError;
+            
+            this.logger.info(`Message ${messageId} deleted successfully`);
+            return true;
+        } catch (error) {
+            this.logger.error('Error deleting message:', error);
+            throw error;
         }
     }
 }
