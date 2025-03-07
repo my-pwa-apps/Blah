@@ -154,6 +154,28 @@ export class DataModule extends BaseModule {
         }
     }
 
+    async fetchMessages(conversationId) {
+        try {
+            const { data, error } = await this.supabase
+                .from('messages')
+                .select(`
+                    id,
+                    content,
+                    created_at,
+                    sender_id,
+                    profiles (*)
+                `)
+                .eq('conversation_id', conversationId)
+                .order('created_at', { ascending: true });
+                
+            if (error) throw error;
+            return data || [];
+        } catch (error) {
+            this.logger.error('Error fetching messages:', error);
+            return [];
+        }
+    }
+
     async searchUsers(query) {
         try {
             const { data, error } = await this.supabase

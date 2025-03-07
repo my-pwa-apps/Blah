@@ -377,6 +377,9 @@ export class UIModule extends BaseModule {
         if (profileName) {
             profileName.textContent = profile.display_name || profile.email;
         }
+        
+        // Render conversations immediately after login
+        this.renderConversationsList();
     }
 
     showOnlineStatus(online = true) {
@@ -446,6 +449,26 @@ export class UIModule extends BaseModule {
             chatArea?.classList.remove('active');
             sidebar?.classList.remove('hidden');
             this.currentConversation = null;
+            
+            // Make sure the chat area is visible on desktop
+            if (window.innerWidth > 768) {
+                chatArea?.classList.remove('hidden');
+            }
+        });
+        
+        // Reset layout on resize
+        window.addEventListener('resize', () => {
+            const chatArea = document.querySelector('.chat-area');
+            const sidebar = document.querySelector('.sidebar');
+            
+            if (window.innerWidth > 768) {
+                chatArea?.classList.remove('active', 'hidden');
+                sidebar?.classList.remove('hidden');
+            } else if (!this.currentConversation) {
+                // On mobile, show sidebar by default if no conversation is selected
+                chatArea?.classList.remove('active');
+                sidebar?.classList.remove('hidden');
+            }
         });
     }
 

@@ -617,6 +617,10 @@ body {
     #back-button {
         color: white;
     }
+
+    .user-profile .profile-name {
+        display: none; /* Hide on mobile to save space */
+    }
 }
 
 /* Sidebar styles */
@@ -947,7 +951,7 @@ body {
 
 .user-email {
     font-size: 0.85rem;
-    color: var(--md-text-secondary);
+    color: var (--md-text-secondary);
 }
 
 /* Utility classes */
