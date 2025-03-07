@@ -94,26 +94,110 @@ export class UIModule extends BaseModule {
     setupConversationListeners() {
         const newConversationBtn = document.getElementById('new-conversation');
         const modal = document.getElementById('new-conversation-modal');
+        const startConversationBtn = document.getElementById('start-conversation');
+        let selectedUserId = null;
 
         newConversationBtn?.addEventListener('click', () => {
             this.logger.info('New conversation button clicked');
             modal?.classList.remove('hidden');
+            selectedUserId = null;
+            startConversationBtn.disabled = true;
+            
+            // Add self-chat option immediately
+            const userSearchResults = document.getElementById('user-search-results');
+            userSearchResults.innerHTML = `
+                <div class="user-search-item" data-user-id="${this.currentUser.id}">
+                    <div class="user-avatar">
+                        <img src="${this.currentUser.avatar_url || 'images/default-avatar.png'}" alt="Avatar">
+                    </div>
+                    <div class="user-info">
+                        <div class="user-name">Notes to Self</div>
+                        <div class="user-email">${this.currentUser.email}</div>
+                    </div>
+                </div>
+            `;
+            
             document.getElementById('user-search')?.focus();
+        });
+
+        // User search with debounce
+        const userSearch = document.getElementById('user-search');
+        userSearch?.addEventListener('input', this.debounce(async (e) => {
+            const query = e.target.value.trim();
+            const users = await this.getModule('data').searchUsers(query);
+            this.renderUserSearchResults(users);
+        }, 300));
+
+        // Handle user selection
+        document.getElementById('user-search-results')?.addEventListener('click', (e) => {
+            const item = e.target.closest('.user-search-item');
+            if (!item) return;
+
+            // Remove previous selection
+            document.querySelectorAll('.user-search-item.selected').forEach(el => 
+                el.classList.remove('selected'));
+            
+            // Add new selection
+            item.classList.add('selected');
+            selectedUserId = item.dataset.userId;
+            startConversationBtn.disabled = false;
+        });
+
+        // Handle start conversation
+        startConversationBtn?.addEventListener('click', () => {
+            if (selectedUserId) {
+                this.startNewConversation(selectedUserId);
+                modal?.classList.add('hidden');
+            }
         });
 
         // Close modal handlers
         document.getElementById('close-new-conversation')?.addEventListener('click', () => {
             modal?.classList.add('hidden');
         });
+    }
 
-        // User search handler
-        document.getElementById('user-search')?.addEventListener('input', async (e) => {
-            const query = e.target.value.trim();
-            if (query) {
-                const users = await this.getModule('data').searchUsers(query);
-                this.renderUserSearchResults(users);
-            }
-        });
+    async renderConversationsList() {
+        const conversationsList = document.getElementById('conversations-list');
+        if (!conversationsList) return;
+
+        try {
+            const dataModule = this.getModule('data');
+            const conversations = await dataModule.fetchConversations(this.currentUser.id);
+            
+            conversationsList.innerHTML = conversations.map(conv => {
+                const isSelfChat = conv.participants.length === 1;
+                const otherParticipant = isSelfChat ? null : 
+                    conv.participants.find(p => p.user_id !== this.currentUser.id);
+                
+                const name = isSelfChat ? 'Notes to Self' : 
+                    otherParticipant?.display_name || otherParticipant?.email || 'Unknown';
+                const avatar = isSelfChat ? this.currentUser.avatar_url : 
+                    otherParticipant?.avatar_url;
+
+                return `
+                    <div class="conversation-item" data-conversation-id="${conv.id}">
+                        <div class="conversation-avatar">
+                            <img src="${avatar || 'images/default-avatar.png'}" alt="Avatar">
+                        </div>
+                        <div class="conversation-details">
+                            <div class="conversation-name">${name}</div>
+                            <div class="conversation-last-message">
+                                ${conv.last_message?.content || 'No messages yet'}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add click handlers
+            conversationsList.querySelectorAll('.conversation-item').forEach(item => {
+                item.addEventListener('click', () => this.loadConversation(item.dataset.conversationId));
+            });
+        } catch (error) {
+            this.logger.error('Failed to render conversations:', error);
+            this.showError('Failed to load conversations');
+        }
     }
 
     setupMessageListeners() {
@@ -315,5 +399,18 @@ export class UIModule extends BaseModule {
                 profileModal.classList.add('hidden');
             }
         });
+    }
+
+    // Add debounce utility method
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func.apply(this, args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
     }
 }

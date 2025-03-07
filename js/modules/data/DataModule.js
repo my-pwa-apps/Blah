@@ -144,4 +144,20 @@ export class DataModule extends BaseModule {
             throw error;
         }
     }
+
+    async searchUsers(query) {
+        try {
+            const { data, error } = await this.supabase
+                .from('profiles')
+                .select('id, email, display_name, avatar_url')
+                .or(`email.ilike.%${query}%,display_name.ilike.%${query}%`)
+                .limit(10);
+            
+            if (error) throw error;
+            return data;
+        } catch (error) {
+            this.logger.error('Error searching users:', error);
+            return [];
+        }
+    }
 }
