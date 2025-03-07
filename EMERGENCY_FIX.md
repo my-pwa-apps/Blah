@@ -119,4 +119,55 @@ The timeout errors happen when:
 
 The fixes reconfigure the real-time system and provide a polling fallback when WebSockets aren't working.
 
+## New Issue: Real-Time Connection Failures
+
+If you're experiencing persistent "CLOSED" or "TIMED_OUT" errors with real-time connections:
+
+### Immediate Solutions:
+
+1. **Use the Real-Time Fixer Tool**:
+   - Include this script tag in your application:
+   ```html
+   <script src="js/realtime_fixer.js"></script>
+   ```
+   - Use the floating panel to test and fix real-time connections
+   - If fixes don't work, enable polling mode as a fallback
+
+2. **Manual Database Configuration**:
+   - Go to the Supabase SQL Editor
+   - Run this SQL to properly configure real-time:
+   ```sql
+   -- Drop and recreate the publication
+   DROP PUBLICATION IF EXISTS supabase_realtime;
+   CREATE PUBLICATION supabase_realtime FOR TABLE messages, participants, conversations;
+   
+   -- Set replica identity to FULL for all tables (needed for real-time)
+   ALTER TABLE messages REPLICA IDENTITY FULL;
+   ALTER TABLE participants REPLICA IDENTITY FULL;
+   ALTER TABLE conversations REPLICA IDENTITY FULL;
+   ALTER TABLE profiles REPLICA IDENTITY FULL;
+   
+   -- Configure publication to include all operations
+   ALTER PUBLICATION supabase_realtime SET (publish = 'insert, update, delete');
+   ```
+
+### Possible Causes and Solutions:
+
+1. **Network Issues**:
+   - Check if your network blocks WebSockets (ports 80/443)
+   - Try on a different network (e.g., mobile hotspot instead of corporate network)
+   - Verify that the network doesn't have a restrictive firewall
+
+2. **Browser Issues**:
+   - Try a different browser
+   - Clear cache and cookies
+   - Check for browser extensions that might interfere with WebSockets
+
+3. **Supabase Configuration**:
+   - Verify your project has real-time enabled in Supabase dashboard
+   - Check if you've reached your project's connection limits
+   - Ensure the tables are properly configured for real-time (REPLICA IDENTITY FULL)
+
+Our application now includes automatic failover to polling mode if real-time connections fail consistently. You may see a warning banner at the top of the page when this happens.
+
 If issues persist, please contact support.

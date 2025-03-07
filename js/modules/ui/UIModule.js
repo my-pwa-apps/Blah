@@ -1283,6 +1283,37 @@ export class UIModule extends BaseModule {
             // Show info message to user
             this._showConnectionIssueNotice(true);
         });
+
+        // Listen for real-time connection failure events
+        window.addEventListener('real-time-connection-failed', (event) => {
+            this._showPersistentConnectionWarning(event.detail.message);
+        });
+        
+        // Listen for real-time connection restored events
+        window.addEventListener('real-time-connection-restored', () => {
+            this._hidePersistentConnectionWarning();
+            this._showTemporaryMessage('Real-time connection restored', 'success');
+        });
+        
+        // Listen for global message events from polling
+        window.addEventListener('global-message-received', (event) => {
+            const message = event.detail.message;
+            if (!message) return;
+            
+            // Handle the message if we're not already in that conversation
+            if (message.conversation_id !== this.currentConversation) {
+                // Update unread indicator for this conversation
+                this._updateConversationWithNewMessage(message);
+                
+                // Show notification
+                this._showMessageNotification(message);
+            }
+        });
+        
+        // Listen for conversation refresh requests
+        window.addEventListener('refresh-conversations', () => {
+            this.renderConversationsList();
+        });
     }
 
     _toggleDebugPanel() {
@@ -1526,5 +1557,120 @@ export class UIModule extends BaseModule {
         notice.querySelector('.notice-close').addEventListener('click', () => {
             notice.remove();
         });
+    }
+
+    _showPersistentConnectionWarning(message = 'Connection issues detected. Using backup communication mode.') {
+        // Remove any existing warning first
+        this._hidePersistentConnectionWarning();
+        
+        const warning = document.createElement('div');
+        warning.id = 'persistent-connection-warning';
+        warning.className = 'persistent-connection-warning';
+        
+        warning.innerHTML = `
+            <div class="warning-content">
+                <span class="warning-icon">⚠️</span>
+                <span class="warning-message">${message}</span>
+                <a href="connection-diagnostics.html" target="_blank" class="warning-link">Troubleshoot</a>
+            </div>
+        `;
+        
+        // Add styles for the warning
+        const style = document.createElement('style');
+        style.textContent = `
+            .persistent-connection-warning {
+                position: fixed;
+                top: 0;
+                left: 0;
+                right: 0;
+                background: #ff9800;
+                color: white;
+                padding: 8px 16px;
+                text-align: center;
+                z-index: 1000;
+                font-size: 14px;
+                display: flex;
+                justify-content: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+            }
+            .warning-content {
+                display: flex;
+                align-items: center;
+                max-width: 800px;
+            }
+            .warning-icon {
+                margin-right: 10px;
+            }
+            .warning-message {
+                flex-grow: 1;
+            }
+            .warning-link {
+                margin-left: 15px;
+                color: white;
+                text-decoration: underline;
+                font-weight: bold;
+            }
+        `;
+        
+        document.head.appendChild(style);
+        document.body.insertAdjacentElement('afterbegin', warning);
+    }
+
+    _hidePersistentConnectionWarning() {
+        const warning = document.getElementById('persistent-connection-warning');
+        if (warning) {
+            warning.remove();
+        }
+    }
+
+    _showTemporaryMessage(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast toast-${type}`;
+        toast.textContent = message;
+        
+        // Add styles for the toast
+        const style = document.createElement('style');
+        style.textContent = `
+            .toast {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                padding: 12px 20px;
+                border-radius: 4px;
+                color: white;
+                opacity: 0;
+                transform: translateY(20px);
+                animation: toast-in 0.3s ease forwards, toast-out 0.3s ease 3s forwards;
+                z-index: 1000;
+            }
+            .toast-info {
+                background: #2196F3;
+            }
+            .toast-success {
+                background: #4CAF50;
+            }
+            .toast-warning {
+                background: #FF9800;
+            }
+            .toast-error {
+                background: #F44336;
+            }
+            @keyframes toast-in {
+                from { opacity: 0; transform: translateY(20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+            @keyframes toast-out {
+                from { opacity: 1; transform: translateY(0); }
+                to { opacity: 0; transform: translateY(-20px); }
+            }
+        `;
+        
+        document.head.appendChild(style);
+        document.body.appendChild(toast);
+        
+        // Remove after animation completes
+        setTimeout(() => {
+            toast.remove();
+        }, 3500);
     }
 }

@@ -73,34 +73,169 @@ export class DataModule extends BaseModule {
     
     // New helper method to create heartbeat channel
     _createHeartbeatChannel() {
-        this.heartbeatChannel = this.supabase.channel('heartbeat')
+        // Track reconnection attempts
+        if (!this.heartbeatReconnectCount) {
+            this.heartbeatReconnectCount = 0;
+        }
+        
+        // Generate a unique channel name with timestamp to avoid conflicts
+        const channelName = `heartbeat-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+        
+        this.logger.info(`Creating new heartbeat channel: ${channelName}`);
+        
+        this.heartbeatChannel = this.supabase.channel(channelName)
             .subscribe((status) => {
                 this.connectionStatus = status;
                 this.logger.info(`Real-time connection status: ${status}`);
                 
                 if (status === 'SUBSCRIBED') {
                     this.connectionStatus = 'CONNECTED';
+                    this.heartbeatReconnectCount = 0; // Reset counter on success
+                    
+                    // Reset failover mode if we're reconnected
+                    if (this.failoverMode) {
+                        this.failoverMode = false;
+                        this.logger.info('Exiting failover mode - real-time connection restored');
+                        window.dispatchEvent(new CustomEvent('real-time-connection-restored', {}));
+                    }
+                    
                 } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
                     this.connectionStatus = 'DISCONNECTED';
-                    // Try to reconnect with a new channel instance
-                    setTimeout(() => {
-                        try {
-                            // Unsubscribe from the old channel first
+                    this.heartbeatReconnectCount++;
+                    
+                    // After several failed attempts, switch to failover mode
+                    if (this.heartbeatReconnectCount >= 5 && !this.failoverMode) {
+                        this.logger.warn(`Failed to connect after ${this.heartbeatReconnectCount} attempts. Switching to failover mode.`);
+                        this.failoverMode = true;
+                        this._enableGlobalFailoverMode();
+                        return; // Don't continue reconnection attempts
+                    }
+                    
+                    // Try to reconnect with a new channel instance, but only if not in failover mode
+                    if (!this.failoverMode) {
+                        setTimeout(() => {
                             try {
-                                this.heartbeatChannel.unsubscribe();
-                            } catch (err) {
-                                // Ignore errors during unsubscribe
+                                // Unsubscribe from the old channel first
+                                try {
+                                    this.heartbeatChannel.unsubscribe();
+                                } catch (err) {
+                                    // Ignore errors during unsubscribe
+                                }
+                                
+                                this.logger.info('Attempting to recreate heartbeat connection...');
+                                this._createHeartbeatChannel();
+                            } catch (innerError) {
+                                this.logger.error('Failed to recreate heartbeat:', innerError);
                             }
-                            
-                            // Create a completely new channel with timestamp to avoid conflicts
-                            this.logger.info('Attempting to recreate heartbeat connection...');
-                            this._createHeartbeatChannel();
-                        } catch (innerError) {
-                            this.logger.error('Failed to recreate heartbeat:', innerError);
-                        }
-                    }, 3000);
+                        }, 3000);
+                    }
                 }
             });
+    }
+
+    // New method to enable global failover mode
+    _enableGlobalFailoverMode() {
+        this.logger.info('Enabling global failover mode');
+        
+        // Show status message to user
+        window.dispatchEvent(new CustomEvent('real-time-connection-failed', {
+            detail: {
+                message: 'Unable to establish real-time connection. Using backup communication mode.',
+                timestamp: new Date().toISOString()
+            }
+        }));
+        
+        // Automatically enable polling for current conversation
+        if (this.app && this.app.state) {
+            const currentConversationId = this.app.state.get('currentConversation');
+            if (currentConversationId) {
+                this.logger.info(`Auto-enabling polling for current conversation: ${currentConversationId}`);
+                this._switchToPollingForCurrentConversation(currentConversationId);
+            }
+        }
+        
+        // Also enable global message polling to keep conversation list updated
+        this._setupGlobalPolling();
+    }
+
+    // Helper method to switch to polling for current conversation
+    _switchToPollingForCurrentConversation(conversationId) {
+        // First check if we have a UI module with callback
+        const uiModule = this.app.modules.get('ui');
+        let messageCallback = null;
+        
+        if (uiModule && uiModule.currentSubscription && typeof uiModule.currentSubscription.callback === 'function') {
+            messageCallback = uiModule.currentSubscription.callback;
+        } else {
+            // Use a default callback that dispatches a general event
+            messageCallback = (message) => {
+                window.dispatchEvent(new CustomEvent('message-received', {
+                    detail: { message }
+                }));
+            };
+        }
+        
+        // Now set up polling for this conversation
+        this._fallbackToPolling(conversationId, messageCallback);
+    }
+
+    // New method to set up global polling to keep conversation list updated
+    _setupGlobalPolling() {
+        // Don't setup multiple times
+        if (this.globalPollingInterval) {
+            return;
+        }
+        
+        this.logger.info('Setting up global polling for all conversations');
+        
+        // Get current user
+        const userId = this.app.state.get('currentUser')?.id;
+        if (!userId) {
+            this.logger.warn('Cannot set up global polling: No current user');
+            return;
+        }
+        
+        let lastPollTimestamp = new Date().toISOString();
+        
+        // Poll for new messages every 10 seconds
+        this.globalPollingInterval = setInterval(async () => {
+            try {
+                // Query for any new messages in any conversation this user participates in
+                const { data, error } = await this.supabase
+                    .from('messages')
+                    .select(`
+                        id,
+                        content,
+                        created_at,
+                        conversation_id,
+                        sender_id,
+                        profiles:sender_id(display_name, avatar_url)
+                    `)
+                    .gt('created_at', lastPollTimestamp)
+                    .in('conversation_id', this.supabase.from('participants').select('conversation_id').eq('user_id', userId))
+                    .order('created_at', { ascending: true });
+                    
+                if (error) {
+                    throw error;
+                }
+                
+                if (data && data.length > 0) {
+                    lastPollTimestamp = data[data.length - 1].created_at;
+                    
+                    data.forEach(message => {
+                        // Dispatch event for each new message
+                        window.dispatchEvent(new CustomEvent('global-message-received', {
+                            detail: { message }
+                        }));
+                    });
+                    
+                    // Also trigger a conversations refresh
+                    window.dispatchEvent(new CustomEvent('refresh-conversations', {}));
+                }
+            } catch (error) {
+                this.logger.error('Error during global polling:', error);
+            }
+        }, 10000); // Every 10 seconds
     }
 
     // Add a method to get current connection status
@@ -991,6 +1126,12 @@ export class DataModule extends BaseModule {
         // Clear the connection check interval when cleaning up
         if (this.connectionCheckInterval) {
             clearInterval(this.connectionCheckInterval);
+        }
+        
+        // Clear global polling if active
+        if (this.globalPollingInterval) {
+            clearInterval(this.globalPollingInterval);
+            this.globalPollingInterval = null;
         }
         
         // Unsubscribe from heartbeat
