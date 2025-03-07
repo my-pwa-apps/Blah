@@ -245,31 +245,31 @@ export class UIModule extends BaseModule {
             
             // Render each conversation
             for (const conv of conversations) {
-                try {t with others
+                try {
                     // Log the conversation data for debugging
                     this.logger.info(`Processing conversation ${conv.id}:`, {
                         is_self_chat: conv.is_self_chat,
                         participantCount: conv.participants?.length,
                         userIsOnlyParticipant: conv.participants?.length === 1 && 
-                                             conv.participants[0].user_id === this.currentUser.id isSelfChat: isSelfChat,
-                    });    is_self_chat_flag: conv.is_self_chat,
-                    .length
+                                             conv.participants[0].user_id === this.currentUser.id
+                    });
+                    
                     // Explicitly determine self-chat status
                     const isSelfChat = Boolean(conv.is_self_chat) || 
                                      (conv.participants?.length === 1 && 
                                       conv.participants[0].user_id === this.currentUser.id);
                     
-                    let displayName, avatarUrl;    displayName = 'Notes to Self';
-                    his.currentUser.avatar_url;
+                    let displayName, avatarUrl;
+                    
                     if (isSelfChat) {
                         displayName = 'Notes to Self';
-                        avatarUrl = this.currentUser.avatar_url; => p.user_id !== this.currentUser.id);
+                        avatarUrl = this.currentUser.avatar_url;
                         this.logger.info(`Rendering self-chat: ${conv.id}`);
                     } else {
                         // Find the other user's profile - improved to handle multiple participants
-                        const otherUsers = conv.participants?.filter(p => p.user_id !== this.currentUser.id) || [];    if (otherUser?.profiles) {
-                        ser.profiles.display_name || otherUser.profiles.email || 'Unknown User';
-                        if (otherUsers.length > 0) {es.avatar_url;
+                        const otherUsers = conv.participants?.filter(p => p.user_id !== this.currentUser.id) || [];
+                        
+                        if (otherUsers.length > 0) {
                             const otherUser = otherUsers[0];
                             if (otherUser?.profiles) {
                                 displayName = otherUser.profiles.display_name || otherUser.profiles.email || 'Unknown User';
@@ -281,910 +281,731 @@ export class UIModule extends BaseModule {
                                 this.logger.info(`Rendering chat with unknown user: ${conv.id}`);
                             }
                         } else {
-                            displayName = 'Group Chat';asUnreadMessages(conv);
+                            displayName = 'Group Chat';
                             avatarUrl = null;
-                            this.logger.info(`Rendering group chat: ${conv.id}`);eate conversation element
-                        }onst conversationEl = document.createElement('div');
-                    }conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
+                            this.logger.info(`Rendering group chat: ${conv.id}`);
+                        }
+                    }
                     
-                    // Check if this conversation has unread messagesfChat); // Explicitly store as string
+                    // Check if this conversation has unread messages
                     const hasUnread = this._hasUnreadMessages(conv);
-                     for notifications
+                    
                     // Create conversation element
                     const conversationEl = document.createElement('div');
                     conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
                     conversationEl.dataset.conversationId = conv.id;
-                    conversationEl.dataset.isSelfChat = String(isSelfChat); // Explicitly store as string    
+                    conversationEl.dataset.isSelfChat = String(isSelfChat); // Explicitly store as string
                     
                     // Add dataset with sender IDs for easier lookup
                     const participantIds = conv.participants?.map(p => p.user_id).join(',') || '';
                     conversationEl.dataset.participantIds = participantIds;
                     
                     conversationEl.innerHTML = `
+                        <div class="conversation-avatar">
                             <img src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">
-                        </div>mg src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">
+                        </div>
                         <div class="conversation-details">
                             <div class="conversation-name">${displayName}</div>
-                            <div class="conversation-last-message">yName}</div>
+                            <div class="conversation-last-message">
                                 ${conv.last_message?.content || 'No messages yet'}
-                            </div>conv.last_message?.content || 'No messages yet'}
-                        </div>div>
+                            </div>
+                        </div>
                         ${hasUnread ? '<div class="unread-indicator"></div>' : ''}
-                    `;  ${hasUnread ? '<div class="unread-indicator"></div>' : ''}
                     `;
+                    
                     // Add click handler
                     conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
-                    conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
+                    
                     // Add to list
                     conversationsList.appendChild(conversationEl);
-                } catch (err) {nsList.appendChild(conversationEl);
+                } catch (err) {
                     this.logger.error(`Error rendering conversation ${conv.id}:`, err);
-                }   this.logger.error(`Error rendering conversation ${conv.id}:`, err);
-            }   }
+                }
             }
+            
             // Fix mobile layout issues
             this.adjustLayoutForScreenSize();
-            this.adjustLayoutForScreenSize();
+            
         } catch (error) {
             this.logger.error('Failed to render conversations list:', error);
-            this.showError('Failed to load conversations');ns list:', error);
-        }   this.showError('Failed to load conversations');
-    }   }
-    }
-    // Improved method to check for unread messages
-    _hasUnreadMessages(conversation) {read messages
-        if (!conversation.last_message || conversation.last_message.sender_id === this.currentUser.id) {
-            return false;.last_message || conversation.last_message.sender_id === this.currentUser.id) {
-        }   return false;
+            this.showError('Failed to load conversations');
         }
-        const lastMessageTime = new Date(conversation.last_message.created_at);
+    }
+
+    // Improved method to check for unread messages
+    _hasUnreadMessages(conversation) {
+        if (!conversation.last_message || conversation.last_message.sender_id === this.currentUser.id) {
+            return false;
+        }
         const lastMessageTime = new Date(conversation.last_message.created_at);
         // Use either the participant record or the conversation user last read time
         const lastReadAt = conversation.userLastRead || 
-                          conversation.participants?.find(p => p.user_id === this.currentUser.id)?.last_read_at;p => p.user_id === this.currentUser.id);
-                          ead_at) {
-        if (!lastReadAt) return true; // Unread if no read timestamp   return true; // Unread if no read timestamp
-        }
+                          conversation.participants?.find(p => p.user_id === this.currentUser.id)?.last_read_at;
+        if (!lastReadAt) return true; // Unread if no read timestamp
         const lastReadTime = new Date(lastReadAt);
-        return lastMessageTime > lastReadTime;icipant.last_read_at);
-    }   return lastMessageTime > lastReadTime;
+        return lastMessageTime > lastReadTime;
     }
+
     setupMessageListeners() {
         const sendButton = document.getElementById('send-button');
         const messageInput = document.getElementById('message-text');
-        const messageInput = document.getElementById('message-text');
-        sendButton?.addEventListener('click', () => this.handleSendMessage());
         sendButton?.addEventListener('click', () => this.handleSendMessage());
         messageInput?.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {(e) => {
-                e.preventDefault();& !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
                 this.handleSendMessage();
-            }   this.handleSendMessage();
-        }); }
-    }   });
+            }
+        });
     }
+
     async handleSendMessage() {
         const messageInput = document.getElementById('message-text');
-        const content = messageInput?.value.trim();d('message-text');
-        const messageContainer = document.getElementById('message-container');
+        const content = messageInput?.value.trim();
         const messageContainer = document.getElementById('message-container');
         if (!content || !this.currentUser) return;
-        if (!content || !this.currentUser) return;
+
         try {
             this.logger.info('Sending message');
             const dataModule = this.getModule('data');
-            const dataModule = this.getModule('data');
             // Create self-conversation if none exists
-            if (!this.currentConversation) {one exists
+            if (!this.currentConversation) {
                 const conversation = await dataModule.createConversation([this.currentUser.id]);
-                this.currentConversation = conversation.id;eConversation([this.currentUser.id]);
-            }   this.currentConversation = conversation.id;
+                this.currentConversation = conversation.id;
             }
             await dataModule.sendMessage(
                 this.currentConversation,
-                this.currentUser.id,tion,
-                contentrrentUser.id,
-            );  content
+                this.currentUser.id,
+                content
             );
             // Add message to UI
             const messageEl = document.createElement('div');
-            messageEl.className = 'message sent';ent('div');
-            messageEl.innerHTML = `message sent';
+            messageEl.className = 'message sent';
+            messageEl.innerHTML = `
                 <div class="message-content">${content}</div>
-                <div class="message-info">t">${content}</div>
+                <div class="message-info">
                     ${new Date().toLocaleTimeString()}
-                </div>new Date().toLocaleTimeString()}
-            `;  </div>
+                </div>
+            `;
             messageContainer.appendChild(messageEl);
-            messageEl.scrollIntoView({ behavior: 'smooth' });
             messageEl.scrollIntoView({ behavior: 'smooth' });
             // Clear input
             messageInput.value = '';
             this.logger.info('Message sent successfully');
-        } catch (error) {nfo('Message sent successfully');
+        } catch (error) {
             this.logger.error('Failed to send message:', error);
-            this.showError('Failed to send message');:', error);
-        }   this.showError('Failed to send message');
-    }   }
+            this.showError('Failed to send message');
+        }
     }
+
     async loadConversation(conversationId) {
-        if (!conversationId) {versationId) {
+        if (!conversationId) {
             this.logger.error('Cannot load conversation: No ID provided');
-            return;gger.error('Cannot load conversation: No ID provided');
-        }   return;
+            return;
         }
         this.logger.info(`Loading conversation: ${conversationId}`);
-        this.currentConversation = conversationId;conversationId}`);
         this.currentConversation = conversationId;
         // Get UI elements
         const messageContainer = document.getElementById('message-container');
-        const chatArea = document.querySelector('.chat-area');age-container');
-        const sidebar = document.querySelector('.sidebar');');
+        const chatArea = document.querySelector('.chat-area');
         const sidebar = document.querySelector('.sidebar');
         if (!messageContainer) {
             this.logger.error('Message container not found');
-            return;gger.error('Message container not found');
-        }   return;
+            return;
         }
         // Update UI to show active conversation
         document.querySelectorAll('.conversation-item').forEach(item => {
-            if (item.dataset.conversationId === conversationId) {tem => {
-                item.classList.add('active');== conversationId) {
+            if (item.dataset.conversationId === conversationId) {
+                item.classList.add('active');
                 this.logger.info(`Set active class on conversation ${conversationId}`);
-            } else {.logger.info(`Set active class on conversation ${conversationId}`);
+            } else {
                 item.classList.remove('active');
-            }   item.classList.remove('active');
-        }); }
+            }
         });
         // Check if conversation is in the list, if not, refresh the list
         const conversationInList = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-        if (!conversationInList) { document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+        if (!conversationInList) {
             this.logger.info(`Conversation ${conversationId} not in list, refreshing list`);
-            await this.renderConversationsList();ersationId} not in list, refreshing list`);
-        }   await this.renderConversationsList();
+            await this.renderConversationsList();
         }
         // Show chat area (important for mobile)
-        if (chatArea) {ea (important for mobile)
+        if (chatArea) {
             chatArea.classList.add('active');
-        }   chatArea.classList.add('active');
         }
         // Hide sidebar on mobile
         if (window.innerWidth <= 768 && sidebar) {
-            sidebar.classList.add('hidden');bar) {
-        }   sidebar.classList.add('hidden');
+            sidebar.classList.add('hidden');
         }
         // Update chat header title
         const chatHeader = document.querySelector('.chat-title');
-        if (chatHeader) {= document.querySelector('.chat-title');
+        if (chatHeader) {
             const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-            if (conversationItem) {= document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            if (conversationItem) {
                 const nameEl = conversationItem.querySelector('.conversation-name');
-                chatHeader.textContent = nameEl ? nameEl.textContent : 'Chat';ame');
-            }   chatHeader.textContent = nameEl ? nameEl.textContent : 'Chat';
-        }   }
+                chatHeader.textContent = nameEl ? nameEl.textContent : 'Chat';
+            }
         }
         try {
             const dataModule = this.getModule('data');
             const messages = await dataModule.fetchMessages(conversationId);
-            const messages = await dataModule.fetchMessages(conversationId);
             // Clear existing messages
             messageContainer.innerHTML = '';
-            messageContainer.innerHTML = '';
             if (messages.length === 0) {
-                // Show empty state 0) {
+                // Show empty state
                 messageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
-            } else {ageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
+            } else {
                 this._renderMessages(messages);
-            }   this._renderMessages(messages);
             }
             // Scroll to bottom
             messageContainer.scrollTop = messageContainer.scrollHeight;
-            messageContainer.scrollTop = messageContainer.scrollHeight;
             // Focus the message input
-            document.getElementById('message-text')?.focus();
             document.getElementById('message-text')?.focus();
             // Mark conversation as read
             await dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
-            await dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
             // Remove unread indicator
             const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-            if (conversationEl) {= document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            if (conversationEl) {
                 conversationEl.classList.remove('unread');
                 conversationEl.querySelector('.unread-indicator')?.remove();
-            }   conversationEl.querySelector('.unread-indicator')?.remove();
             }
             // Setup real-time subscription for new messages
-            this._setupMessageSubscription(conversationId);s
-        } catch (error) {ssageSubscription(conversationId);
+            this._setupMessageSubscription(conversationId);
+        } catch (error) {
             this.logger.error('Failed to load conversation messages:', error);
-            this.showError('Failed to load messages');tion messages:', error);
-        }   this.showError('Failed to load messages');
-    }   }
+            this.showError('Failed to load messages');
+        }
     }
+
     async startNewConversation(userId) {
-        try {rtNewConversation(userId) {
-            this.logger.info(`Starting conversation with user ID: ${userId}`);
+        try {
             this.logger.info(`Starting conversation with user ID: ${userId}`);
             // Create participants array with correct order and structure
-            const participants = [];rray with correct order and structure
             const participants = [];
             // Always include current user first
             participants.push(this.currentUser.id);
-            participants.push(this.currentUser.id);
             // Check if this is a self-chat or chat with another user
-            if (userId !== this.currentUser.id) {at with another user
-                participants.push(userId);r.id) {
+            if (userId !== this.currentUser.id) {
+                participants.push(userId);
                 this.logger.info(`Creating chat with other user: ${userId}`);
-            } else {.logger.info(`Creating chat with other user: ${userId}`);
+            } else {
                 this.logger.info('Creating self-chat conversation');
-            }   this.logger.info('Creating self-chat conversation');
             }
-            const dataModule = this.getModule('data');
             const dataModule = this.getModule('data');
             // Create the conversation
             const conversation = await dataModule.createConversation(participants);
-            if (!conversation || !conversation.id) {eateConversation(participants);
+            if (!conversation || !conversation.id) {
                 throw new Error('Failed to create conversation');
-            }   throw new Error('Failed to create conversation');
             }
-            this.logger.info(`Created conversation with ID: ${conversation.id}`);
             this.logger.info(`Created conversation with ID: ${conversation.id}`);
             // Close the conversation modal
             const modal = document.getElementById('new-conversation-modal');
-            if (modal) modal.classList.add('hidden');w-conversation-modal');
             if (modal) modal.classList.add('hidden');
             // Set as current conversation
             this.currentConversation = conversation.id;
-            this.currentConversation = conversation.id;
             // Update UI in correct sequence
-            await this.renderConversationsList();
             await this.renderConversationsList();
             // Wait for DOM updates to complete
             await new Promise(resolve => setTimeout(resolve, 300));
-            await new Promise(resolve => setTimeout(resolve, 300));
             // Now load the conversation
             await this.loadConversation(conversation.id);
-            await this.loadConversation(conversation.id);
             this.logger.info('New conversation created and loaded successfully');
-        } catch (error) {nfo('New conversation created and loaded successfully');
+        } catch (error) {
             this.logger.error('Failed to start conversation:', error);
             this.showError('Failed to create conversation: ' + error.message);
-        }   this.showError('Failed to create conversation: ' + error.message);
-    }   }
+        }
     }
+
     async loadConversationData(conversationId) {
-        try {dConversationData(conversationId) {
+        try {
             this.logger.info(`Loading conversation data for: ${conversationId}`);
-            const dataModule = this.getModule('data');a for: ${conversationId}`);
+            const dataModule = this.getModule('data');
             const messages = await dataModule.fetchMessages(conversationId);
             this.logger.info(`Loaded ${messages.length} messages for conversation ${conversationId}`);
-            return messages;(`Loaded ${messages.length} messages for conversation ${conversationId}`);
-        } catch (error) {es;
+            return messages;
+        } catch (error) {
             this.logger.error('Failed to load conversation data:', error);
-            return [];r.error('Failed to load conversation data:', error);
-        }   return [];
-    }   }
+            return [];
+        }
     }
+
     showError(message) {
         const errorDiv = document.createElement('div');
-        errorDiv.className = 'auth-error';ement('div');
-        errorDiv.textContent = message;r';
+        errorDiv.className = 'auth-error';
         errorDiv.textContent = message;
         const existingError = document.querySelector('.auth-error');
-        if (existingError) existingError.remove();or('.auth-error');
         if (existingError) existingError.remove();
         const authForm = document.querySelector('.auth-form');
         authForm?.insertAdjacentElement('afterend', errorDiv);
-        authForm?.insertAdjacentElement('afterend', errorDiv);
         setTimeout(() => errorDiv.remove(), 5000);
-    }   setTimeout(() => errorDiv.remove(), 5000);
     }
+
     showMessage(message) {
         const messageDiv = document.createElement('div');
-        messageDiv.className = 'auth-message';ent('div');
-        messageDiv.textContent = message;age';
+        messageDiv.className = 'auth-message';
         messageDiv.textContent = message;
         const existingMessage = document.querySelector('.auth-message');
-        if (existingMessage) existingMessage.remove();('.auth-message');
         if (existingMessage) existingMessage.remove();
         const authForm = document.querySelector('.auth-form');
         authForm?.insertAdjacentElement('afterend', messageDiv);
-        authForm?.insertAdjacentElement('afterend', messageDiv);
         setTimeout(() => messageDiv.remove(), 5000);
-    }   setTimeout(() => messageDiv.remove(), 5000);
     }
+
     showAuthScreen() {
         document.getElementById('auth-container')?.classList.remove('hidden');
-        document.getElementById('app-content')?.classList.add('hidden');den');
-    }   document.getElementById('app-content')?.classList.add('hidden');
+        document.getElementById('app-content')?.classList.add('hidden');
     }
+
     showMainApp(profile) {
         this.currentUser = profile;
         document.getElementById('auth-container')?.classList.add('hidden');
         document.getElementById('app-content')?.classList.remove('hidden');
-        document.getElementById('app-content')?.classList.remove('hidden');
         const profileName = document.querySelector('.profile-name');
-        if (profileName) {= document.querySelector('.profile-name');
+        if (profileName) {
             profileName.textContent = profile.display_name || profile.email;
-        }   profileName.textContent = profile.display_name || profile.email;
         }
         // Render conversations immediately after login
-        this.renderConversationsList();tely after login
-    }   this.renderConversationsList();
+        this.renderConversationsList();
     }
+
     showOnlineStatus(online = true) {
         const status = document.getElementById('status');
-        if (!status) return;ent.getElementById('status');
         if (!status) return;
         status.textContent = online ? 'Online' : 'Offline';
         status.className = `status-indicator ${online ? '' : 'offline'} show`;
-        status.className = `status-indicator ${online ? '' : 'offline'} show`;
         setTimeout(() => status.classList.remove('show'), 3000);
-    }   setTimeout(() => status.classList.remove('show'), 3000);
     }
+
     setupThemeToggle() {
         const themeToggle = document.getElementById('theme-toggle');
-        if (!themeToggle) return;ent.getElementById('theme-toggle');
         if (!themeToggle) return;
         const toggleTheme = () => {
             const currentTheme = document.body.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';);
-            document.body.setAttribute('data-theme', newTheme);: 'dark';
-            localStorage.setItem('theme', newTheme); newTheme);
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
             themeToggle.querySelector('.material-icons').textContent = 
-                newTheme === 'dark' ? 'light_mode' : 'dark_mode';ent = 
-        };      newTheme === 'dark' ? 'light_mode' : 'dark_mode';
+                newTheme === 'dark' ? 'light_mode' : 'dark_mode';
         };
         themeToggle.addEventListener('click', toggleTheme);
-    }   themeToggle.addEventListener('click', toggleTheme);
     }
+
     setupProfileHandlers() {
         const userProfile = document.getElementById('user-profile');
         const profileModal = document.getElementById('profile-modal');
         const closeProfileBtn = document.querySelectorAll('#close-profile, #cancel-profile');  // Get both close buttons    
-        const closeProfileBtn = document.querySelectorAll('#close-profile, #cancel-profile');  // Get both close buttons    
         userProfile?.addEventListener('click', () => {
-            profileModal?.classList.remove('hidden');{
-            if (this.currentUser) {.remove('hidden');
+            profileModal?.classList.remove('hidden');
+            if (this.currentUser) {
                 document.getElementById('display-name').value = this.currentUser.display_name || '';
-                document.getElementById('status-message').value = this.currentUser.status || ''; '';
-                document.getElementById('avatar-preview').src = = this.currentUser.status || '';
+                document.getElementById('status-message').value = this.currentUser.status || '';
+                document.getElementById('avatar-preview').src = 
                     this.currentUser.avatar_url || 'images/default-avatar.png';
-            }       this.currentUser.avatar_url || 'images/default-avatar.png';
-        }); }
+            }
         });
         // Add click handler to all close buttons
-        closeProfileBtn?.forEach(btn => { buttons
+        closeProfileBtn?.forEach(btn => {
             btn.addEventListener('click', () => {
                 profileModal?.classList.add('hidden');
-            }); profileModal?.classList.add('hidden');
-        }); });
+            });
         });
         // Close when clicking outside
         profileModal?.addEventListener('click', (e) => {
-            if (e.target === profileModal) {k', (e) => {
+            if (e.target === profileModal) {
                 profileModal.classList.add('hidden');
-            }   profileModal.classList.add('hidden');
-        }); }
-    }   });
+            }
+        });
     }
+
     setupMobileHandlers() {
         const backButton = document.getElementById('back-button');
-        backButton?.addEventListener('click', () => {ack-button');
+        backButton?.addEventListener('click', () => {
             this.logger.info('Back button clicked, returning to sidebar');
-            const chatArea = document.querySelector('.chat-area');debar');
-            const sidebar = document.querySelector('.sidebar');');
-            if (chatArea) chatArea.classList.remove('active');;
-            if (sidebar) sidebar.classList.remove('hidden'););
-        }); if (sidebar) sidebar.classList.remove('hidden');
+            const chatArea = document.querySelector('.chat-area');
+            const sidebar = document.querySelector('.sidebar');
+            if (chatArea) chatArea.classList.remove('active');
+            if (sidebar) sidebar.classList.remove('hidden');
         });
         // Handle resizing properly
         window.addEventListener('resize', () => {
-            this.adjustLayoutForScreenSize();=> {
-        }); this.adjustLayoutForScreenSize();
+            this.adjustLayoutForScreenSize();
         });
         // Initial adjustment
         this.adjustLayoutForScreenSize();
-    }   this.adjustLayoutForScreenSize();
     }
+
     adjustLayoutForScreenSize() {
         const isMobile = window.innerWidth <= 768;
         const sidebar = document.querySelector('.sidebar');
-        const chatArea = document.querySelector('.chat-area');
         const chatArea = document.querySelector('.chat-area');
         if (!sidebar || !chatArea) return;
 
         if (!isMobile) {
             // Desktop layout: both visible
-            sidebar.classList.remove('hidden');move('active', 'hidden');
+            sidebar.classList.remove('hidden');
             chatArea.classList.remove('active', 'hidden');
-        } else { sidebar
+        } else {
             // Mobile layout
-            if (this.currentConversation) {chatArea) chatArea.classList.remove('active');
+            if (this.currentConversation) {
                 // Show chat area when conversation is active
-                sidebar.classList.add('hidden');ow chat area
+                sidebar.classList.add('hidden');
                 chatArea.classList.add('active');
-                chatArea.classList.remove('hidden');   if (chatArea) chatArea.classList.add('active');
-            } else {   }
-                // Show sidebar when no conversation is selected    }
+                chatArea.classList.remove('hidden');
+            } else {
+                // Show sidebar when no conversation is selected
                 sidebar.classList.remove('hidden');
-                chatArea.classList.remove('active');ait) {
+                chatArea.classList.remove('active');
                 chatArea.classList.add('hidden');
-            }unction(...args) {
+            }
         }
         
-        this.logger.info(`Layout adjusted for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);  func.apply(this, args);
+        this.logger.info(`Layout adjusted for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);
     }
 
-    debounce(func, wait) {  timeout = setTimeout(later, wait);
-        let timeout;   };
-        return function executedFunction(...args) {    }
+    debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
             const later = () => {
-                clearTimeout(timeout);ssages
+                clearTimeout(timeout);
                 func.apply(this, args);
-            };on if any
+            };
             clearTimeout(timeout);
-            timeout = setTimeout(later, wait);   this.currentSubscription.unsubscribe();
-        };}
+            timeout = setTimeout(later, wait);
+        };
     }
 
-    // Setup real-time subscription for new messagesssages(conversationId, (newMessage) => {
+    // Setup real-time subscription for new messages
     setupMessageSubscription(conversationId) {
-        // Clean up previous subscription if anyrsationId) {
-        if (this.currentSubscription) {.handleNewMessage(newMessage);
+        // Clean up previous subscription if any
+        if (this.currentSubscription) {
             this.currentSubscription.unsubscribe();
-        }ons
-        this.showMessageNotification(newMessage);
-        const dataModule = this.getModule('data');
-        this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (newMessage) => { show unread indicator
-            // Only handle if this is the current conversation   this.renderConversationsList();
-            if (this.currentConversation === conversationId) { }
-                this.handleNewMessage(newMessage);   });
-            } else {    }
+        }
+        this.currentSubscription = this.getModule('data').subscribeToNewMessages(conversationId, (newMessage) => {
+            // Only handle if this is the current conversation
+            if (this.currentConversation === conversationId) {
+                this.handleNewMessage(newMessage);
+            } else {
                 // Show notification for other conversations
-                this.showMessageNotification(newMessage);age
+                this.showMessageNotification(newMessage);
                 
-                // Update conversations list to show unread indicator-container');
-                this.renderConversationsList();const isSent = message.sender_id === this.currentUser.id;
+                // Update conversations list to show unread indicator
+                this.renderConversationsList();
             }
-        });wn messages again (already added when sent)
-    }if (isSent) return;
+        });
+    }
 
-    // Handle new incoming message'div');
+    // Handle new incoming message
     handleNewMessage(message) {
-        const messageContainer = document.getElementById('message-container');geId = message.id;
+        const messageContainer = document.getElementById('message-container');
         const isSent = message.sender_id === this.currentUser.id;
         
-        // Don't show our own messages again (already added when sent)  <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+        // Don't show our own messages again (already added when sent)
         if (isSent) return;
         
-        const messageEl = document.createElement('div');messageEl.scrollIntoView({ behavior: 'smooth' });
+        const messageEl = document.createElement('div');
         messageEl.className = `message received`;
         messageEl.dataset.messageId = message.id;
         messageEl.innerHTML = `
-            <div class="message-content">${message.content}</div>dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
+            <div class="message-content">${message.content}</div>
             <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
-        `;ay notification sound for active conversation
+        `;
         messageContainer.appendChild(messageEl);
-        messageEl.scrollIntoView({ behavior: 'smooth' });this.getModule('notification');
-        ({
+        messageEl.scrollIntoView({ behavior: 'smooth' });
+        
         // Mark as read since we're viewing it
-        const dataModule = this.getModule('data');ent.substring(0, 50) + (message.content.length > 50 ? '...' : ''),
+        const dataModule = this.getModule('data');
         dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
-         showNotification: false
+        
         // Play notification sound for active conversation
         try {
-            const notificationModule = this.getModule('notification');ation sound:', error);
-            notificationModule.notify({ation sound
-                title: 'New Message',   this.playNotificationSound();
-                message: message.content.substring(0, 50) + (message.content.length > 50 ? '...' : ''),   }
-                soundType: 'message',    }
+            const notificationModule = this.getModule('notification');
+            notificationModule.notify({
+                title: 'New Message',
+                message: message.content.substring(0, 50) + (message.content.length > 50 ? '...' : ''),
+                soundType: 'message',
                 showNotification: false
-            });ges
-        } catch (error) {geNotification(message) {
+            });
+        } catch (error) {
             this.logger.error('Error playing notification sound:', error);
             // Fallback to simple notification sound
-            this.playNotificationSound();const notificationModule = this.getModule('notification');
+            this.playNotificationSound();
         }
     }
-const senderName = this.getSenderName(message.sender_id) || 'Someone';
+
     // Show notification for new messages
     showMessageNotification(message) {
         try {
-            // Use notification module for OS-specific handlingng(0, 100) + (message.content.length > 100 ? '...' : ''),
+            // Use notification module for OS-specific handling
             const notificationModule = this.getModule('notification');
-            onversation_id,
-            // Try to get sender name soundType: 'notification'
+            // Try to get sender name
             const senderName = this.getSenderName(message.sender_id) || 'Someone';
             
-            notificationModule.notify({this.logger.error('Error showing notification:', error);
+            notificationModule.notify({
                 title: `New Message from ${senderName}`,
                 message: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
                 icon: 'images/icon-192x192.png',
-                conversationId: message.conversation_id,otification('New Message', {
+                conversationId: message.conversation_id,
                 soundType: 'notification'
-            }); icon: 'images/icon-192x192.png'
-        } catch (error) {});
+            });
+        } catch (error) {
             this.logger.error('Error showing notification:', error);
-            k = () => {
             // Fallback to browser notification
-            if (Notification.permission === 'granted') {  this.loadConversation(message.conversation_id);
-                const notification = new Notification('New Message', {   };
-                    body: message.content,}
+            if (Notification.permission === 'granted') {
+                const notification = new Notification('New Message', {
+                    body: message.content,
                     icon: 'images/icon-192x192.png'
                 });
-                   this.playNotificationSound();
-                notification.onclick = () => {   }
-                    window.focus();    }
+                notification.onclick = () => {
+                    window.focus();
                     this.loadConversation(message.conversation_id);
-                };d
-            }icationSound() {
-            
-            // Play sound as fallbackudio('sounds/notification.mp3');
-            this.playNotificationSound();= 0.5;
+                };
+            }
+            // Play sound as fallback
+            this.playNotificationSound();
         }
     }
-   this.logger.error('Failed to play notification sound:', error);
-    // Play notification sound   }
-    playNotificationSound() {    }
+
+    // Play notification sound
+    playNotificationSound() {
         try {
-            const audio = new Audio('sounds/notification.mp3');onversation
+            const audio = new Audio('sounds/notification.mp3');
             audio.volume = 0.5;
-            audio.play();= document.querySelector(`.conversation-item[data-sender-id="${senderId}"]`);
+            audio.play();
         } catch (error) {
-            this.logger.error('Failed to play notification sound:', error);'.conversation-name');
-        }   return nameEl ? nameEl.textContent : null;
+            this.logger.error('Failed to play notification sound:', error);
+        }
     }
-   return null;
-    // Get sender name from conversation    }
+
+    // Get sender name from conversation
     getSenderName(senderId) {
         const conversation = document.querySelector(`.conversation-item[data-sender-id="${senderId}"]`);
-        if (conversation) {= document.getElementById('profile-modal');
+        if (conversation) {
             const nameEl = conversation.querySelector('.conversation-name');
             return nameEl ? nameEl.textContent : null;
         }
-        return null;);
-    }tings';
-ation-settings';
+        return null;
+    }
+
     setupNotificationHandlers() {
-        const profileModal = document.getElementById('profile-modal');s</h3>
+        const profileModal = document.getElementById('profile-modal');
         if (profileModal) {
-            // Check if notification settings section already existse-sounds">
+            // Check if notification settings section already exists
             if (!document.getElementById('notification-settings')) {
-                const notificationSection = document.createElement('div');ut type="checkbox" id="enable-sounds" checked>
-                notificationSection.className = 'notification-settings';label>
+                const notificationSection = document.createElement('div');
+                notificationSection.className = 'notification-settings';
                 notificationSection.id = 'notification-settings';
                 notificationSection.innerHTML = `
-                    <h3>Notification Settings</h3>>
+                    <h3>Notification Settings</h3>
                     <div class="form-group">
-                        <label for="enable-sounds">ut type="checkbox" id="enable-vibration" checked>
-                            Enable Soundslabel>
+                        <label for="enable-sounds">
+                            Enable Sounds
                             <input type="checkbox" id="enable-sounds" checked>
                         </label>
-                    </div>-permission" class="md-button">
-                    <div class="form-group">e Notifications
-                        <label for="enable-vibration">button>
-                            Enable Vibration (Mobile)  </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="enable-vibration">
+                            Enable Vibration (Mobile)
                             <input type="checkbox" id="enable-vibration" checked>
                         </label>
-                    </div>= profileModal.querySelector('.modal-buttons');
+                    </div>
                     <div class="form-group">
-                        <button id="notification-permission" class="md-button">lButtons.parentNode.insertBefore(notificationSection, modalButtons);
+                        <button id="notification-permission" class="md-button">
                             Enable Notifications
-                        </button>   profileModal.querySelector('.profile-form').appendChild(notificationSection);
-                    </div>                }
+                        </button>
+                    </div>
                 `;
                 // Insert before modal buttons
-                const modalButtons = profileModal.querySelector('.modal-buttons');= document.getElementById('notification-permission');
+                const modalButtons = profileModal.querySelector('.modal-buttons');
                 if (modalButtons) {
                     modalButtons.parentNode.insertBefore(notificationSection, modalButtons);
                 } else {
-                    profileModal.querySelector('.profile-form').appendChild(notificationSection);= await notificationModule.requestPermission();
+                    profileModal.querySelector('.profile-form').appendChild(notificationSection);
                 }
 
-                // Setup notification permission buttonEnabled';
-                const permissionBtn = document.getElementById('notification-permission');.showMessage('Notifications enabled!');
+                // Setup notification permission button
+                const permissionBtn = document.getElementById('notification-permission');
                 if (permissionBtn) {
-                    permissionBtn.addEventListener('click', async () => {   this.showError('Notification permission denied');
-                        const notificationModule = this.getModule('notification'); }
+                    permissionBtn.addEventListener('click', async () => {
+                        const notificationModule = this.getModule('notification');
                         const granted = await notificationModule.requestPermission();
-                        if (granted) {ission
-                            permissionBtn.disabled = true;ranted') {
+                        if (granted) {
+                            permissionBtn.disabled = true;
                             permissionBtn.textContent = 'Notifications Enabled';
-                            this.showMessage('Notifications enabled!');   permissionBtn.textContent = 'Notifications Enabled';
-                        } else {   }
-                            this.showError('Notification permission denied');                }
+                            this.showMessage('Notifications enabled!');
+                        } else {
+                            this.showError('Notification permission denied');
                         }
                     });
                     // Update button state based on current permission
-                    if (Notification.permission === 'granted') {lementById('enable-vibration');
+                    if (Notification.permission === 'granted') {
                         permissionBtn.disabled = true;
-                        permissionBtn.textContent = 'Notifications Enabled';dule = this.getModule('notification');
+                        permissionBtn.textContent = 'Notifications Enabled';
                     }
                 }
-d = notificationModule.vibrationEnabled;
+
                 // Setup toggle handlers
                 const soundToggle = document.getElementById('enable-sounds');
-                const vibrationToggle = document.getElementById('enable-vibration');undToggle.checked;
-                if (soundToggle && vibrationToggle) { notificationModule.savePreferences();
+                const vibrationToggle = document.getElementById('enable-vibration');
+                if (soundToggle && vibrationToggle) {
                     const notificationModule = this.getModule('notification');
                     // Set initial state
-                    soundToggle.checked = notificationModule.soundsEnabled; vibrationToggle.checked;
-                    vibrationToggle.checked = notificationModule.vibrationEnabled; notificationModule.savePreferences();
-                    // Add change handlers   });
-                    soundToggle.addEventListener('change', () => {   }
-                        notificationModule.soundsEnabled = soundToggle.checked;   }
-                        notificationModule.savePreferences();   }
-                    });    }
-                    vibrationToggle.addEventListener('change', () => {
-                        notificationModule.vibrationEnabled = vibrationToggle.checked;messages
+                    soundToggle.checked = notificationModule.soundsEnabled;
+                    vibrationToggle.checked = notificationModule.vibrationEnabled;
+                    // Add change handlers
+                    soundToggle.addEventListener('change', () => {
+                        notificationModule.soundsEnabled = soundToggle.checked;
                         notificationModule.savePreferences();
-                    });ent.getElementById('message-container');
-                }if (!messageContainer) return;
+                    });
+                    vibrationToggle.addEventListener('change', () => {
+                        notificationModule.vibrationEnabled = vibrationToggle.checked;
+                        notificationModule.savePreferences();
+                    });
+                }
             }
         }
-    }= this._createMessageElement(message);
+    }
 
-    // Helper method to render messages   messageContainer.appendChild(messageEl);
-    _renderMessages(messages) { }
-        const messageContainer = document.getElementById('message-container');   });
-        if (!messageContainer) return;    }
+    // Helper method to render messages
+    _renderMessages(messages) {
+        const messageContainer = document.getElementById('message-container');
+        if (!messageContainer) return;
         
-        messages.forEach(message => {d on message data
-            const messageEl = this._createMessageElement(message); {
-            if (messageEl) {if (!message) return null;
+        messages.forEach(message => {
+            const messageEl = this._createMessageElement(message);
+            if (messageEl) {
                 messageContainer.appendChild(messageEl);
-            }tUser.id;
+            }
         });
-    } 'sent' : 'received'}`;
-geId = message.id;
+    }
+
     // Create a message element based on message data
     _createMessageElement(message) {
-        if (!message) return null;  <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+        if (!message) return null;
         
-        const isSent = message.sender_id === this.currentUser.id;   return messageEl;
-        const messageEl = document.createElement('div');    }
+        const isSent = message.sender_id === this.currentUser.id;
+        const messageEl = document.createElement('div');
         messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
         messageEl.dataset.messageId = message.id;
         messageEl.innerHTML = `
-            <div class="message-content">${message.content}</div>on if any
+            <div class="message-content">${message.content}</div>
             <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
-        `;ribe();
-        return messageEl;   this.currentSubscription = null;
-    }}
+        `;
+        return messageEl;
+    }
 
-    // Improve real-time message subscriptionthis.logger.info(`Setting up message subscription for conversation ${conversationId}`);
+    // Improve real-time message subscription
     _setupMessageSubscription(conversationId) {
         try {
-            // Log and cleanup any previous subscription{
-            if (this.currentSubscription) {this.logger.info(`Received real-time message update for conversation ${conversationId}`);
+            // Log and cleanup any previous subscription
+            if (this.currentSubscription) {
                 this.logger.info(`Cleaning up previous subscription for conversation ${this.currentSubscription.conversationId || 'unknown'}`);
-                try {sation
-                    this.currentSubscription.unsubscribe();sationId) {
+                try {
+                    this.currentSubscription.unsubscribe();
                 } catch (err) {
-                    this.logger.error('Error cleaning up previous subscription:', err);s.currentUser.id) {
+                    this.logger.error('Error cleaning up previous subscription:', err);
                 }
-                this.currentSubscription = null;this._addMessageToUI(newMessage);
+                this.currentSubscription = null;
             }
             
-            this.logger.info(`Setting up new real-time subscription for conversation ${conversationId}`);   dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+            this.logger.info(`Setting up new real-time subscription for conversation ${conversationId}`);
             
             const dataModule = this.getModule('data');
-             conversations
-            // Create new subscriptionthis._showMessageNotification(newMessage);
+            
+            // Create new subscription
             this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (newMessage) => {
-                this.logger.info(`Received real-time message in conversation ${conversationId}:`, newMessage.id); show unread indicator
-                   this.renderConversationsList();
-                // Check if we're still viewing this conversation }
-                if (this.currentConversation === conversationId) {   });
-                    this.logger.info('Message is for current conversation');    }
+                this.logger.info(`Received real-time message in conversation ${conversationId}:`, newMessage.id);
+                
+                // Check if we're still viewing this conversation
+                if (this.currentConversation === conversationId) {
+                    this.logger.info('Message is for current conversation');
                     
-                    // Don't show our own messages twicee UI
+                    // Don't show our own messages twice
                     if (newMessage.sender_id !== this.currentUser.id) {
-                        this.logger.info('Adding message to UI');ent.getElementById('message-container');
-                        if (!messageContainer) return;
-                        // Add message to UI
+                        this.logger.info('Adding message to UI');
                         this._addMessageToUI(newMessage);
-                        ment.querySelector(`.message[data-message-id="${message.id}"]`);
-                        // Mark as readif (existingMessage) return;
+                        
+                        // Mark as read
                         dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
-                    } else {= this._createMessageElement(message);
+                    } else {
                         this.logger.info('Ignoring own message from subscription');
                     }
-                } else {erySelector('.no-messages');
-                    this.logger.info('Message is for a different conversation, showing notification');if (noMessagesEl) noMessagesEl.remove();
+                } else {
+                    this.logger.info('Message is for a different conversation, showing notification');
                     
                     // Show notification for messages in other conversations
                     this._showMessageNotification(newMessage);
-                    messageEl.scrollIntoView({ behavior: 'smooth' });
+                    
                     // Update conversations list for unread indicator
                     this.renderConversationsList();
-                }   this._playIncomingMessageSound();
-            });   }
                 }
+            });
+            
             this.logger.info('Real-time subscription setup completed');
-        } catch (error) {coming messages
-            this.logger.error('Error setting up message subscription:', error);mingMessageSound() {
+        } catch (error) {
+            this.logger.error('Error setting up message subscription:', error);
         }
-    }= this.getModule('notification');
+    }
 
-    // Add a new message to the UI with improved error handling({
-    _addMessageToUI(message) {Message',
+    // Add a new message to the UI with improved error handling
+    _addMessageToUI(message) {
         try {
             this.logger.info(`Adding message ${message.id} to UI`);
-            const messageContainer = document.getElementById('message-container'); showNotification: false
-               });
+            const messageContainer = document.getElementById('message-container');
             if (!messageContainer) {
                 this.logger.error('Message container not found');
-                return;   this.logger.error('Error playing message sound:', error);
-            }   }
-                }
-            // Check if this message is already in the UI
-            const existingMessage = document.querySelector(`.message[data-message-id="${message.id}"]`);n other conversations
-            if (existingMessage) {ageNotification(message) {
-                this.logger.info(`Message ${message.id} already exists in UI, skipping`);
-                return;= this.getModule('notification');
+                return;
             }
-            
-            // Create message elementne';
-            const messageEl = this._createMessageElement(message);
-            if (!messageEl) {   senderName = message.profiles.display_name || message.profiles.email || 'Someone';
-                this.logger.error('Failed to create message element');}
+            // Check if this message is already in the UI
+            const existingMessage = document.querySelector(`.message[data-message-id="${message.id}"]`);
+            if (existingMessage) {
+                this.logger.info(`Message ${message.id} already exists in UI, skipping`);
                 return;
             }
             
-            // Remove "no messages" placeholder if present0) + (message.content.length > 100 ? '...' : ''),
-            const noMessagesEl = messageContainer.querySelector('.no-messages');onversation_id,
-            if (noMessagesEl) { soundType: 'notification'
-                noMessagesEl.remove();   });
+            // Create message element
+            const messageEl = this._createMessageElement(message);
+            if (!messageEl) {
+                this.logger.error('Failed to create message element');
+                return;
             }
             
-            // Add message to container   this.logger.error('Error showing message notification:', error);
-            messageContainer.appendChild(messageEl);   }
-                }
+            // Remove "no messages" placeholder if present
+            const noMessagesEl = messageContainer.querySelector('.no-messages');
+            if (noMessagesEl) {
+                noMessagesEl.remove();
+            }
+            
+            // Add message to container
+            messageContainer.appendChild(messageEl);
+            
             // Scroll into view with a small delay to ensure rendering completes
             setTimeout(() => {
                 messageEl.scrollIntoView({ behavior: 'smooth' });
             }, 50);
-                    const chatArea = document.querySelector('.chat-area');
+            
             // Play notification sound for active conversation
-            this._playIncomingMessageSound();        if (!sidebar || !chatArea) return;
+            this._playIncomingMessageSound();
             
             this.logger.info(`Message ${message.id} successfully added to UI`);
         } catch (error) {
             this.logger.error('Error adding message to UI:', error);
-        }Area.classList.remove('active', 'hidden');
+        }
     }
 
-    // Improve real-time message subscription
-    _setupMessageSubscription(conversationId) {ion is active
-        // Clean up previous subscription if any
-        if (this.currentSubscription) {
-            this.currentSubscription.unsubscribe();Area.classList.remove('hidden');
-            this.currentSubscription = null;
-        }n is selected
-        
-        this.logger.info(`Setting up message subscription for conversation ${conversationId}`);');
-           chatArea.classList.add('hidden');
-        const dataModule = this.getModule('data');   }
-        this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (newMessage) => {}
-            this.logger.info(`Received real-time message update for conversation ${conversationId}`);
-               this.logger.info(`Layout adjusted for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);
-            // Only handle if this is still the current conversation   }
-            if (this.currentConversation === conversationId) {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-}    }        this.logger.info(`Layout adjusted for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);                }            }                chatArea.classList.add('hidden');                chatArea.classList.remove('active');                sidebar.classList.remove('hidden');                // Show sidebar when no conversation is selected            } else {                chatArea.classList.remove('hidden');                chatArea.classList.add('active');                sidebar.classList.add('hidden');                // Show chat area when conversation is active            if (this.currentConversation) {            // Mobile layout        } else {            chatArea.classList.remove('active', 'hidden');            sidebar.classList.remove('hidden');            // Desktop layout: both visible        if (!isMobile) {        if (!sidebar || !chatArea) return;        const chatArea = document.querySelector('.chat-area');        const sidebar = document.querySelector('.sidebar');        const isMobile = window.innerWidth <= 768;    adjustLayoutForScreenSize() {    }        }            this.logger.error('Error showing message notification:', error);        } catch (error) {            }                });                    soundType: 'notification'                    conversationId: message.conversation_id,                    message: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),                    title: `New Message from ${senderName}`,                notificationModule.notify({                                }                    senderName = message.profiles.display_name || message.profiles.email || 'Someone';                if (message.profiles) {                let senderName = 'Someone';                // Try to get sender name            if (notificationModule) {            const notificationModule = this.getModule('notification');        try {    _showMessageNotification(message) {    // Show notification for messages in other conversations    }        }            this.logger.error('Error playing message sound:', error);        } catch (error) {            }                });                    showNotification: false                    soundType: 'message',                    message: '',                    title: 'New Message',                notificationModule.notify({            if (notificationModule) {            const notificationModule = this.getModule('notification');        try {    _playIncomingMessageSound() {    // Play a subtle sound for incoming messages    }        }            this._playIncomingMessageSound();            // Play notification sound                        messageEl.scrollIntoView({ behavior: 'smooth' });            messageContainer.appendChild(messageEl);            // Add message and scroll into view                        if (noMessagesEl) noMessagesEl.remove();            const noMessagesEl = messageContainer.querySelector('.no-messages');            // Remove "no messages" indicator if present        if (messageEl) {        const messageEl = this._createMessageElement(message);                if (existingMessage) return;        const existingMessage = document.querySelector(`.message[data-message-id="${message.id}"]`);        // Check if this message already exists in the UI                if (!messageContainer) return;        const messageContainer = document.getElementById('message-container');    _addMessageToUI(message) {    // Add a new message to the UI    }        });            }                this.renderConversationsList();                // Update conversations list to show unread indicator                                this._showMessageNotification(newMessage);                // Show notification for messages in other conversations            } else {                }                    dataModule.markMessagesAsRead(conversationId, this.currentUser.id);                    // Mark as read since we're viewing it                                        this._addMessageToUI(newMessage);                    // Add the message to the UI                if (newMessage.sender_id !== this.currentUser.id) {                // Don't add our own messages again    // Add this new method to handle events from other modules
+    // Play a subtle sound for incoming messages
+    _playIncomingMessageSound() {
+        try {
+            const notificationModule = this.getModule('notification');
+            notificationModule.notify({
+                title: 'New Message',
+                message: '',
+                soundType: 'message',
+                showNotification: false
+            });
+        } catch (error) {
+            this.logger.error('Error playing message sound:', error);
+        }
+    }
+
+    // Add this new method to handle events from other modules
     setupSpecialEvents() {
         // Listen for notification click events
         window.addEventListener('open-conversation', (event) => {
