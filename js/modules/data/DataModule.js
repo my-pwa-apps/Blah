@@ -234,36 +234,54 @@ export class DataModule extends BaseModule {
 
     async fetchConversations(userId, skipCache = false) {
         try {
-            // Add logging and optional cache skipping
             this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
             
+            // Use a more reliable query that clearly shows all conversations for this user
             const query = this.supabase
                 .from('conversations')
                 .select(`
-                    *,
+                    id,
+                    created_at,
+                    is_self_chat,
+                    last_message,
                     participants!inner (
                         user_id,
-                        profiles (*)
+                        profiles (
+                            id,
+                            email,
+                            display_name,
+                            avatar_url
+                        )
                     )
                 `)
-                .eq('participants.user_id', userId)
-                .order('created_at', { ascending: false });
+                .eq('participants.user_id', userId);
             
-            // If we need to skip cache (e.g., after creating a new conversation)
+            // If skipping cache, add a timestamp parameter to break the cache
             if (skipCache) {
-                // This single-row update forces a fresh fetch by adding a cache-busting parameter
-                await this.supabase.rpc('touch_last_access', { user_id: userId });
+                query.order('created_at', { ascending: false, nullsFirst: false });
+            } else {
+                query.order('created_at', { ascending: false });
             }
             
             const { data, error } = await query;
             
-            if (error) throw error;
+            if (error) {
+                this.logger.error('Error in fetchConversations query:', error);
+                throw error;
+            }
             
-            this.logger.info(`Found ${data?.length || 0} conversations for user ${userId}`);
+            this.logger.info(`Found ${data?.length || 0} total conversations for user ${userId}`);
             
-            // Log conversation IDs for debugging
+            // Log all conversation IDs for debugging
             if (data && data.length > 0) {
-                this.logger.info('Conversation IDs:', data.map(c => c.id).join(', '));
+                data.forEach(conv => {
+                    const otherParticipants = conv.participants
+                        .filter(p => p.user_id !== userId)
+                        .map(p => p.profiles?.email || p.user_id)
+                        .join(', ');
+                        
+                    this.logger.info(`Conversation ${conv.id}: with ${otherParticipants || 'self'}, is_self_chat: ${conv.is_self_chat}`);
+                });
             }
             
             return data || [];

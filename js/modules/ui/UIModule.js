@@ -228,70 +228,66 @@ export class UIModule extends BaseModule {
             this.logger.info('Fetching conversations for user:', this.currentUser.id);
             const dataModule = this.getModule('data');
             
-            // Force a fresh fetch from the database
+            // Always force a fresh fetch to get the latest data
             const conversations = await dataModule.fetchConversations(this.currentUser.id, true);
-            this.logger.info(`Fetched ${conversations.length} conversations`);
+            this.logger.info(`Fetched ${conversations.length} conversations from database`);
             
-            // Add proper logging about the current conversation
-            if (this.currentConversation) {
-                this.logger.info(`Current conversation ID: ${this.currentConversation}`);
-                const exists = conversations.some(c => c.id === this.currentConversation);
-                this.logger.info(`Current conversation exists in fetched data: ${exists}`);
-            }
-            
-            // Filter and deduplicate conversations
-            const processedConversations = [];
-            let selfChat = null;
-            
-            // Find the most recent self chat (if any)
+            // Debug info about what we received
             conversations.forEach(conv => {
-                if (conv.is_self_chat || conv.participants.length === 1) {
-                    // If we haven't found a self chat yet, or this one is more recent
-                    if (!selfChat || new Date(conv.created_at) > new Date(selfChat.created_at)) {
-                        selfChat = conv;
-                    }
-                } else {
-                    processedConversations.push(conv);
-                }
+                this.logger.info(`Conversation ID: ${conv.id}, Self chat: ${conv.is_self_chat}, Participants: ${conv.participants.length}`);
             });
             
-            // Add the self chat at the beginning if it exists
-            if (selfChat) {
-                processedConversations.unshift(selfChat);
-            }
-            
-            // Ensure current conversation is included if it exists
             if (this.currentConversation) {
-                const currentInList = processedConversations.some(c => c.id === this.currentConversation);
-                if (!currentInList) {
-                    const currentConv = conversations.find(c => c.id === this.currentConversation);
-                    if (currentConv) {
-                        this.logger.info('Adding current conversation to list as it was missing');
-                        processedConversations.push(currentConv);
-                    }
-                }
+                this.logger.info(`Current active conversation ID: ${this.currentConversation}`);
             }
             
-            // Debug output processed conversations
-            this.logger.info(`Rendering ${processedConversations.length} conversations`);
+            // Don't filter conversations by type - include all conversations
+            const processedConversations = [...conversations];
             
-            // Render the conversations
+            // Show all conversations in the list - both self chats and chats with others
+            this.logger.info(`Rendering ${processedConversations.length} total conversations`);
+            
+            // Sort: active conversation first, then by most recent
+            processedConversations.sort((a, b) => {
+                // Current conversation always comes first
+                if (a.id === this.currentConversation) return -1;
+                if (b.id === this.currentConversation) return 1;
+                
+                // Otherwise sort by most recent
+                return new Date(b.created_at) - new Date(a.created_at);
+            });
+            
+            // Render all conversations
             conversationsList.innerHTML = processedConversations.map(conv => {
                 const isSelfChat = conv.is_self_chat || conv.participants.length === 1;
                 
-                // Handle both data structures: profiles directly on participants or nested
-                const otherParticipant = isSelfChat ? null : 
-                    conv.participants.find(p => p.user_id !== this.currentUser.id);
+                // Find the other participant (if not self chat)
+                let name, avatar;
                 
-                const otherProfile = otherParticipant?.profiles || 
-                                    (otherParticipant && typeof otherParticipant.profiles === 'undefined' ? otherParticipant : null);
-                
-                const name = isSelfChat ? 'Notes to Self' : 
-                    otherProfile?.display_name || otherProfile?.email || 'Unknown User';
+                if (isSelfChat) {
+                    name = 'Notes to Self';
+                    avatar = this.currentUser.avatar_url;
+                } else {
+                    // Find the participant who is not the current user
+                    const otherParticipant = conv.participants.find(p => 
+                        p.user_id !== this.currentUser.id
+                    );
                     
-                const avatar = isSelfChat ? this.currentUser.avatar_url : 
-                    otherProfile?.avatar_url;
+                    if (!otherParticipant) {
+                        this.logger.warn(`No other participant found for conversation ${conv.id}`);
+                        name = 'Unknown User';
+                        avatar = null;
+                    } else {
+                        // Get the profile from the other participant
+                        const profile = otherParticipant.profiles;
+                        name = profile?.display_name || profile?.email || 'Unknown User';
+                        avatar = profile?.avatar_url;
+                        
+                        this.logger.info(`Found other participant: ${name} for conversation ${conv.id}`);
+                    }
+                }
                 
+                // Create the HTML for this conversation
                 return `
                     <div class="conversation-item${conv.id === this.currentConversation ? ' active' : ''}" 
                          data-conversation-id="${conv.id}">
@@ -479,75 +475,39 @@ export class UIModule extends BaseModule {
             // Only add the other user if it's not a self-chat
             if (userId !== this.currentUser.id) {
                 participants.push(userId);
-                this.logger.info(`Adding participant: ${userId}`);
+                this.logger.info(`Creating chat with participant: ${userId}`);
             } else {
                 this.logger.info('Creating self-chat conversation');
             }
             
             const dataModule = this.getModule('data');
+            
+            // Create the conversation
             const conversation = await dataModule.createConversation(participants);
             if (!conversation || !conversation.id) {
                 throw new Error('Failed to create conversation - no ID returned');
             }
             
-            this.logger.info(`Conversation created with ID: ${conversation.id}`);
+            this.logger.info(`Successfully created conversation with ID: ${conversation.id}`);
             
-            // Close the modal first
+            // Close the modal
             document.getElementById('new-conversation-modal')?.classList.add('hidden');
             
-            // Set current conversation ID immediately
+            // Set the current conversation ID
             this.currentConversation = conversation.id;
             
-            // Use a more reliable approach:
-            // 1. First load the conversation to ensure it's in the database
-            await this.loadConversationData(conversation.id);
-            
-            // 2. Then render the conversations list
+            // Refresh the list first so the new conversation appears
             await this.renderConversationsList();
             
-            // 3. Wait longer for DOM updates to complete
-            await new Promise(resolve => setTimeout(resolve, 300));
+            // Short delay to ensure DOM updates are complete
+            await new Promise(resolve => setTimeout(resolve, 200));
             
-            // 4. Now update the UI to show this conversation
-            const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversation.id}"]`);
-            if (conversationItem) {
-                this.logger.info(`Found conversation in list, highlighting it: ${conversation.id}`);
-                // Mark as active
-                document.querySelectorAll('.conversation-item').forEach(item => 
-                    item.classList.remove('active'));
-                conversationItem.classList.add('active');
-            } else {
-                this.logger.warn(`Conversation ${conversation.id} not found in list after rendering`);
-            }
+            // Load the conversation into the chat area
+            await this.loadConversation(conversation.id);
             
-            // Show chat area
-            const chatArea = document.querySelector('.chat-area');
-            const sidebar = document.querySelector('.sidebar');
-            
-            if (chatArea) {
-                chatArea.classList.add('active');
-            }
-            
-            if (window.innerWidth <= 768 && sidebar) {
-                sidebar.classList.add('hidden');
-            }
-            
-            // Update message container with empty state
-            const messageContainer = document.getElementById('message-container');
-            if (messageContainer) {
-                messageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
-            }
-            
-            // Focus the message input
-            const messageInput = document.getElementById('message-text');
-            if (messageInput) {
-                messageInput.value = '';
-                messageInput.focus();
-            }
-            
-            this.logger.info('Conversation successfully initiated with UI updates');
+            this.logger.info('New conversation created and loaded successfully');
         } catch (error) {
-            this.logger.error('Failed to start conversation:', error);
+            this.logger.error('Error creating conversation:', error.message);
             this.showError('Failed to create conversation: ' + error.message);
         }
     }
