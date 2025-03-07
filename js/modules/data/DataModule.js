@@ -492,7 +492,6 @@ export class DataModule extends BaseModule {
         }
     }
 
-    // Add a method to subscribe to real-time message updates
     subscribeToNewMessages(conversationId, callback) {
         this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
         
@@ -516,9 +515,9 @@ export class DataModule extends BaseModule {
                 .subscribe((status) => {
                     this.logger.info(`Subscription status for ${conversationId}: ${status}`);
                     
-                    if (status === 'CLOSED' || status === 'TIMED_OUT') {
-                        this.logger.warn(`Subscription lost for ${conversationId}, reconnecting...`);
-                        setTimeout(() => channel.subscribe(), 3000);
+                    if (status === 'CLOSED' || status === 'TIMED_OUT' || status === 'CHANNEL_ERROR') {
+                        this.logger.warn(`Subscription status changed to ${status}, attempting reconnect...`);
+                        this._handleSubscriptionError(channel, conversationId);
                     }
                 });
 
@@ -535,6 +534,26 @@ export class DataModule extends BaseModule {
                 unsubscribe: () => {},
                 conversationId
             };
+        }
+    }
+
+    // Add this new method for handling subscription errors
+    async _handleSubscriptionError(channel, conversationId) {
+        try {
+            this.logger.info(`Handling subscription error for conversation ${conversationId}`);
+            
+            // Wait a bit before attempting reconnect
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            
+            // Check if the channel is still active
+            if (channel) {
+                this.logger.info(`Attempting to resubscribe to conversation ${conversationId}`);
+                await channel.subscribe();
+            }
+        } catch (error) {
+            this.logger.error(`Error handling subscription reconnect for ${conversationId}:`, error);
+            // If reconnect fails, try again in 5 seconds
+            setTimeout(() => this._handleSubscriptionError(channel, conversationId), 5000);
         }
     }
 
