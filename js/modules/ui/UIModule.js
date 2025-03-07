@@ -1039,4 +1039,67 @@ export class UIModule extends BaseModule {
         
         // Could add more special events here as needed
     }
+
+    // Improve subscription handling
+    _setupMessageSubscription(conversationId) {
+        try {
+            // Clean up existing subscription
+            if (this.currentSubscription) {
+                this.logger.info(`Cleaning up previous subscription: ${this.currentSubscription.conversationId}`);
+                this.currentSubscription.unsubscribe();
+                this.currentSubscription = null;
+            }
+            
+            this.logger.info(`Setting up new subscription for conversation: ${conversationId}`);
+            const dataModule = this.getModule('data');
+            
+            // Set up new subscription
+            this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (message) => {
+                this.logger.info(`Received message in conversation ${conversationId}:`, message.id);
+                
+                // Ignore if we've navigated away
+                if (this.currentConversation !== conversationId) {
+                    this.logger.info('Message is for a different conversation, showing notification');
+                    this._showMessageNotification(message);
+                    this.renderConversationsList();
+                    return;
+                }
+                
+                // Don't show our own messages twice
+                if (message.sender_id === this.currentUser.id) {
+                    this.logger.info('Ignoring own message from subscription');
+                    return;
+                }
+                
+                // Add message to UI and mark as read
+                this._addMessageToUI(message);
+                dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+                
+                // Play notification sound
+                this._playIncomingMessageSound();
+            });
+            
+        } catch (error) {
+            this.logger.error('Error setting up message subscription:', error);
+        }
+    }
+
+    // Add this method to properly show notifications
+    _showMessageNotification(message) {
+        if (!message) return;
+        
+        try {
+            const notificationModule = this.getModule('notification');
+            const senderName = message.profiles?.display_name || message.profiles?.email || 'Someone';
+            
+            notificationModule.notify({
+                title: `New message from ${senderName}`,
+                message: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
+                conversationId: message.conversation_id,
+                soundType: 'notification'
+            });
+        } catch (error) {
+            this.logger.error('Error showing message notification:', error);
+        }
+    }
 }

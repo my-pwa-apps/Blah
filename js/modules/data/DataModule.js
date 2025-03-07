@@ -433,19 +433,21 @@ export class DataModule extends BaseModule {
         this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
         
         try {
-            // Use a unique channel name with timestamp to avoid conflicts
-            const channelName = `messages_${conversationId}_${Date.now()}`;
+            // Use unique channel name with conversation ID only
+            const channelName = `messages_${conversationId}`;
             
-            // Create channel with better error handling
             const channel = this.supabase
                 .channel(channelName)
                 .on('postgres_changes', {
-                    event: 'INSERT', 
+                    event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
                 }, async (payload) => {
-                    this.logger.info(`Received message in real-time for conversation ${conversationId}:`, payload.new.id);
+                    this.logger.info(`Received real-time event for conversation ${conversationId}:`, payload);
+                    
+                    // Only process new messages
+                    if (payload.eventType !== 'INSERT') return;
                     
                     try {
                         // Get complete message data with sender profile
@@ -457,7 +459,12 @@ export class DataModule extends BaseModule {
                                 created_at,
                                 sender_id,
                                 conversation_id,
-                                profiles:sender_id (*)
+                                profiles!messages_sender_id_fkey (
+                                    id,
+                                    email,
+                                    display_name,
+                                    avatar_url
+                                )
                             `)
                             .eq('id', payload.new.id)
                             .single();
@@ -466,7 +473,7 @@ export class DataModule extends BaseModule {
                             this.logger.error(`Error fetching complete message ${payload.new.id}:`, error);
                             callback(payload.new);
                         } else if (data) {
-                            this.logger.info(`Processing complete message data:`, data.id);
+                            this.logger.info(`Processing complete message:`, data);
                             callback(data);
                         }
                     } catch (err) {
@@ -475,23 +482,20 @@ export class DataModule extends BaseModule {
                     }
                 });
             
-            // Connect with status reporting and auto-reconnect
-            channel.subscribe((status, err) => {
+            // Subscribe with better error handling and reconnection logic
+            channel.subscribe(async (status, err) => {
                 if (status === 'SUBSCRIBED') {
                     this.logger.info(`Successfully subscribed to conversation ${conversationId}`);
-                } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
-                    this.logger.error(`Subscription error for ${conversationId}:`, err);
-                    
-                    // Try to reconnect after a delay
-                    setTimeout(() => {
-                        this.logger.info(`Attempting to reconnect to conversation ${conversationId}`);
-                        channel.subscribe();
-                    }, 2000);
-                } else if (status === 'CLOSED') {
-                    this.logger.info(`Channel for conversation ${conversationId} closed`);
+                } else if (status === 'CHANNEL_ERROR') {
+                    this.logger.error(`Channel error for ${conversationId}:`, err);
+                    await this._handleSubscriptionError(channel, conversationId);
+                } else if (status === 'TIMED_OUT') {
+                    this.logger.error(`Subscription timed out for ${conversationId}`);
+                    await this._handleSubscriptionError(channel, conversationId);
                 }
             });
             
+            // Return subscription handle
             return {
                 unsubscribe: () => {
                     this.logger.info(`Unsubscribing from conversation ${conversationId}`);
@@ -501,14 +505,25 @@ export class DataModule extends BaseModule {
                         this.logger.error(`Error unsubscribing from conversation ${conversationId}:`, err);
                     }
                 },
-                conversationId // Store for debugging
+                conversationId
             };
         } catch (error) {
             this.logger.error(`Failed to create subscription for ${conversationId}:`, error);
-            return { 
-                unsubscribe: () => this.logger.info(`Unsubscribing from dummy channel for ${conversationId}`),
+            return {
+                unsubscribe: () => {},
                 conversationId
             };
+        }
+    }
+
+    // Add helper method for subscription error handling
+    async _handleSubscriptionError(channel, conversationId) {
+        this.logger.info(`Attempting to reconnect to conversation ${conversationId}`);
+        try {
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
+            await channel.subscribe();
+        } catch (error) {
+            this.logger.error(`Reconnection failed for conversation ${conversationId}:`, error);
         }
     }
 
