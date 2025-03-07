@@ -10,44 +10,30 @@ export class DataModule extends BaseModule {
 
     async init() {
         this.supabase = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
-        
-        // Set up a status channel to monitor real-time connection status
+        this.connectionStatus = 'CONNECTING';
         this._setupConnectionMonitoring();
-        
         this.logger.info('Data module initialized');
     }
 
-    // Add connection status monitoring
     _setupConnectionMonitoring() {
         try {
-            // Create a status channel to monitor connection state
-            const statusChannel = this.supabase.channel('status-channel');
-            
-            statusChannel
-                .on('system', { event: 'presence_state' }, () => {
-                    this.connectionStatus = 'CONNECTED';
-                    this.logger.info('Supabase real-time connection established');
-                })
+            this.heartbeatChannel = this.supabase.channel('heartbeat')
                 .subscribe((status) => {
+                    this.connectionStatus = status;
+                    this.logger.info(`Real-time connection status: ${status}`);
+                    
                     if (status === 'SUBSCRIBED') {
                         this.connectionStatus = 'CONNECTED';
-                        this.logger.info('Real-time status channel connected');
-                    } else if (status === 'CHANNEL_ERROR') {
-                        this.connectionStatus = 'ERROR';
-                        this.logger.error('Real-time connection error');
                     } else if (status === 'CLOSED' || status === 'TIMED_OUT') {
                         this.connectionStatus = 'DISCONNECTED';
-                        this.logger.warn('Real-time connection closed or timed out');
-                        
-                        // Try to reconnect after 3 seconds
+                        // Try to reconnect
                         setTimeout(() => {
-                            this.logger.info('Attempting to reconnect status channel');
-                            statusChannel.subscribe();
+                            this.heartbeatChannel.subscribe();
                         }, 3000);
                     }
                 });
         } catch (error) {
-            this.logger.error('Failed to setup connection monitoring:', error);
+            this.logger.error('Error setting up connection monitoring:', error);
         }
     }
 
@@ -508,108 +494,47 @@ export class DataModule extends BaseModule {
 
     // Add a method to subscribe to real-time message updates
     subscribeToNewMessages(conversationId, callback) {
-        this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
+        this.logger.info(`Setting up message subscription for conversation: ${conversationId}`);
         
         try {
-            // Create truly unique channel name using timestamp
-            const uniqueId = new Date().getTime();
-            const channelName = `message_updates:${conversationId}:${uniqueId}`;
-            
-            this.logger.info(`Creating channel: ${channelName}`);
-            
-            const channel = this.supabase
-                .channel(channelName)
-                .on('postgres_changes', {
-                    event: 'INSERT',
-                    schema: 'public',
-                    table: 'messages',
-                    filter: `conversation_id=eq.${conversationId}`
-                }, async (payload) => {
-                    this.logger.info(`Received real-time event for conversation ${conversationId}`);
-                    
-                    if (!payload.new || !payload.new.id) {
-                        this.logger.warn('Received empty payload', payload);
-                        return;
-                    }
-                    
-                    try {
-                        // Get complete message data with sender profile
-                        const { data, error } = await this.supabase
-                            .from('messages')
-                            .select(`
-                                id,
-                                content,
-                                created_at,
-                                sender_id,
-                                conversation_id,
-                                profiles:sender_id (
-                                    id,
-                                    email,
-                                    display_name,
-                                    avatar_url
-                                )
-                            `)
-                            .eq('id', payload.new.id)
-                            .single();
-                        
-                        if (error) {
-                            this.logger.error(`Error fetching message details:`, error);
+            const channel = this.supabase.channel(`messages:${conversationId}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: 'INSERT',
+                        schema: 'public',
+                        table: 'messages',
+                        filter: `conversation_id=eq.${conversationId}`
+                    },
+                    (payload) => {
+                        this.logger.info(`New message received for conversation ${conversationId}`);
+                        if (payload.new) {
                             callback(payload.new);
-                        } else {
-                            callback(data);
                         }
-                    } catch (err) {
-                        this.logger.error('Error processing real-time message:', err);
-                        callback(payload.new);
+                    }
+                )
+                .subscribe((status) => {
+                    this.logger.info(`Subscription status for ${conversationId}: ${status}`);
+                    
+                    if (status === 'CLOSED' || status === 'TIMED_OUT') {
+                        this.logger.warn(`Subscription lost for ${conversationId}, reconnecting...`);
+                        setTimeout(() => channel.subscribe(), 3000);
                     }
                 });
-            
-            // Add detailed connection state handling
-            channel.subscribe(async (status, err) => {
-                this.logger.info(`Channel ${channelName} status: ${status}`);
-                
-                if (status === 'SUBSCRIBED') {
-                    this.logger.info(`Successfully subscribed to conversation ${conversationId}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    this.logger.error(`Channel error for ${conversationId}:`, err);
-                    await this._handleSubscriptionError(channel, conversationId);
-                } else if (status === 'TIMED_OUT') {
-                    this.logger.error(`Subscription timed out for ${conversationId}`);
-                    await this._handleSubscriptionError(channel, conversationId);
-                } else if (status === 'CLOSED') {
-                    this.logger.warn(`Channel closed for conversation ${conversationId}`);
-                }
-            });
-            
-            // Return subscription handle
+
             return {
                 unsubscribe: () => {
                     this.logger.info(`Unsubscribing from conversation ${conversationId}`);
-                    try {
-                        channel.unsubscribe();
-                    } catch (err) {
-                        this.logger.error(`Error unsubscribing:`, err);
-                    }
+                    channel.unsubscribe();
                 },
                 conversationId
             };
         } catch (error) {
-            this.logger.error(`Failed to create subscription:`, error);
+            this.logger.error('Error setting up message subscription:', error);
             return {
                 unsubscribe: () => {},
                 conversationId
             };
-        }
-    }
-
-    // Add helper method for subscription error handling
-    async _handleSubscriptionError(channel, conversationId) {
-        this.logger.info(`Attempting to reconnect to conversation ${conversationId}`);
-        try {
-            await new Promise(resolve => setTimeout(resolve, 2000)); // Wait 2 seconds
-            await channel.subscribe();
-        } catch (error) {
-            this.logger.error(`Reconnection failed for conversation ${conversationId}:`, error);
         }
     }
 

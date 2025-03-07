@@ -402,118 +402,59 @@ export class UIModule extends BaseModule {
     }
 
     async loadConversation(conversationId) {
-        if (!conversationId) {
-            this.logger.error('Cannot load conversation: No ID provided');
-            return;
-        }
+        if (!conversationId) return;
         
         this.logger.info(`Loading conversation: ${conversationId}`);
-        this.currentConversation = conversationId;
         
-        // Get UI elements
-        const messageContainer = document.getElementById('message-container');
-        const chatArea = document.querySelector('.chat-area');
-        const sidebar = document.querySelector('.sidebar');
+        try {
+            // Clean up existing subscription first
+            if (this.currentSubscription) {
+                this.logger.info('Cleaning up existing subscription');
+                this.currentSubscription.unsubscribe();
+                this.currentSubscription = null;
+            }
+            
+            this.currentConversation = conversationId;
+            
+            // Set up new subscription before loading messages
+            this.logger.info('Setting up new message subscription');
+            const dataModule = this.getModule('data');
+            this.currentSubscription = dataModule.subscribeToNewMessages(
+                conversationId,
+                (message) => this._handleNewMessage(message)
+            );
+            
+            // Load existing messages
+            const messages = await dataModule.fetchMessages(conversationId);
+            this._renderMessages(messages);
+            
+            // Update UI
+            this._updateConversationUI(conversationId);
+            
+        } catch (error) {
+            this.logger.error('Error loading conversation:', error);
+            this.showError('Failed to load conversation');
+        }
+    }
+
+    _handleNewMessage(message) {
+        if (!message || !this.currentConversation) return;
         
-        if (!messageContainer) {
-            this.logger.error('Message container not found');
+        this.logger.info(`Handling new message: ${message.id}`);
+        
+        // Don't show own messages twice (they're added immediately when sent)
+        if (message.sender_id === this.currentUser.id) {
+            this.logger.info('Ignoring own message from subscription');
             return;
         }
         
-        // Update UI to show active conversation
-        document.querySelectorAll('.conversation-item').forEach(item => {
-            if (item.dataset.conversationId === conversationId) {
-                item.classList.add('active');
-                this.logger.info(`Set active class on conversation ${conversationId}`);
-            } else {
-                item.classList.remove('active');
-            }
-        });
+        // Add message to UI
+        this._addMessageToUI(message);
         
-        // Find the conversation item to get its name and other data
-        const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-        
-        // Update chat header title with correct name
-        const chatHeader = document.querySelector('.chat-title');
-        if (chatHeader && conversationItem) {
-            const nameEl = conversationItem.querySelector('.conversation-name');
-            chatHeader.textContent = nameEl ? nameEl.textContent : 'Chat';
-            
-            // Add data attribute to header to identify chat type
-            chatHeader.dataset.isSelfChat = conversationItem.dataset.isSelfChat || 'false';
-        }
-        
-        // For mobile, disable transitions when showing chat area
-        if (window.innerWidth <= 768) {
-            chatArea?.classList.add('no-transition');
-            sidebar?.classList.add('no-transition');
-            
-            // Force browser to acknowledge the class change
-            void chatArea?.offsetWidth;
-            
-            // Show chat area (especially important on mobile)
-            if (chatArea) {
-                chatArea.classList.add('active');
-            }
-            
-            // Hide sidebar on mobile
-            if (sidebar) {
-                sidebar.classList.add('hidden');
-            }
-            
-            // Re-enable transitions after a short delay
-            setTimeout(() => {
-                chatArea?.classList.remove('no-transition');
-                sidebar?.classList.remove('no-transition');
-            }, 50);
-        } else {
-            // For desktop, just update classes
-            if (chatArea) {
-                chatArea.classList.add('active');
-            }
-        }
-        
-        // Check if conversation is in the list, if not, refresh the list
-        if (!conversationItem) {
-            this.logger.info(`Conversation ${conversationId} not in list, refreshing list`);
-            await this.renderConversationsList();
-        }
-
-        try {
+        // Mark as read if this is the current conversation
+        if (message.conversation_id === this.currentConversation) {
             const dataModule = this.getModule('data');
-            const messages = await dataModule.fetchMessages(conversationId);
-            
-            // Clear existing messages
-            messageContainer.innerHTML = '';
-            
-            if (messages.length === 0) {
-                // Show empty state
-                messageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
-            } else {
-                this._renderMessages(messages);
-            }
-            
-            // Scroll to bottom
-            messageContainer.scrollTop = messageContainer.scrollHeight;
-            
-            // Focus the message input
-            document.getElementById('message-text')?.focus();
-            
-            // Mark conversation as read
-            await dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
-            
-            // Remove unread indicator
-            const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-            if (conversationEl) {
-                conversationEl.classList.remove('unread');
-                conversationEl.querySelector('.unread-indicator')?.remove();
-            }
-            
-            // Setup real-time subscription for new messages
-            this._setupMessageSubscription(conversationId);
-        } catch (error) {
-            this.logger.error('Failed to load conversation messages:', error);
-            this.showError('Failed to load messages');
+            dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
         }
     }
 
