@@ -641,19 +641,34 @@ export class UIModule extends BaseModule {
         const backButton = document.getElementById('back-button');
         backButton?.addEventListener('click', () => {
             this.logger.info('Back button clicked, returning to sidebar');
+            
+            // First reset the conversation state BEFORE changing any UI
+            const previousConversation = this.currentConversation;
+            this.currentConversation = null;
+            this.logger.info(`Current conversation reset from ${previousConversation} to null`);
+            
+            // Then update UI based on this new state
             const chatArea = document.querySelector('.chat-area');
             const sidebar = document.querySelector('.sidebar');
             
-            // First update the UI classes
-            if (chatArea) chatArea.classList.remove('active');
-            if (sidebar) sidebar.classList.remove('hidden');
+            if (chatArea) {
+                // Add a class for transitioning out
+                chatArea.classList.add('transitioning-out');
+                chatArea.classList.remove('active');
+            }
             
-            // Add a slight delay before resetting conversation to allow CSS transitions to complete
+            if (sidebar) {
+                sidebar.classList.remove('hidden');
+            }
+            
+            // Remove the transitioning class after animation completes
             setTimeout(() => {
-                // Reset current conversation state
-                this.currentConversation = null;
-                this.logger.info('Current conversation reset to null after back button click');
-            }, 50);
+                if (chatArea) {
+                    chatArea.classList.remove('transitioning-out');
+                }
+                // Force a layout adjustment
+                this.adjustLayoutForScreenSize();
+            }, 350); // Allow full 300ms transition to complete plus a bit extra
         });
         
         // Handle resizing properly

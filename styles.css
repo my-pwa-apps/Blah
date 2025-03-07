@@ -1385,3 +1385,48 @@ body {
         background-color: transparent;
     }
 }
+
+/* Add this new CSS class for better transitions */
+.chat-area.transitioning-out {
+    transform: translateX(100%) !important;
+    transition: transform 0.3s ease-in;
+}
+
+/* Ensure sidebar shows correctly during transitions */
+.sidebar {
+    position: absolute !important;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+    transition: transform 0.3s ease;
+}
+
+/* Override any conflicting styles */
+@media (max-width: 768px) {
+    .sidebar.hidden {
+        transform: translateX(-100%) !important;
+        z-index: 5;
+    }
+    
+    .chat-area.active {
+        transform: translateX(0) !important;
+        z-index: 20;
+    }
+    
+    .chat-area {
+        transform: translateX(100%) !important;
+        transition: transform 0.3s ease-out;
+    }
+    
+    /* Ensure back button is clearly visible and clickable */
+    #back-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 40px;
+        height: 40px; 
+        margin-right: 8px;
+        color: white !important;
+        cursor: pointer;
+    }
+}
