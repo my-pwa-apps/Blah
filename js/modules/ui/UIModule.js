@@ -12,6 +12,8 @@ export class UIModule extends BaseModule {
         this.setupAuthListener();
         this.setupConversationListeners();
         this.setupMessageListeners();
+        this.setupThemeToggle();
+        this.setupProfileHandlers();
         this.logger.info('UI module initialized');
     }
 
@@ -252,5 +254,49 @@ export class UIModule extends BaseModule {
         status.className = `status-indicator ${online ? '' : 'offline'} show`;
         
         setTimeout(() => status.classList.remove('show'), 3000);
+    }
+
+    setupThemeToggle() {
+        const themeToggle = document.getElementById('theme-toggle');
+        if (!themeToggle) return;
+
+        const toggleTheme = () => {
+            const currentTheme = document.body.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            
+            document.body.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+            themeToggle.querySelector('.material-icons').textContent = 
+                newTheme === 'dark' ? 'light_mode' : 'dark_mode';
+        };
+
+        themeToggle.addEventListener('click', toggleTheme);
+    }
+
+    setupProfileHandlers() {
+        const userProfile = document.getElementById('user-profile');
+        const profileModal = document.getElementById('profile-modal');
+        const closeProfile = document.getElementById('close-profile');
+        
+        userProfile?.addEventListener('click', () => {
+            profileModal?.classList.remove('hidden');
+            if (this.currentUser) {
+                document.getElementById('display-name').value = this.currentUser.display_name || '';
+                document.getElementById('status-message').value = this.currentUser.status || '';
+                document.getElementById('avatar-preview').src = 
+                    this.currentUser.avatar_url || 'images/default-avatar.png';
+            }
+        });
+
+        closeProfile?.addEventListener('click', () => {
+            profileModal?.classList.add('hidden');
+        });
+
+        // Close when clicking outside
+        profileModal?.addEventListener('click', (e) => {
+            if (e.target === profileModal) {
+                profileModal.classList.add('hidden');
+            }
+        });
     }
 }

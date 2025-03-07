@@ -111,4 +111,37 @@ export class DataModule extends BaseModule {
             return null;
         }
     }
+
+    async sendMessage(conversationId, senderId, content) {
+        try {
+            const { data, error } = await this.supabase
+                .from('messages')
+                .insert({
+                    conversation_id: conversationId,
+                    sender_id: senderId,
+                    content
+                })
+                .select()
+                .single();
+            
+            if (error) throw error;
+            
+            // Update conversation's last message
+            await this.supabase
+                .from('conversations')
+                .update({
+                    last_message: {
+                        content,
+                        sender_id: senderId,
+                        created_at: new Date().toISOString()
+                    }
+                })
+                .eq('id', conversationId);
+            
+            return data;
+        } catch (error) {
+            this.logger.error('Error sending message:', error);
+            throw error;
+        }
+    }
 }
