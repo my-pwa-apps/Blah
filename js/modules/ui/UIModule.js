@@ -342,10 +342,15 @@ export class UIModule extends BaseModule {
         this.logger.info(`Loading conversation: ${conversationId}`);
         this.currentConversation = conversationId;
         const messageContainer = document.getElementById('message-container');
+        if (!messageContainer) {
+            this.logger.error('Message container not found');
+            return;
+        }
+        
         const chatArea = document.querySelector('.chat-area');
         const sidebar = document.querySelector('.sidebar');
         
-        // Update UI to show active conversation
+        // Set active conversation in list
         document.querySelectorAll('.conversation-item').forEach(item => {
             if (item.dataset.conversationId === conversationId) {
                 item.classList.add('active');
@@ -354,9 +359,20 @@ export class UIModule extends BaseModule {
             }
         });
         
-        if (window.innerWidth <= 768) {
-            chatArea?.classList.add('active');
-            sidebar?.classList.add('hidden');
+        // Update UI visibility - make sure chat area is shown
+        if (chatArea) chatArea.classList.add('active');
+        if (window.innerWidth <= 768 && sidebar) {
+            sidebar.classList.add('hidden');
+        }
+        
+        // Update chat header to show conversation name
+        const chatHeader = document.querySelector('.chat-title');
+        if (chatHeader) {
+            const conversationItem = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            if (conversationItem) {
+                const name = conversationItem.querySelector('.conversation-name')?.textContent || 'Conversation';
+                chatHeader.textContent = name;
+            }
         }
 
         try {
@@ -364,18 +380,27 @@ export class UIModule extends BaseModule {
             const messages = await dataModule.fetchMessages(conversationId);
             
             messageContainer.innerHTML = '';
-            messages.forEach(message => {
-                const isSent = message.sender_id === this.currentUser.id;
-                const messageEl = document.createElement('div');
-                messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
-                messageEl.innerHTML = `
-                    <div class="message-content">${message.content}</div>
-                    <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
-                `;
-                messageContainer.appendChild(messageEl);
-            });
             
+            if (messages.length === 0) {
+                messageContainer.innerHTML = '<div class="no-messages">No messages yet. Start typing to send a message.</div>';
+            } else {
+                messages.forEach(message => {
+                    const isSent = message.sender_id === this.currentUser.id;
+                    const messageEl = document.createElement('div');
+                    messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
+                    messageEl.innerHTML = `
+                        <div class="message-content">${message.content}</div>
+                        <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+                    `;
+                    messageContainer.appendChild(messageEl);
+                });
+            }
+            
+            // Scroll to bottom of message container
             messageContainer.scrollTop = messageContainer.scrollHeight;
+            
+            // Focus the message input
+            document.getElementById('message-text')?.focus();
         } catch (error) {
             this.logger.error('Failed to load conversation:', error);
             this.showError('Failed to load conversation');
@@ -404,23 +429,35 @@ export class UIModule extends BaseModule {
             this.currentConversation = conversation.id;
             this.logger.info(`Conversation created with ID: ${conversation.id}`);
             
-            // First refresh the conversations list
-            await this.renderConversationsList();
-            
-            // Then load the specific conversation
-            await this.loadConversation(conversation.id);
-            
+            // Close the modal first
             document.getElementById('new-conversation-modal')?.classList.add('hidden');
             
-            this.logger.info('Conversation started successfully');
+            // Force reload of conversations list
+            await this.renderConversationsList();
             
-            // For mobile devices, ensure we're showing the chat area
+            // Ensure UI state is properly set
+            const chatArea = document.querySelector('.chat-area');
+            const sidebar = document.querySelector('.sidebar');
+            
+            // Make sure we're showing the conversation area
+            chatArea?.classList.add('active');
+            
+            // On mobile, hide sidebar
             if (window.innerWidth <= 768) {
-                const chatArea = document.querySelector('.chat-area');
-                const sidebar = document.querySelector('.sidebar');
-                chatArea?.classList.add('active');
                 sidebar?.classList.add('hidden');
             }
+            
+            // Clear the message container before loading the new conversation
+            const messageContainer = document.getElementById('message-container');
+            if (messageContainer) messageContainer.innerHTML = '';
+            
+            // Then load the conversation with slight delay to ensure DOM updates
+            setTimeout(() => {
+                this.loadConversation(conversation.id);
+                this.logger.info('Conversation UI updated');
+            }, 100);
+            
+            this.logger.info('Conversation started successfully');
         } catch (error) {
             this.logger.error('Failed to start conversation:', error);
             this.showError('Failed to start conversation: ' + error.message);

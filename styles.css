@@ -1167,3 +1167,41 @@ body {
         color: white !important;
     }
 }
+
+/* Fix empty message container */
+.no-messages {
+    text-align: center;
+    color: var(--md-text-secondary);
+    padding: 2rem;
+    font-style: italic;
+}
+
+/* Fix chat area visibility issues */
+.chat-area.active {
+    display: flex !important;
+    flex-direction: column;
+    z-index: 10;
+}
+
+/* Fix chat title in header */
+.chat-title {
+    font-weight: 500;
+    flex: 1;
+}
+
+@media (max-width: 768px) {
+    /* Ensure proper stacking on mobile */
+    .content-container {
+        position: relative;
+        height: calc(100vh - 64px);
+        overflow: hidden;
+    }
+
+    .chat-area.active {
+        transform: translateX(0) !important;
+    }
+
+    .sidebar.hidden {
+        transform: translateX(-100%) !important;
+    }
+}
