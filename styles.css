@@ -1518,7 +1518,7 @@ body {
     color: white !important;
     font-size: 24px;
     cursor: pointer;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--md-primary-dark);
     border-radius: 50%;
     -webkit-tap-highlight-color: rgba(255, 255, 255, 0.3); /* Visual feedback on tap */
     touch-action: manipulation; /* Optimize for touch */
@@ -1526,6 +1526,28 @@ body {
 
 #back-button:active {
     background-color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* Make clicking the material icon work reliably */
+#back-button .material-icons {
+    pointer-events: none; /* Ensure clicks pass through to button */
+    color: white !important;
+    font-size: 24px !important;
+}
+
+/* Explicitly control back button visibility */
+@media (min-width: 769px) {
+    #back-button {
+        display: none !important;
+    }
+}
+
+@media (max-width: 768px) {
+    #back-button {
+        display: flex !important;
+    }
+    
+    /* Other mobile-specific styles... */
 }
 
 /* Make clicking the material icon work reliably */

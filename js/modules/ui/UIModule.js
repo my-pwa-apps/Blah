@@ -700,6 +700,9 @@ export class UIModule extends BaseModule {
                     chatArea.classList.remove('active');
                     sidebar.classList.remove('hidden');
                     
+                    // Update back button visibility
+                    newBackButton.style.display = 'none';
+                    
                     // Log the state to confirm changes
                     this.logger.info('UI state updated: chat inactive, sidebar visible');
                     
@@ -718,6 +721,10 @@ export class UIModule extends BaseModule {
             }, { passive: false });
             
             this.logger.info('Back button handler replaced with improved version');
+            
+            // Set initial visibility based on screen size
+            const isMobile = window.innerWidth <= 768;
+            backButton.style.display = (isMobile && this.currentConversation) ? 'flex' : 'none';
         }
         
         // Handle resizing properly
@@ -733,6 +740,8 @@ export class UIModule extends BaseModule {
         const isMobile = window.innerWidth <= 768;
         const sidebar = document.querySelector('.sidebar');
         const chatArea = document.querySelector('.chat-area');
+        const backButton = document.getElementById('back-button');
+        
         if (!sidebar || !chatArea) return;
 
         this.logger.info(`Adjusting layout for ${isMobile ? 'mobile' : 'desktop'}, conversation: ${this.currentConversation || 'none'}`);
@@ -741,6 +750,9 @@ export class UIModule extends BaseModule {
             // Desktop layout: both visible side by side (controlled by CSS grid)
             sidebar.classList.remove('hidden');
             chatArea.classList.remove('active', 'hidden');
+            
+            // Always hide back button on desktop
+            if (backButton) backButton.style.display = 'none';
         } else {
             // Mobile layout
             if (this.currentConversation) {
@@ -748,12 +760,20 @@ export class UIModule extends BaseModule {
                 sidebar.classList.add('hidden');
                 chatArea.classList.add('active');
                 chatArea.classList.remove('hidden');
+                
+                // Show back button on mobile when in conversation
+                if (backButton) backButton.style.display = 'flex';
+                
                 this.logger.info('Mobile layout: showing chat area');
             } else {
                 // Show sidebar when no conversation is selected
                 sidebar.classList.remove('hidden');
                 chatArea.classList.remove('active');
                 chatArea.classList.add('hidden');
+                
+                // Hide back button when viewing sidebar on mobile
+                if (backButton) backButton.style.display = 'none';
+                
                 this.logger.info('Mobile layout: showing conversation list');
             }
         }
