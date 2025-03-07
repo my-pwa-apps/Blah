@@ -657,4 +657,86 @@ export class DataModule extends BaseModule {
             conversationId
         };
     }
+
+    // Add a method to subscribe to all new messages (global updates)
+    subscribeToAllMessages(callback) {
+        this.logger.info('Setting up global real-time subscription for all conversations');
+        
+        try {
+            // Create unique channel name
+            const uniqueId = new Date().getTime();
+            const channelName = `all_messages:${uniqueId}`;
+            
+            const channel = this.supabase
+                .channel(channelName)
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'messages'
+                }, async (payload) => {
+                    this.logger.info('Received global real-time event for a message');
+                    
+                    if (!payload.new || !payload.new.id) {
+                        this.logger.warn('Received empty payload in global listener');
+                        return;
+                    }
+                    
+                    try {
+                        // Get complete message with sender profile
+                        const { data, error } = await this.supabase
+                            .from('messages')
+                            .select(`
+                                id,
+                                content,
+                                created_at,
+                                sender_id,
+                                conversation_id,
+                                profiles:sender_id (
+                                    id, 
+                                    email,
+                                    display_name,
+                                    avatar_url
+                                )
+                            `)
+                            .eq('id', payload.new.id)
+                            .single();
+                        
+                        if (error) {
+                            this.logger.error('Error fetching complete message in global listener:', error);
+                            callback(payload.new);
+                        } else {
+                            callback(data);
+                        }
+                    } catch (err) {
+                        this.logger.error('Error processing message in global listener:', err);
+                        callback(payload.new);
+                    }
+                });
+            
+            channel.subscribe(async (status, err) => {
+                if (status === 'SUBSCRIBED') {
+                    this.logger.info('Successfully subscribed to global message updates');
+                } else if (status === 'CHANNEL_ERROR') {
+                    this.logger.error('Global subscription channel error:', err);
+                    await this._handleSubscriptionError(channel, 'global');
+                }
+            });
+            
+            return {
+                unsubscribe: () => {
+                    this.logger.info('Unsubscribing from global message updates');
+                    try {
+                        channel.unsubscribe();
+                    } catch (err) {
+                        this.logger.error('Error unsubscribing from global updates:', err);
+                    }
+                }
+            };
+        } catch (error) {
+            this.logger.error('Failed to create global subscription:', error);
+            return {
+                unsubscribe: () => {}
+            };
+        }
+    }
 }

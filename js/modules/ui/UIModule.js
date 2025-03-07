@@ -17,6 +17,7 @@ export class UIModule extends BaseModule {
         this.setupMobileHandlers();
         this.setupNotificationHandlers();
         this.setupSpecialEvents(); // Add this line
+        await this.setupConversationMonitor(); // Add this line
         this.logger.info('UI module initialized');
     }
 
@@ -1200,6 +1201,120 @@ export class UIModule extends BaseModule {
             document.body.appendChild(debugPanel);
         } else {
             debugPanel.remove();
+        }
+    }
+
+    // Improve real-time message subscription handling
+    _setupMessageSubscription(conversationId) {
+        try {
+            // Clean up existing subscription
+            if (this.currentSubscription) {
+                this.logger.info(`Cleaning up previous subscription: ${this.currentSubscription.conversationId}`);
+                this.currentSubscription.unsubscribe();
+                this.currentSubscription = null;
+            }
+            
+            this.logger.info(`Setting up new subscription for conversation: ${conversationId}`);
+            const dataModule = this.getModule('data');
+            
+            // Set up new subscription
+            this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (message) => {
+                this.logger.info(`Received message in conversation ${conversationId}:`, message.id);
+                
+                // Ignore if we've navigated away
+                if (this.currentConversation !== conversationId) {
+                    this.logger.info('Message is for a different conversation, showing notification');
+                    this._showMessageNotification(message);
+                    
+                    // Update conversation in list without full re-render
+                    this._updateConversationWithNewMessage(message);
+                    
+                    return;
+                }
+                
+                // Don't show our own messages twice
+                if (message.sender_id === this.currentUser.id) {
+                    this.logger.info('Ignoring own message from subscription');
+                    return;
+                }
+                
+                // Add message to UI and mark as read
+                this._addMessageToUI(message);
+                dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+                
+                // Play notification sound
+                this._playIncomingMessageSound();
+            });
+            
+        } catch (error) {
+            this.logger.error('Error setting up message subscription:', error);
+        }
+    }
+
+    // New method to update conversation list with a new message without full re-render
+    _updateConversationWithNewMessage(message) {
+        try {
+            const conversationId = message.conversation_id;
+            if (!conversationId) return;
+            
+            // Find the conversation element in the list
+            const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            if (!conversationEl) {
+                // If conversation not found in list, do a full refresh
+                this.logger.info(`Conversation ${conversationId} not in list, refreshing all conversations`);
+                this.renderConversationsList();
+                return;
+            }
+            
+            // Update last message text
+            const lastMessageEl = conversationEl.querySelector('.conversation-last-message');
+            if (lastMessageEl) {
+                lastMessageEl.textContent = message.content;
+            }
+            
+            // Mark as unread if not current conversation
+            if (conversationId !== this.currentConversation && message.sender_id !== this.currentUser.id) {
+                conversationEl.classList.add('unread');
+                
+                // Add unread indicator if not already present
+                if (!conversationEl.querySelector('.unread-indicator')) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'unread-indicator';
+                    conversationEl.appendChild(indicator);
+                }
+            }
+            
+            // Move conversation to top of list (newest first)
+            const conversationsList = document.getElementById('conversations-list');
+            if (conversationsList && conversationsList.firstChild !== conversationEl) {
+                conversationsList.removeChild(conversationEl);
+                conversationsList.insertBefore(conversationEl, conversationsList.firstChild);
+            }
+            
+            this.logger.info(`Updated conversation ${conversationId} in list with new message`);
+        } catch (error) {
+            this.logger.error('Error updating conversation in list:', error);
+            // Fall back to full refresh on error
+            this.renderConversationsList();
+        }
+    }
+
+    // Add global subscription to track conversations
+    async setupConversationMonitor() {
+        try {
+            const dataModule = this.getModule('data');
+            
+            // Subscribe to all message inserts (global listener)
+            this.globalSubscription = dataModule.subscribeToAllMessages((message) => {
+                this.logger.info('Received message from global subscription:', message.id);
+                
+                // Update conversation in list or add it if it doesn't exist
+                this._updateConversationWithNewMessage(message);
+            });
+            
+            this.logger.info('Conversation monitor initialized');
+        } catch (error) {
+            this.logger.error('Failed to setup conversation monitor:', error);
         }
     }
 }

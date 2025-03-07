@@ -1354,4 +1354,34 @@ body {
     height: 10px;
     border-radius: 50%;
     background-color: var(--md-primary);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        transform: translateY(-50%) scale(0.95);
+        box-shadow: 0 0 0 0 rgba(var(--md-primary-rgb, 74, 103, 65), 0.7);
+    }
+    70% {
+        transform: translateY(-50%) scale(1);
+        box-shadow: 0 0 0 10px rgba(var(--md-primary-rgb, 74, 103, 65), 0);
+    }
+    100% {
+        transform: translateY(-50%) scale(0.95);
+        box-shadow: 0 0 0 0 rgba(var(--md-primary-rgb, 74, 103, 65), 0);
+    }
+}
+
+/* Move conversation with new message to top with animation */
+.conversation-item.new-message {
+    animation: highlight-new 2s ease-out;
+}
+
+@keyframes highlight-new {
+    0% {
+        background-color: rgba(var(--md-primary-rgb, 74, 103, 65), 0.3);
+    }
+    100% {
+        background-color: transparent;
+    }
 }
