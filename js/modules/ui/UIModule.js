@@ -228,7 +228,7 @@ export class UIModule extends BaseModule {
             this.logger.info('Fetching conversations for current user');
             const dataModule = this.getModule('data');
             
-            // Get conversations
+            // Get conversations (force fresh data)
             const conversations = await dataModule.fetchConversations(this.currentUser.id, true);
             this.logger.info(`Retrieved ${conversations.length} conversations from server`);
             
@@ -240,12 +240,15 @@ export class UIModule extends BaseModule {
                 return;
             }
             
+            // Track whether we added any items to the list
+            let addedItems = 0;
+            
             // Render each conversation
             for (const conv of conversations) {
                 try {
                     // Get participants and check if it's a self chat
                     const participants = conv.enrichedParticipants || [];
-                    this.logger.info(`Rendering conv ${conv.id} with ${participants.length} participants`);
+                    this.logger.info(`Processing conv ${conv.id} with ${participants.length} participants`);
                     
                     const isSelfChat = conv.is_self_chat || participants.length === 1;
                     let name, avatar;
@@ -254,7 +257,7 @@ export class UIModule extends BaseModule {
                         // It's a self chat
                         name = 'Notes to Self';
                         avatar = this.currentUser.avatar_url;
-                        this.logger.info(`Rendering self-chat: ${conv.id}`);
+                        this.logger.info(`Adding self-chat: ${conv.id}`);
                     } else {
                         // It's a chat with other users - find the other participant(s)
                         const otherParticipants = participants.filter(p => p.user_id !== this.currentUser.id);
@@ -266,20 +269,25 @@ export class UIModule extends BaseModule {
                             if (otherProfile) {
                                 name = otherProfile.display_name || otherProfile.email || 'Unknown User';
                                 avatar = otherProfile.avatar_url;
-                                this.logger.info(`Rendering chat with: ${name}`);
+                                this.logger.info(`Adding chat with: ${name}, id: ${conv.id}`);
                             } else {
                                 name = 'Unknown User';
                                 avatar = null;
+                                this.logger.info(`Adding chat with unknown user: ${conv.id}`);
                             }
                         } else {
                             name = 'Unknown User';
                             avatar = null;
+                            this.logger.info(`Adding chat with no other participants: ${conv.id}`);
                         }
                     }
                     
-                    // Create the conversation element
+                    // Check if there are unread messages
+                    const hasUnread = this.hasUnreadMessages(conv);
+                    
+                    // Create conversation element
                     const conversationEl = document.createElement('div');
-                    conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}`;
+                    conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
                     conversationEl.dataset.conversationId = conv.id;
                     conversationEl.dataset.isSelfChat = isSelfChat;
                     conversationEl.innerHTML = `
@@ -292,19 +300,53 @@ export class UIModule extends BaseModule {
                                 ${conv.last_message?.content || 'No messages yet'}
                             </div>
                         </div>
+                        ${hasUnread ? '<div class="unread-indicator"></div>' : ''}
                     `;
                     
                     // Add click handler
                     conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
+                    
+                    // Add to list
                     conversationsList.appendChild(conversationEl);
+                    addedItems++;
                 } catch (err) {
                     this.logger.error(`Error processing conversation ${conv.id}:`, err);
+                }
+            }
+            
+            this.logger.info(`Added ${addedItems} conversations to the list`);
+            
+            // If no items were added but we had conversations, show an error
+            if (addedItems === 0 && conversations.length > 0) {
+                conversationsList.innerHTML = '<div class="no-conversations">Error displaying conversations. Please try again.</div>';
+                this.logger.error('Failed to render any conversations despite having data');
+            }
+            
+            // Fix mobile layout - make sure sidebar is visible
+            if (window.innerWidth <= 768) {
+                const sidebar = document.querySelector('.sidebar');
+                if (sidebar && !this.currentConversation) {
+                    sidebar.classList.remove('hidden');
                 }
             }
         } catch (error) {
             this.logger.error('Failed to render conversations list:', error);
             this.showError('Failed to load conversations');
         }
+    }
+
+    // Check if conversation has unread messages
+    hasUnreadMessages(conversation) {
+        if (!conversation.last_message) return false;
+        
+        const lastMessageTime = new Date(conversation.last_message.created_at);
+        const lastRead = conversation.last_read?.[this.currentUser.id];
+        
+        if (!lastRead) return conversation.last_message.sender_id !== this.currentUser.id;
+        
+        const lastReadTime = new Date(lastRead);
+        return conversation.last_message.sender_id !== this.currentUser.id && 
+               lastMessageTime > lastReadTime;
     }
 
     setupMessageListeners() {
@@ -450,6 +492,19 @@ export class UIModule extends BaseModule {
             
             // Focus the message input
             document.getElementById('message-text')?.focus();
+            
+            // Mark conversation as read
+            await dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
+            
+            // Remove unread indicator
+            const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            if (conversationEl) {
+                conversationEl.classList.remove('unread');
+                conversationEl.querySelector('.unread-indicator')?.remove();
+            }
+            
+            // Setup real-time subscription for new messages
+            this.setupMessageSubscription(conversationId);
         } catch (error) {
             this.logger.error('Failed to load conversation messages:', error);
             this.showError('Failed to load messages');
@@ -672,5 +727,82 @@ export class UIModule extends BaseModule {
             clearTimeout(timeout);
             timeout = setTimeout(later, wait);
         };
+    }
+
+    // Setup real-time subscription for new messages
+    setupMessageSubscription(conversationId) {
+        // Clean up previous subscription if any
+        if (this.currentSubscription) {
+            this.currentSubscription.unsubscribe();
+        }
+        
+        const dataModule = this.getModule('data');
+        this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (newMessage) => {
+            // Only handle if this is the current conversation
+            if (this.currentConversation === conversationId) {
+                this.handleNewMessage(newMessage);
+            } else {
+                // Show notification for other conversations
+                this.showMessageNotification(newMessage);
+                
+                // Update conversations list to show unread indicator
+                this.renderConversationsList();
+            }
+        });
+    }
+
+    // Handle new incoming message
+    handleNewMessage(message) {
+        const messageContainer = document.getElementById('message-container');
+        const isSent = message.sender_id === this.currentUser.id;
+        
+        // Don't show our own messages again (already added when sent)
+        if (isSent) return;
+        
+        const messageEl = document.createElement('div');
+        messageEl.className = `message received`;
+        messageEl.innerHTML = `
+            <div class="message-content">${message.content}</div>
+            <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+        `;
+        messageContainer.appendChild(messageEl);
+        messageEl.scrollIntoView({ behavior: 'smooth' });
+        
+        // Mark as read since we're viewing it
+        const dataModule = this.getModule('data');
+        dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
+        
+        // Play notification sound
+        this.playNotificationSound();
+    }
+
+    // Show notification for new messages
+    showMessageNotification(message) {
+        // Browser notification
+        if (Notification.permission === 'granted') {
+            const notification = new Notification('New Message', {
+                body: message.content,
+                icon: 'images/icon-192x192.png'
+            });
+            
+            notification.onclick = () => {
+                window.focus();
+                this.loadConversation(message.conversation_id);
+            };
+        }
+        
+        // Play sound
+        this.playNotificationSound();
+    }
+
+    // Play notification sound
+    playNotificationSound() {
+        try {
+            const audio = new Audio('sounds/notification.mp3');
+            audio.volume = 0.5;
+            audio.play();
+        } catch (error) {
+            this.logger.error('Failed to play notification sound:', error);
+        }
     }
 }

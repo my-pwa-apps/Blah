@@ -283,107 +283,137 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
             
-            // Use a simpler query that works better with Supabase's structure
-            const query = this.supabase
-                .from('conversations')
+            // First make sure we clean up any duplicate self-chats
+            await this.cleanupSelfChats(userId);
+            
+            // Use a different query approach that's more reliable
+            const { data: conversations, error } = await this.supabase
+                .from('participants')
                 .select(`
-                    id,
-                    created_at,
-                    is_self_chat,
-                    last_message,
-                    participants!inner (
-                        user_id
+                    conversation_id,
+                    user_id,
+                    conversations:conversation_id (
+                        id,
+                        created_at,
+                        is_self_chat,
+                        last_message
+                    ),
+                    profiles:user_id (
+                        id,
+                        email,
+                        display_name,
+                        avatar_url
                     )
                 `)
-                .eq('participants.user_id', userId)
-                .order('created_at', { ascending: false });
-                
-            if (skipCache) {
-                query.limit(100);
-            }
-            
-            // Execute the query to get conversations
-            const { data: conversations, error } = await query;
+                .eq('user_id', userId);
             
             if (error) throw error;
             
-            // If no conversations, return empty array
-            if (!conversations || conversations.length === 0) {
-                return [];
-            }
+            this.logger.info(`Found ${conversations?.length || 0} participant entries for user ${userId}`);
             
-            // For each conversation, fetch the participants with profile data
-            const conversationsWithProfiles = await Promise.all(conversations.map(async (conv) => {
-                // Get all participants for this conversation
+            if (!conversations || conversations.length === 0) return [];
+            
+            // Get all conversation IDs
+            const conversationIds = [...new Set(conversations.map(p => p.conversation_id))];
+            
+            // Now get other participants for each conversation
+            const result = [];
+            
+            for (const convId of conversationIds) {
                 const { data: participants, error: participantsError } = await this.supabase
                     .from('participants')
                     .select(`
                         user_id,
                         profiles:user_id (
                             id,
-                            email, 
+                            email,
                             display_name,
                             avatar_url
                         )
                     `)
-                    .eq('conversation_id', conv.id);
-                    
+                    .eq('conversation_id', convId);
+                
                 if (participantsError) {
-                    this.logger.error(`Error fetching participants for conversation ${conv.id}:`, participantsError);
-                    return { ...conv, enrichedParticipants: [] };
+                    this.logger.error(`Error fetching participants for conversation ${convId}:`, participantsError);
+                    continue;
                 }
                 
-                return { ...conv, enrichedParticipants: participants || [] };
-            }));
-            
-            // Group conversations by participant set (self chat or by other participant id)
-            const conversationsByParticipants = new Map();
-            
-            for (const conv of conversationsWithProfiles) {
-                // Determine if this is a self chat
-                const isSelfChat = conv.is_self_chat || (conv.enrichedParticipants.length === 1);
+                // Find the conversation details
+                const conv = conversations.find(c => c.conversation_id === convId)?.conversations;
                 
-                if (isSelfChat) {
-                    // Handle self chats - group under 'self' key
-                    const existing = conversationsByParticipants.get('self');
-                    if (!existing || new Date(conv.created_at) > new Date(existing.created_at)) {
-                        conversationsByParticipants.set('self', conv);
-                        this.logger.info(`Selected self-chat: ${conv.id}`);
+                if (!conv) continue;
+                
+                // Add enriched data
+                result.push({
+                    ...conv,
+                    enrichedParticipants: participants
+                });
+            }
+            
+            // Group conversations by participant type
+            const processedConversations = [];
+            let selfChat = null;
+            
+            for (const conv of result) {
+                if (conv.is_self_chat || conv.enrichedParticipants.length === 1) {
+                    if (!selfChat || new Date(conv.created_at) > new Date(selfChat.created_at)) {
+                        selfChat = conv;
                     }
                 } else {
-                    // For chats with others, key by the other person's user ID
-                    const otherParticipant = conv.enrichedParticipants.find(p => 
-                        p.user_id !== userId
-                    );
-                    
-                    if (otherParticipant) {
-                        const otherUserId = otherParticipant.user_id;
-                        const existing = conversationsByParticipants.get(otherUserId);
-                        
-                        // Keep only the most recent conversation with this person
-                        if (!existing || new Date(conv.created_at) > new Date(existing.created_at)) {
-                            conversationsByParticipants.set(otherUserId, conv);
-                            this.logger.info(`Selected newest conversation with user ${otherUserId}: ${conv.id}`);
-                        } else {
-                            this.logger.info(`Skipping older conversation with user ${otherUserId}: ${conv.id}`);
-                        }
-                    }
+                    processedConversations.push(conv);
                 }
             }
             
-            // Convert map back to array of conversations
-            const deduplicatedConversations = Array.from(conversationsByParticipants.values());
+            // Add self chat at the beginning if found
+            if (selfChat) {
+                processedConversations.unshift(selfChat);
+            }
             
-            // Sort by created_at (newest first)
-            deduplicatedConversations.sort((a, b) => 
-                new Date(b.created_at) - new Date(a.created_at)
-            );
+            this.logger.info(`Returning ${processedConversations.length} conversations after processing`);
             
-            this.logger.info(`Returning ${deduplicatedConversations.length} deduplicated conversations`);
-            return deduplicatedConversations;
+            return processedConversations;
         } catch (error) {
-            this.logger.error('Error fetching conversations:', error);
+            this.logger.error('Error in fetchConversations:', error);
             return [];
+        }
+    }
+
+    // Add a method to subscribe to real-time message updates
+    subscribeToNewMessages(conversationId, callback) {
+        this.logger.info(`Subscribing to messages for conversation ${conversationId}`);
+        return this.supabase
+            .channel(`conversation:${conversationId}`)
+            .on('postgres_changes', {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'messages',
+                filter: `conversation_id=eq.${conversationId}`
+            }, payload => {
+                this.logger.info(`New message received in conversation ${conversationId}`);
+                callback(payload.new);
+            })
+            .subscribe();
+    }
+
+    // Add method to mark messages as read
+    async markMessagesAsRead(conversationId, userId) {
+        try {
+            const { error } = await this.supabase
+                .from('conversations')
+                .update({
+                    last_read: {
+                        [userId]: new Date().toISOString()
+                    }
+                })
+                .eq('id', conversationId);
+            
+            if (error) throw error;
+            
+            this.logger.info(`Marked conversation ${conversationId} as read for user ${userId}`);
+            return true;
+        } catch (error) {
+            this.logger.error('Error marking messages as read:', error);
+            return false;
         }
     }
 }

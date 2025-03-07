@@ -1205,3 +1205,88 @@ body {
         transform: translateX(-100%) !important;
     }
 }
+
+/* Add unread indicator styles */
+.conversation-item.unread {
+    background-color: rgba(var(--md-primary-rgb, 74, 103, 65), 0.1);
+    position: relative;
+}
+
+.unread-indicator {
+    position: absolute;
+    right: 1rem;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background-color: var(--md-primary, #4a6741);
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(var(--md-primary-rgb, 74, 103, 65), 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 6px rgba(var(--md-primary-rgb, 74, 103, 65), 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(var(--md-primary-rgb, 74, 103, 65), 0);
+    }
+}
+
+/* Fix mobile sidebar visibility */
+@media (max-width: 768px) {
+    .app-container {
+        overflow: hidden;
+    }
+    
+    .content-container {
+        position: relative;
+    }
+    
+    .sidebar {
+        position: absolute !important;
+        width: 100%;
+        height: 100%;
+        left: 0;
+        top: 0;
+        z-index: 10;
+        transform: translateX(0) !important;  /* Start visible on mobile */
+        transition: transform 0.3s ease;
+    }
+    
+    .sidebar.hidden {
+        transform: translateX(-100%) !important;
+    }
+    
+    .chat-area {
+        position: absolute !important;
+        width: 100%;
+        height: 100%;
+        left: 0;
+        top: 0;
+        z-index: 20;
+        transform: translateX(100%) !important;
+        transition: transform 0.3s ease;
+    }
+    
+    .chat-area.active {
+        transform: translateX(0) !important;
+    }
+    
+    /* Fix conversation items on mobile */
+    .conversation-item {
+        padding: 1.25rem 1rem;
+    }
+    
+    /* Make message input more mobile friendly */
+    .message-input {
+        padding: 0.75rem;
+    }
+    
+    #message-text {
+        padding: 0.75rem;
+    }
+}
