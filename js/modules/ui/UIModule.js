@@ -228,86 +228,85 @@ export class UIModule extends BaseModule {
             this.logger.info('Fetching conversations for user:', this.currentUser.id);
             const dataModule = this.getModule('data');
             
-            // Always force a fresh fetch to get the latest data
+            // Force a fresh fetch from the database
             const conversations = await dataModule.fetchConversations(this.currentUser.id, true);
             this.logger.info(`Fetched ${conversations.length} conversations from database`);
             
-            // Debug info about what we received
+            // Debug deeply what we got - examine the full structure
             conversations.forEach(conv => {
-                this.logger.info(`Conversation ID: ${conv.id}, Self chat: ${conv.is_self_chat}, Participants: ${conv.participants.length}`);
+                this.logger.info(`Conversation ${conv.id}: is_self_chat=${conv.is_self_chat}`);
+                this.logger.info(`Participants: ${JSON.stringify(conv.participants)}`);
             });
             
-            if (this.currentConversation) {
-                this.logger.info(`Current active conversation ID: ${this.currentConversation}`);
+            // Reset the conversations list HTML
+            conversationsList.innerHTML = '';
+            
+            if (conversations.length === 0) {
+                conversationsList.innerHTML = '<div class="no-conversations">No conversations yet. Start a new chat!</div>';
+                return;
             }
             
-            // Don't filter conversations by type - include all conversations
-            const processedConversations = [...conversations];
-            
-            // Show all conversations in the list - both self chats and chats with others
-            this.logger.info(`Rendering ${processedConversations.length} total conversations`);
-            
-            // Sort: active conversation first, then by most recent
-            processedConversations.sort((a, b) => {
-                // Current conversation always comes first
-                if (a.id === this.currentConversation) return -1;
-                if (b.id === this.currentConversation) return 1;
+            // Process each conversation one by one
+            for (const conv of conversations) {
+                // First determine if this is a self-chat
+                const isSelfChat = conv.is_self_chat || 
+                                   (conv.participants.length === 1 && conv.participants[0].user_id === this.currentUser.id);
                 
-                // Otherwise sort by most recent
-                return new Date(b.created_at) - new Date(a.created_at);
-            });
-            
-            // Render all conversations
-            conversationsList.innerHTML = processedConversations.map(conv => {
-                const isSelfChat = conv.is_self_chat || conv.participants.length === 1;
-                
-                // Find the other participant (if not self chat)
-                let name, avatar;
+                // Initialize variables for the conversation display
+                let name = 'Unknown User';
+                let avatar = null;
                 
                 if (isSelfChat) {
+                    // This is a self chat
                     name = 'Notes to Self';
                     avatar = this.currentUser.avatar_url;
+                    this.logger.info(`Found self-chat: ${conv.id}`);
                 } else {
-                    // Find the participant who is not the current user
-                    const otherParticipant = conv.participants.find(p => 
-                        p.user_id !== this.currentUser.id
-                    );
+                    // This is a chat with another person
+                    // Find the other participant (not current user)
+                    const otherParticipants = conv.participants.filter(p => p.user_id !== this.currentUser.id);
                     
-                    if (!otherParticipant) {
-                        this.logger.warn(`No other participant found for conversation ${conv.id}`);
-                        name = 'Unknown User';
-                        avatar = null;
-                    } else {
-                        // Get the profile from the other participant
-                        const profile = otherParticipant.profiles;
-                        name = profile?.display_name || profile?.email || 'Unknown User';
-                        avatar = profile?.avatar_url;
+                    if (otherParticipants.length > 0) {
+                        // Take the first other participant
+                        const otherParticipant = otherParticipants[0];
                         
-                        this.logger.info(`Found other participant: ${name} for conversation ${conv.id}`);
+                        // Get their profile data - handle both data structures
+                        const profile = otherParticipant.profiles;
+                        
+                        if (profile) {
+                            name = profile.display_name || profile.email || 'Unknown User';
+                            avatar = profile.avatar_url;
+                            this.logger.info(`Found conversation with: ${name}, ID: ${conv.id}`);
+                        } else {
+                            this.logger.warn(`Missing profile data for participant in conversation ${conv.id}`);
+                        }
+                    } else {
+                        this.logger.warn(`No other participants found for conversation ${conv.id}`);
                     }
                 }
                 
                 // Create the HTML for this conversation
-                return `
-                    <div class="conversation-item${conv.id === this.currentConversation ? ' active' : ''}" 
-                         data-conversation-id="${conv.id}">
-                        <div class="conversation-avatar">
-                            <img src="${avatar || 'images/default-avatar.png'}" alt="Avatar">
-                        </div>
-                        <div class="conversation-details">
-                            <div class="conversation-name">${name}</div>
-                            <div class="conversation-last-message">
-                                ${conv.last_message?.content || 'No messages yet'}
-                            </div>
+                const conversationEl = document.createElement('div');
+                conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}`;
+                conversationEl.dataset.conversationId = conv.id;
+                conversationEl.innerHTML = `
+                    <div class="conversation-avatar">
+                        <img src="${avatar || 'images/default-avatar.png'}" alt="Avatar">
+                    </div>
+                    <div class="conversation-details">
+                        <div class="conversation-name">${name}</div>
+                        <div class="conversation-last-message">
+                            ${conv.last_message?.content || 'No messages yet'}
                         </div>
                     </div>
                 `;
-            }).join('');
-
-            // Add click handlers
-            conversationsList.querySelectorAll('.conversation-item').forEach(item => {
-                item.addEventListener('click', () => this.loadConversation(item.dataset.conversationId));
-            });
+                
+                // Add click handler
+                conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
+                
+                // Add to the list
+                conversationsList.appendChild(conversationEl);
+            }
             
             this.logger.info('Conversation list rendering complete');
         } catch (error) {

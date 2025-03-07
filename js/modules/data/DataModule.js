@@ -236,7 +236,7 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Fetching conversations for user: ${userId}, skipCache: ${skipCache}`);
             
-            // Use a more reliable query that clearly shows all conversations for this user
+            // Use a more reliable query with a better profile selection
             const query = this.supabase
                 .from('conversations')
                 .select(`
@@ -246,7 +246,7 @@ export class DataModule extends BaseModule {
                     last_message,
                     participants!inner (
                         user_id,
-                        profiles (
+                        profiles:profiles (
                             id,
                             email,
                             display_name,
@@ -254,13 +254,13 @@ export class DataModule extends BaseModule {
                         )
                     )
                 `)
-                .eq('participants.user_id', userId);
+                .eq('participants.user_id', userId)
+                .order('created_at', { ascending: false });
             
-            // If skipping cache, add a timestamp parameter to break the cache
+            // Skip cache if needed
             if (skipCache) {
-                query.order('created_at', { ascending: false, nullsFirst: false });
-            } else {
-                query.order('created_at', { ascending: false });
+                // Add a timestamp to break cache
+                query.limit(100, { foreignTable: 'participants' });
             }
             
             const { data, error } = await query;
@@ -270,17 +270,16 @@ export class DataModule extends BaseModule {
                 throw error;
             }
             
-            this.logger.info(`Found ${data?.length || 0} total conversations for user ${userId}`);
+            this.logger.info(`Found ${data?.length || 0} conversations for user ${userId}`);
             
-            // Log all conversation IDs for debugging
+            // Add detailed logging about each conversation for debugging
             if (data && data.length > 0) {
                 data.forEach(conv => {
-                    const otherParticipants = conv.participants
-                        .filter(p => p.user_id !== userId)
-                        .map(p => p.profiles?.email || p.user_id)
-                        .join(', ');
-                        
-                    this.logger.info(`Conversation ${conv.id}: with ${otherParticipants || 'self'}, is_self_chat: ${conv.is_self_chat}`);
+                    const selfChat = conv.is_self_chat ? 'Yes' : 'No';
+                    const participantCount = conv.participants?.length || 0;
+                    const participantIds = conv.participants?.map(p => p.user_id).join(', ') || 'none';
+                    
+                    this.logger.info(`Conversation ${conv.id}: Self chat: ${selfChat}, Participants: ${participantCount}, IDs: ${participantIds}`);
                 });
             }
             
