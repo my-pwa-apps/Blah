@@ -204,17 +204,27 @@ export class DataModule extends BaseModule {
     async sendMessage(conversationId, senderId, content, attachments = []) {
         try {
             const timestamp = new Date().toISOString();
+            
+            // Validate inputs
+            if (!conversationId) throw new Error('Missing conversation ID');
+            if (!senderId) throw new Error('Missing sender ID');
+            
+            // Clean up content and attachments for storage
+            const sanitizedContent = content || '';
+            const validatedAttachments = Array.isArray(attachments) ? attachments.filter(a => a && a.url) : [];
+            
             const messageData = {
                 conversation_id: conversationId,
                 sender_id: senderId,
-                content: content || '',
+                content: sanitizedContent,
                 created_at: timestamp,
                 metadata: {
-                    attachments,
+                    attachments: validatedAttachments,
                     timestamp
                 }
             };
 
+            // Insert the message with complete profile data in one query
             const { data, error } = await this.supabase
                 .from('messages')
                 .insert(messageData)
@@ -236,17 +246,9 @@ export class DataModule extends BaseModule {
 
             if (error) throw error;
             
-            // Update conversation's last message
-            await this.supabase
-                .from('conversations')
-                .update({
-                    last_message: {
-                        content: content || 'Attachment',
-                        sender_id: senderId,
-                        created_at: timestamp
-                    }
-                })
-                .eq('id', conversationId);
+            // Update conversation's last message (in background, don't wait)
+            this._updateConversationLastMessage(conversationId, sanitizedContent, senderId, timestamp)
+                .catch(err => this.logger.error('Error updating conversation last message:', err));
             
             return data;
         } catch (error) {
@@ -838,23 +840,19 @@ export class DataModule extends BaseModule {
 
     async uploadAttachment(file, userId) {
         try {
-            this.logger.info(`Starting upload for file: ${file.name}`);
-            const fileName = `${userId}/${Date.now()}-${file.name}`;
+            this.logger.info(`Starting upload for file: ${file.name} (${file.size} bytes, ${file.type})`);
             
-            // Upload the file
-            const { data, error } = await this.supabase
-                .storage
-                .from('attachments')
-                .upload(fileName, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                });
-
+            // Create optimized filename - ensure unique names with timestamp and sanitize
+            const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+            const fileName = `${userId}/${Date.now()}-${safeFileName}`;
+            
+            // Upload with retry logic
+            const { data, error } = await this._uploadWithRetry('attachments', fileName, file);
+            
             if (error) throw error;
-
             this.logger.info(`File uploaded successfully: ${fileName}`);
 
-            // Get public URL immediately after upload
+            // Get public URL
             const { data: publicUrlData } = this.supabase
                 .storage
                 .from('attachments')
@@ -874,6 +872,60 @@ export class DataModule extends BaseModule {
         } catch (error) {
             this.logger.error('Error uploading attachment:', error);
             throw error;
+        }
+    }
+
+    // Add a helper method for upload with retry
+    async _uploadWithRetry(bucket, fileName, file, maxRetries = 2) {
+        let attempt = 0;
+        let lastError = null;
+        
+        while (attempt <= maxRetries) {
+            try {
+                const result = await this.supabase.storage
+                    .from(bucket)
+                    .upload(fileName, file, {
+                        cacheControl: '3600',
+                        upsert: attempt > 0 // Only upsert on retry attempts
+                    });
+                    
+                if (!result.error) {
+                    return result;
+                }
+                
+                lastError = result.error;
+                this.logger.warn(`Upload attempt ${attempt + 1}/${maxRetries + 1} failed:`, lastError);
+                
+            } catch (error) {
+                lastError = error;
+                this.logger.warn(`Upload attempt ${attempt + 1}/${maxRetries + 1} failed with exception:`, error);
+            }
+            
+            // Wait before retry (exponential backoff)
+            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+            attempt++;
+        }
+        
+        // If we get here, all attempts failed
+        return { data: null, error: lastError };
+    }
+
+    // Helper to update conversation last message (extracted for clarity)
+    async _updateConversationLastMessage(conversationId, content, senderId, timestamp) {
+        try {
+            await this.supabase
+                .from('conversations')
+                .update({
+                    last_message: {
+                        content: content || 'Attachment',
+                        sender_id: senderId,
+                        created_at: timestamp || new Date().toISOString()
+                    }
+                })
+                .eq('id', conversationId);
+        } catch (error) {
+            this.logger.error('Error updating conversation last message:', error);
+            // Don't rethrow - this is a background operation
         }
     }
 }

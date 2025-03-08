@@ -411,15 +411,15 @@ export class UIModule extends BaseModule {
     }
 
     async handleFileSelection(files) {
-        if (!files || files.length === 0) {
-            this.logger.error('No files selected');
-            return;
-        }
+        if (!files || files.length === 0) return;
         
         const dataModule = this.getModule('data');
         const maxSize = 10 * 1024 * 1024; // 10MB limit
         
         this.logger.info(`Processing ${files.length} selected files`);
+        
+        // Create preview area once for all attachments
+        const previewArea = this.createAttachmentPreviewArea();
         
         for (const file of files) {
             if (file.size > maxSize) {
@@ -428,33 +428,22 @@ export class UIModule extends BaseModule {
             }
             
             try {
-                // Ensure we have a preview area
-                const previewArea = this.createAttachmentPreviewArea();
-                
                 // Show loading indicator
                 const loadingItem = document.createElement('div');
                 loadingItem.className = 'attachment-preview-item loading';
                 loadingItem.innerHTML = `<span>Uploading ${file.name}...</span>`;
                 previewArea.appendChild(loadingItem);
                 
-                this.logger.info(`Uploading file: ${file.name}, type: ${file.type}, size: ${file.size}`);
-
                 // Upload file
                 const attachment = await dataModule.uploadAttachment(file, this.currentUser.id);
-                
-                // Remove loading indicator
                 loadingItem.remove();
                 
-                // Ensure pendingAttachments exists
-                if (!this.pendingAttachments) {
-                    this.pendingAttachments = [];
-                }
+                // Initialize attachments array if needed
+                if (!this.pendingAttachments) this.pendingAttachments = [];
                 
-                // Update UI with successful upload
+                // Add to pending attachments and update UI
                 this.pendingAttachments.push(attachment);
                 this.showAttachmentPreview(attachment);
-                
-                this.logger.info(`Successfully uploaded and added attachment: ${attachment.name}`);
                 
             } catch (error) {
                 this.logger.error('Failed to upload file:', error);
@@ -1473,23 +1462,82 @@ export class UIModule extends BaseModule {
         }
     }
 
-    // Add this method to properly show notifications
-    _showMessageNotification(message) {
-        if (!message) return;
-        
+    // New method to update conversation list with a new message without full re-render
+    _updateConversationWithNewMessage(message) {
         try {
-            const notificationModule = this.getModule('notification');
-            const senderName = message.profiles?.display_name || message.profiles?.email || 'Someone';
+            const conversationId = message.conversation_id;
+            if (!conversationId) return;
             
-            notificationModule.notify({
-                title: `New message from ${senderName}`,
-                message: message.content.substring(0, 100) + (message.content.length > 100 ? '...' : ''),
-                conversationId: message.conversation_id,
-                soundType: 'notification'
-            });
+            // Find the conversation element in the list
+            const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            if (!conversationEl) {
+                // If conversation not found in list, do a full refresh
+                this.logger.info(`Conversation ${conversationId} not in list, refreshing all conversations`);
+                this.renderConversationsList();
+                return;
+            }
+            
+            // Update last message text
+            const lastMessageEl = conversationEl.querySelector('.conversation-last-message');
+            if (lastMessageEl) {
+                lastMessageEl.textContent = message.content;
+            }
+            
+            // Mark as unread if not current conversation
+            if (conversationId !== this.currentConversation && message.sender_id !== this.currentUser.id) {
+                conversationEl.classList.add('unread');
+                
+                // Add unread indicator if not already present
+                if (!conversationEl.querySelector('.unread-indicator')) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'unread-indicator';
+                    conversationEl.appendChild(indicator);
+                }
+            }
+            
+            // Move conversation to top of list (newest first)
+            const conversationsList = document.getElementById('conversations-list');
+            if (conversationsList && conversationsList.firstChild !== conversationEl) {
+                conversationsList.removeChild(conversationEl);
+                conversationsList.insertBefore(conversationEl, conversationsList.firstChild);
+            }
+            
+            this.logger.info(`Updated conversation ${conversationId} in list with new message`);
         } catch (error) {
-            this.logger.error('Error showing message notification:', error);
+            this.logger.error('Error updating conversation in list:', error);
+            // Fall back to full refresh on error
+            this.renderConversationsList();
         }
+    }
+
+    // Add global subscription to track conversations
+    async setupConversationMonitor() {
+        try {
+            const dataModule = this.getModule('data');
+            
+            // Subscribe to all message inserts (global listener)
+            this.globalSubscription = dataModule.subscribeToAllMessages((message) => {
+                this.logger.info('Received message from global subscription:', message.id);
+                
+                // Update conversation in list or add it if it doesn't exist
+                this._updateConversationWithNewMessage(message);
+            });
+            
+            this.logger.info('Conversation monitor initialized');
+        } catch (error) {
+            this.logger.error('Failed to setup conversation monitor:', error);
+        }
+    }
+
+    // Add missing method for attachment icons
+    getAttachmentIcon(type) {
+        if (type.startsWith('image/')) return 'image';
+        if (type.startsWith('video/')) return 'videocam';
+        if (type.startsWith('audio/')) return 'audiotrack';
+        if (type.includes('pdf')) return 'picture_as_pdf';
+        if (type.includes('word') || type.includes('document')) return 'description';
+        if (type.includes('spreadsheet') || type.includes('excel')) return 'table_chart';
+        return 'attach_file';
     }
 
     _toggleDebugPanel() {
@@ -1581,120 +1629,6 @@ export class UIModule extends BaseModule {
             document.body.appendChild(debugPanel);
         } else {
             debugPanel.remove();
-        }
-    }
-
-    // Improve real-time message subscription handling
-    _setupMessageSubscription(conversationId) {
-        try {
-            // Clean up existing subscription
-            if (this.currentSubscription) {
-                this.logger.info(`Cleaning up previous subscription: ${this.currentSubscription.conversationId}`);
-                this.currentSubscription.unsubscribe();
-                this.currentSubscription = null;
-            }
-            
-            this.logger.info(`Setting up new subscription for conversation: ${conversationId}`);
-            const dataModule = this.getModule('data');
-            
-            // Set up new subscription
-            this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (message) => {
-                this.logger.info(`Received message in conversation ${conversationId}:`, message.id);
-                
-                // Ignore if we've navigated away
-                if (this.currentConversation !== conversationId) {
-                    this.logger.info('Message is for a different conversation, showing notification');
-                    this._showMessageNotification(message);
-                    
-                    // Update conversation in list without full re-render
-                    this._updateConversationWithNewMessage(message);
-                    
-                    return;
-                }
-                
-                // Don't show our own messages twice
-                if (message.sender_id === this.currentUser.id) {
-                    this.logger.info('Ignoring own message from subscription');
-                    return;
-                }
-                
-                // Add message to UI and mark as read
-                this._addMessageToUI(message);
-                dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
-                
-                // Play notification sound
-                this._playIncomingMessageSound();
-            });
-            
-        } catch (error) {
-            this.logger.error('Error setting up message subscription:', error);
-        }
-    }
-
-    // New method to update conversation list with a new message without full re-render
-    _updateConversationWithNewMessage(message) {
-        try {
-            const conversationId = message.conversation_id;
-            if (!conversationId) return;
-            
-            // Find the conversation element in the list
-            const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
-            if (!conversationEl) {
-                // If conversation not found in list, do a full refresh
-                this.logger.info(`Conversation ${conversationId} not in list, refreshing all conversations`);
-                this.renderConversationsList();
-                return;
-            }
-            
-            // Update last message text
-            const lastMessageEl = conversationEl.querySelector('.conversation-last-message');
-            if (lastMessageEl) {
-                lastMessageEl.textContent = message.content;
-            }
-            
-            // Mark as unread if not current conversation
-            if (conversationId !== this.currentConversation && message.sender_id !== this.currentUser.id) {
-                conversationEl.classList.add('unread');
-                
-                // Add unread indicator if not already present
-                if (!conversationEl.querySelector('.unread-indicator')) {
-                    const indicator = document.createElement('div');
-                    indicator.className = 'unread-indicator';
-                    conversationEl.appendChild(indicator);
-                }
-            }
-            
-            // Move conversation to top of list (newest first)
-            const conversationsList = document.getElementById('conversations-list');
-            if (conversationsList && conversationsList.firstChild !== conversationEl) {
-                conversationsList.removeChild(conversationEl);
-                conversationsList.insertBefore(conversationEl, conversationsList.firstChild);
-            }
-            
-            this.logger.info(`Updated conversation ${conversationId} in list with new message`);
-        } catch (error) {
-            this.logger.error('Error updating conversation in list:', error);
-            // Fall back to full refresh on error
-            this.renderConversationsList();
-        }
-    }
-
-    // Add global subscription to track conversations
-    async setupConversationMonitor() {
-        try {
-            const dataModule = this.getModule('data');
-            
-            // Subscribe to all message inserts (global listener)
-            this.globalSubscription = dataModule.subscribeToAllMessages((message) => {
-                this.logger.info('Received message from global subscription:', message.id);
-                
-                // Update conversation in list or add it if it doesn't exist
-                this._updateConversationWithNewMessage(message);
-            });
-            
-            this.logger.info('Conversation monitor initialized');
-        } catch (error) {
-            this.logger.error('Failed to setup conversation monitor:', error);
         }
     }
 }
