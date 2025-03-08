@@ -349,14 +349,34 @@ export class DataModule extends BaseModule {
                     id, 
                     created_at,
                     is_self_chat,
-                    last_message
+                    last_message,
+                    messages:messages (
+                        id,
+                        content,
+                        created_at,
+                        sender_id,
+                        metadata
+                    )
                 `)
-                .in('id', conversationIds);
+                .in('id', conversationIds)
+                .order('created_at', { ascending: false });
                 
             if (conversationsError) throw conversationsError;
-            
-            // For each conversation, get all participants with their profiles
+
+            // Process conversations to include latest message
             const conversationsWithDetails = await Promise.all(conversations.map(async (conv) => {
+                // Find the latest message
+                const latestMessage = conv.messages?.length > 0 ? 
+                    conv.messages.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0] 
+                    : null;
+
+                // Update last_message with the actual latest message
+                const updatedConv = {
+                    ...conv,
+                    last_message: latestMessage || conv.last_message
+                };
+
+                // For each conversation, get all participants with their profiles
                 const { data: participants, error: participantsError } = await this.supabase
                     .from('participants')
                     .select(`
@@ -369,24 +389,24 @@ export class DataModule extends BaseModule {
                             avatar_url
                         )
                     `)
-                    .eq('conversation_id', conv.id);
+                    .eq('conversation_id', updatedConv.id);
                     
                 if (participantsError) {
-                    this.logger.error(`Error fetching participants for conversation ${conv.id}:`, participantsError);
-                    return { ...conv, participants: [] };
+                    this.logger.error(`Error fetching participants for conversation ${updatedConv.id}:`, participantsError);
+                    return { ...updatedConv, participants: [] };
                 }
                 
                 // Add the current user's last read time from our earlier query
                 const currentUserEntry = participantEntries.find(p => 
-                    p.conversation_id === conv.id && p.user_id === userId
+                    p.conversation_id === updatedConv.id && p.user_id === userId
                 );
                 
                 // CRITICAL FIX: Properly identify self chats vs. regular chats
-                const isSelfChat = conv.is_self_chat || 
+                const isSelfChat = updatedConv.is_self_chat || 
                                   (participants.length === 1 && participants[0].user_id === userId);
                 
                 return { 
-                    ...conv, 
+                    ...updatedConv, 
                     participants,
                     userLastRead: currentUserEntry?.last_read_at || null,
                     isSelfChat // Explicitly store this property
