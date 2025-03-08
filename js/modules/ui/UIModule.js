@@ -465,16 +465,17 @@ export class UIModule extends BaseModule {
                 if (error.message) {
                     errorMessage = error.message;
                     
-                    // Show storage setup dialog for storage configuration errors
-                    if (error.message.includes('storage') || error.message.includes('bucket') || 
-                        error.message.includes('Setup') || error.message.includes('storage')) {
-                        // Add a "Configure Storage" button to the error message
+                    // Show storage setup dialog for storage configuration errors with clearer message
+                    if (error.message.includes('Storage not configured') || 
+                        error.message.includes('bucket not found') || 
+                        error.message.includes('setup script')) {
+                        // Add a "View Setup Instructions" button to the error message
                         setTimeout(() => {
                             const errorEl = document.querySelector('.auth-error');
                             if (errorEl) {
                                 const configBtn = document.createElement('button');
                                 configBtn.className = 'md-button small';
-                                configBtn.textContent = 'Storage Settings';
+                                configBtn.textContent = 'View Setup Instructions';
                                 configBtn.addEventListener('click', () => {
                                     this.showStorageSetupDialog();
                                     errorEl.remove();
@@ -971,31 +972,34 @@ export class UIModule extends BaseModule {
                 statusHtml = `
                     <div class="status-indicator error">
                         <span class="material-icons">error</span>
-                        Storage configuration issue
+                        Storage Configuration Required
                     </div>
-                    <p>${storageStatus.message}</p>
+                    <p><strong>Administrator Action Required</strong>: The attachments bucket is missing or not properly configured.</p>
+                    <p>A Supabase administrator needs to run the setup script in the SQL Editor:</p>
                     <div class="code-block">
-                        <pre><code>-- Run this SQL in Supabase SQL Editor
-    INSERT INTO storage.buckets (id, name, public)
-    VALUES ('attachments', 'attachments', true)
-    ON CONFLICT (id) DO NOTHING;
-    
-    -- Set up policies
-    CREATE POLICY "Authenticated users can read attachments" 
-      ON storage.objects FOR SELECT
-      USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
-    
-    CREATE POLICY "Users can upload their own attachments" 
-      ON storage.objects FOR INSERT 
-      WITH CHECK (bucket_id = 'attachments' AND 
-                  auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
+                        <pre><code>-- Run this SQL in Supabase SQL Editor as an admin
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('attachments', 'attachments', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Set up policies
+CREATE POLICY "Authenticated users can read attachments" 
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can upload their own attachments" 
+  ON storage.objects FOR INSERT 
+  WITH CHECK (bucket_id = 'attachments' AND 
+              auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
                     </div>
                 `;
                 
                 buttonHtml = `
-                    <button id="try-create-bucket" class="md-button">Try Creating Bucket</button>
+                    <a href="https://app.supabase.com/project/_/sql" target="_blank" class="md-button">
+                        Open SQL Editor
+                    </a>
                     <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
-                        Open Supabase Dashboard
+                        Open Storage Dashboard
                     </a>
                 `;
             }
@@ -1020,30 +1024,6 @@ export class UIModule extends BaseModule {
             dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
                 dialog.remove();
             });
-            
-            const createBucketBtn = dialog.querySelector('#try-create-bucket');
-            if (createBucketBtn) {
-                createBucketBtn.addEventListener('click', async () => {
-                    createBucketBtn.disabled = true;
-                    createBucketBtn.textContent = 'Creating...';
-                    
-                    try {
-                        const result = await dataModule.runStorageSetupScript();
-                        
-                        if (result.status === 'success') {
-                            this.showMessage(result.message);
-                            dialog.remove();
-                        } else {
-                            this.showError(result.message);
-                        }
-                    } catch (error) {
-                        this.showError('Failed to create storage bucket');
-                    } finally {
-                        createBucketBtn.disabled = false;
-                        createBucketBtn.textContent = 'Try Creating Bucket';
-                    }
-                });
-            }
         } catch (error) {
             this.logger.error('Error showing storage setup dialog:', error);
         }
@@ -1534,31 +1514,34 @@ export class UIModule extends BaseModule {
                 statusHtml = `
                     <div class="status-indicator error">
                         <span class="material-icons">error</span>
-                        Storage configuration issue
+                        Storage Configuration Required
                     </div>
-                    <p>${storageStatus.message}</p>
+                    <p><strong>Administrator Action Required</strong>: The attachments bucket is missing or not properly configured.</p>
+                    <p>A Supabase administrator needs to run the setup script in the SQL Editor:</p>
                     <div class="code-block">
-                        <pre><code>-- Run this SQL in Supabase SQL Editor
-    INSERT INTO storage.buckets (id, name, public)
-    VALUES ('attachments', 'attachments', true)
-    ON CONFLICT (id) DO NOTHING;
-    
-    -- Set up policies
-    CREATE POLICY "Authenticated users can read attachments" 
-      ON storage.objects FOR SELECT
-      USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
-    
-    CREATE POLICY "Users can upload their own attachments" 
-      ON storage.objects FOR INSERT 
-      WITH CHECK (bucket_id = 'attachments' AND 
-                  auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
+                        <pre><code>-- Run this SQL in Supabase SQL Editor as an admin
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('attachments', 'attachments', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Set up policies
+CREATE POLICY "Authenticated users can read attachments" 
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can upload their own attachments" 
+  ON storage.objects FOR INSERT 
+  WITH CHECK (bucket_id = 'attachments' AND 
+              auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
                     </div>
                 `;
                 
                 buttonHtml = `
-                    <button id="try-create-bucket" class="md-button">Try Creating Bucket</button>
+                    <a href="https://app.supabase.com/project/_/sql" target="_blank" class="md-button">
+                        Open SQL Editor
+                    </a>
                     <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
-                        Open Supabase Dashboard
+                        Open Storage Dashboard
                     </a>
                 `;
             }
@@ -1583,30 +1566,6 @@ export class UIModule extends BaseModule {
             dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
                 dialog.remove();
             });
-            
-            const createBucketBtn = dialog.querySelector('#try-create-bucket');
-            if (createBucketBtn) {
-                createBucketBtn.addEventListener('click', async () => {
-                    createBucketBtn.disabled = true;
-                    createBucketBtn.textContent = 'Creating...';
-                    
-                    try {
-                        const result = await dataModule.runStorageSetupScript();
-                        
-                        if (result.status === 'success') {
-                            this.showMessage(result.message);
-                            dialog.remove();
-                        } else {
-                            this.showError(result.message);
-                        }
-                    } catch (error) {
-                        this.showError('Failed to create storage bucket');
-                    } finally {
-                        createBucketBtn.disabled = false;
-                        createBucketBtn.textContent = 'Try Creating Bucket';
-                    }
-                });
-            }
         } catch (error) {
             this.logger.error('Error showing storage setup dialog:', error);
         }
@@ -1660,9 +1619,11 @@ export class UIModule extends BaseModule {
                 `;
                 
                 buttonHtml = `
-                    <button id="try-create-bucket" class="md-button">Try Creating Bucket</button>
+                    <a href="https://app.supabase.com/project/_/sql" target="_blank" class="md-button">
+                        Open SQL Editor
+                    </a>
                     <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
-                        Open Supabase Dashboard
+                        Open Storage Dashboard
                     </a>
                 `;
             }

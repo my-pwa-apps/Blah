@@ -860,31 +860,12 @@ export class DataModule extends BaseModule {
             
             if (!bucketExists) {
                 this.logger.error('Attachments bucket not found in Supabase.');
-                
-                // Try to create the bucket automatically if possible
-                try {
-                    this.logger.info('Attempting to create attachments bucket automatically...');
-                    
-                    // Create bucket
-                    const { error: createError } = await this.supabase
-                        .storage
-                        .createBucket('attachments', { public: true });
-                        
-                    if (createError) {
-                        this.logger.error('Failed to create bucket automatically:', createError);
-                        throw new Error('Storage bucket missing. Please run the setup script from README.md.');
-                    }
-                    
-                    this.logger.info('Successfully created attachments bucket!');
-                    
-                    // Wait a moment for the bucket to be ready
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    
-                } catch (createBucketError) {
-                    this.logger.error('Failed to create bucket:', createBucketError);
-                    throw new Error('Storage not configured. Please visit Settings > Storage Setup for instructions.');
-                }
+                // Don't try to create it automatically - this requires admin rights
+                throw new Error('Storage not configured. Please run the SQL setup script from README.md as a Supabase admin.');
             }
+            
+            // Continue with file upload if bucket exists
+            // ...existing code...
             
             // Create a unique, sanitized filename
             const timestamp = Date.now();
@@ -905,63 +886,22 @@ export class DataModule extends BaseModule {
             if (error) {
                 this.logger.error('Supabase storage upload error:', error);
                 
-                // Provide more helpful error messages based on error status
-                if (error.statusCode === '404') {
-                    throw new Error('Storage bucket not found. Please check setup instructions.');
-                } else if (error.statusCode === '403') {
-                    throw new Error('Permission denied. Storage policy may not be configured correctly.');
+                if (error.message?.includes('not found') || error.statusCode === '404') {
+                    throw new Error('Storage bucket not found. Please check setup instructions in README.md.');
+                } else if (error.message?.includes('permission') || error.statusCode === '403') {
+                    throw new Error('Permission denied. Storage policy needs to be configured correctly.');
                 } else {
                     throw error;
                 }
             }
             
-            this.logger.info(`File uploaded successfully to: ${data.path}`);
-
-            // Get public URL
-            const { data: publicUrlData } = this.supabase
-                .storage
-                .from('attachments')
-                .getPublicUrl(data.path);
-
-            if (!publicUrlData?.publicUrl) {
-                throw new Error('Failed to get public URL for uploaded file');
-            }
-            
-            this.logger.info(`Public URL generated: ${publicUrlData.publicUrl}`);
-
-            return {
-                url: publicUrlData.publicUrl,
-                path: data.path,
-                type: file.type,
-                size: file.size,
-                name: file.name
-            };
+            // ...existing code...
         } catch (error) {
             this.logger.error('Error uploading attachment:', error);
             throw error;
         }
     }
 
-    // Helper to update conversation last message (extracted for clarity)
-    async _updateConversationLastMessage(conversationId, content, senderId, timestamp) {
-        try {
-            await this.supabase
-                .from('conversations')
-                .update({
-                    last_message: {
-                        content: content || 'Attachment',
-                        sender_id: senderId,
-                        created_at: timestamp || new Date().toISOString()
-                    }
-                })
-                .eq('id', conversationId);
-        } catch (error) {
-            this.logger.error('Error updating conversation last message:', error);
-            // Don't rethrow - this is a background operation
-        }
-    }
-
-    // Add a helper method to check storage configuration
     async checkStorageConfiguration() {
         try {
             const { data: buckets, error } = await this.supabase.storage.listBuckets();
@@ -979,7 +919,7 @@ export class DataModule extends BaseModule {
             if (!attachmentsBucket) {
                 return {
                     status: 'missing',
-                    message: 'Attachments bucket not found',
+                    message: 'Attachments bucket not found. An administrator needs to run the setup script.',
                     buckets: buckets || []
                 };
             }
@@ -999,33 +939,22 @@ export class DataModule extends BaseModule {
         }
     }
 
-    // Add a method to run setup SQL
-    async runStorageSetupScript() {
+    // Helper to update conversation last message (extracted for clarity)
+    async _updateConversationLastMessage(conversationId, content, senderId, timestamp) {
         try {
-            this.logger.info('Running storage setup script');
-            
-            // Create the bucket
-            const { error: bucketError } = await this.supabase.storage
-                .createBucket('attachments', { public: true });
-                
-            if (bucketError && bucketError.message !== 'Bucket already exists') {
-                throw bucketError;
-            }
-            
-            // Add policies - unfortunately this requires more privileges than the client has
-            // We'll need to provide instructions for manual SQL setup instead
-            
-            return {
-                status: 'success', 
-                message: 'Created attachments bucket. Please complete setup by adding policies.'
-            };
+            await this.supabase
+                .from('conversations')
+                .update({
+                    last_message: {
+                        content: content || 'Attachment',
+                        sender_id: senderId,
+                        created_at: timestamp || new Date().toISOString()
+                    }
+                })
+                .eq('id', conversationId);
         } catch (error) {
-            this.logger.error('Failed to run storage setup script:', error);
-            return {
-                status: 'error', 
-                message: 'Failed to run setup script',
-                error
-            };
+            this.logger.error('Error updating conversation last message:', error);
+            // Don't rethrow - this is a background operation
         }
     }
 }
