@@ -458,10 +458,28 @@ export class UIModule extends BaseModule {
                 
             } catch (error) {
                 this.logger.error('Failed to upload file:', error);
-                this.showError(`Failed to upload ${file.name}`);
+                
+                // Extract error message for common Supabase errors
+                let errorMessage = 'Failed to upload file';
+                
+                if (error.message) {
+                    errorMessage = error.message;
+                } else if (error.error === 'Bucket not found') {
+                    errorMessage = 'Storage not configured. Please contact administrator.';
+                } else if (error.statusCode === '403') {
+                    errorMessage = 'Permission denied. You cannot upload files.';
+                }
+                
+                this.showError(`Error uploading ${file.name}: ${errorMessage}`);
+                
                 // Only try to remove if it's still in the DOM
                 if (loadingItem.parentNode) {
                     loadingItem.remove();
+                }
+                
+                // If no attachments were successfully uploaded, remove the preview area
+                if (!this.pendingAttachments || this.pendingAttachments.length === 0) {
+                    previewArea.remove();
                 }
             }
         }

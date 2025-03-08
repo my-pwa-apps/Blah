@@ -846,19 +846,37 @@ export class DataModule extends BaseModule {
             
             this.logger.info(`Starting upload for file: ${file.name} (${file.size} bytes, ${file.type})`);
             
+            // First check if the bucket exists
+            const { data: buckets, error: bucketError } = await this.supabase
+                .storage
+                .listBuckets();
+                
+            if (bucketError) {
+                this.logger.error('Error listing storage buckets:', bucketError);
+                throw new Error('Unable to access storage. Check Supabase connection.');
+            }
+            
+            const bucketExists = buckets?.some(bucket => bucket.name === 'attachments');
+            
+            if (!bucketExists) {
+                this.logger.error('Attachments bucket not found. Please create it in Supabase dashboard.');
+                throw new Error('Storage not configured properly. Please contact support.');
+            }
+            
             // Create a unique, sanitized filename
             const timestamp = Date.now();
-            const fileExt = file.name.split('.').pop();
-            const safeFileName = `${timestamp}-${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
+            const fileExt = file.name.split('.').pop() || '';
+            const safeFileName = `${timestamp}-${Math.random().toString(36).substring(2, 10)}${fileExt ? '.' + fileExt : ''}`;
             const fileName = `${userId}/${safeFileName}`;
             
             this.logger.info(`Uploading to path: ${fileName}`);
             
-            // Direct upload without retry to simplify and identify the issue
+            // Upload the file
             const { data, error } = await this.supabase.storage
                 .from('attachments')
                 .upload(fileName, file, {
-                    cacheControl: '3600'
+                    cacheControl: '3600',
+                    upsert: false
                 });
             
             if (error) {
