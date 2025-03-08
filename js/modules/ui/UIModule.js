@@ -399,6 +399,31 @@ export class UIModule extends BaseModule {
                 this.handleSendMessage();
             }
         });
+
+        // Add drag and drop support
+        if (messageInput) {
+            messageInput.parentElement.addEventListener('dragover', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.add('dragover');
+            });
+
+            messageInput.parentElement.addEventListener('dragleave', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('dragover');
+            });
+
+            messageInput.parentElement.addEventListener('drop', e => {
+                e.preventDefault();
+                e.stopPropagation();
+                e.currentTarget.classList.remove('dragover');
+                
+                if (e.dataTransfer.files?.length) {
+                    this.handleFileSelection(e.dataTransfer.files);
+                }
+            });
+        }
     }
 
     async handleFileSelection(files) {
@@ -1607,8 +1632,10 @@ export class UIModule extends BaseModule {
             // Update the last message text
             const lastMessageEl = conversationEl.querySelector('.conversation-last-message');
             if (lastMessageEl) {
-                lastMessageEl.textContent = message.content || 'New message';
-                this.logger.info(`Updated last message text for conversation ${conversationId}`);
+                const hasAttachments = message.metadata?.attachments?.length > 0;
+                lastMessageEl.textContent = hasAttachments ? 
+                    `📎 ${message.content || 'Attachment'}` : 
+                    message.content || 'New message';
             }
             
             // CRITICAL FIX: Add unread indicator if this is not the current conversation

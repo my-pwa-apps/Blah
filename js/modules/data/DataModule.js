@@ -264,6 +264,7 @@ export class DataModule extends BaseModule {
                     created_at,
                     sender_id,
                     metadata,
+                    conversation_id,
                     profiles (*)
                 `)
                 .eq('conversation_id', conversationId)
@@ -498,97 +499,43 @@ export class DataModule extends BaseModule {
         this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
         
         try {
-            // Create truly unique channel name using timestamp
             const uniqueId = new Date().getTime();
             const channelName = `message_updates:${conversationId}:${uniqueId}`;
-            
-            this.logger.info(`Creating channel: ${channelName}`);
             
             const channel = this.supabase
                 .channel(channelName)
                 .on('postgres_changes', {
-                    event: '*', // Changed from 'INSERT' to '*' to catch all events
+                    event: '*',
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
                 }, async (payload) => {
-                    this.logger.info(`Received real-time event for conversation ${conversationId}:`, payload);
-                    
-                    // Handle deletion events
-                    if (payload.eventType === 'DELETE') {
-                        callback({
-                            type: 'DELETE',
-                            id: payload.old.id
-                        });
-                        return;
-                    }
-                    
-                    // Handle inserts and updates
-                    if (!payload.new || !payload.new.id) {
-                        this.logger.warn('Received empty payload', payload);
-                        return;
-                    }
-                    
-                    try {
-                        // Get complete message data with sender profile
-                        const { data, error } = await this.supabase
+                    // Always fetch full message data to get metadata and profile
+                    if (payload.new) {
+                        const { data: message } = await this.supabase
                             .from('messages')
                             .select(`
                                 id,
                                 content,
                                 created_at,
                                 sender_id,
+                                metadata,
                                 conversation_id,
-                                metadata,  // Make sure to select the metadata field
-                                profiles:sender_id (
-                                    id,
-                                    email,
-                                    display_name,
-                                    avatar_url
-                                )
+                                profiles (*)
                             `)
                             .eq('id', payload.new.id)
                             .single();
-                        
-                        if (error) {
-                            this.logger.error(`Error fetching message details:`, error);
-                            callback(payload.new);
-                        } else {
-                            callback(data);
+
+                        if (message) {
+                            callback(message);
                         }
-                    } catch (err) {
-                        this.logger.error('Error processing real-time message:', err);
-                        callback(payload.new);
                     }
                 });
             
-            // Add detailed connection state handling
-            channel.subscribe(async (status, err) => {
-                this.logger.info(`Channel ${channelName} status: ${status}`);
-                
-                if (status === 'SUBSCRIBED') {
-                    this.logger.info(`Successfully subscribed to conversation ${conversationId}`);
-                } else if (status === 'CHANNEL_ERROR') {
-                    this.logger.error(`Channel error for ${conversationId}:`, err);
-                    await this._handleSubscriptionError(channel, conversationId);
-                } else if (status === 'TIMED_OUT') {
-                    this.logger.error(`Subscription timed out for ${conversationId}`);
-                    await this._handleSubscriptionError(channel, conversationId);
-                } else if (status === 'CLOSED') {
-                    this.logger.warn(`Channel closed for conversation ${conversationId}`);
-                }
-            });
+            channel.subscribe();
             
-            // Return subscription handle
             return {
-                unsubscribe: () => {
-                    this.logger.info(`Unsubscribing from conversation ${conversationId}`);
-                    try {
-                        channel.unsubscribe();
-                    } catch (err) {
-                        this.logger.error(`Error unsubscribing:`, err);
-                    }
-                },
+                unsubscribe: () => channel.unsubscribe(),
                 conversationId
             };
         } catch (error) {

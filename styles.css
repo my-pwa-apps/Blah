@@ -1672,3 +1672,57 @@ body {
 .file-attachment:hover {
     background: rgba(0, 0, 0, 0.08);
 }
+
+/* Make attachment button and message delete more visible on mobile */
+@media (max-width: 768px) {
+    .attach-button {
+        padding: 12px;
+        margin-right: 8px;
+    }
+    
+    .attach-button .material-icons {
+        font-size: 24px;
+    }
+    
+    .message .message-delete {
+        opacity: 1;
+        padding: 8px;
+    }
+    
+    .message .message-delete .material-icons {
+        font-size: 20px;
+    }
+    
+    /* Improve attachment preview on mobile */
+    .attachment-preview-area {
+        padding: 12px;
+        margin-bottom: 12px;
+    }
+    
+    .attachment-preview-item {
+        padding: 8px 12px;
+        font-size: 14px;
+    }
+    
+    /* Improve file attachments on mobile */
+    .file-attachment {
+        padding: 12px;
+        margin: 4px 0;
+    }
+}
+
+/* Improve unread indicator visibility */
+.unread-indicator {
+    width: 10px;
+    height: 10px;
+    background: #4a6741;
+    border-radius: 50%;
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.conversation-item.unread .conversation-name {
+    font-weight: bold;
+}
