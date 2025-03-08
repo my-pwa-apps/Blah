@@ -760,9 +760,83 @@ body {
 
 .message-input {
     display: flex;
+    align-items: center;
+    gap: 0.5rem;
     padding: 1rem;
     border-top: 1px solid var(--md-divider);
+    background-color: var(--md-background);
+}
+
+.attach-button {
+    background: none;
+    border: none;
+    color: var(--md-primary);
+    padding: 0.5rem;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.attach-button:hover {
+    background-color: rgba(var(--md-primary-rgb), 0.1);
+}
+
+.attach-button .material-icons {
+    font-size: 24px;
+}
+
+.attachment-preview-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-top: 1px solid var(--md-divider);
+    background-color: var(--md-surface);
+}
+
+.attachment-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: var(--md-background);
+    border-radius: 4px;
     box-shadow: var(--elevation-1);
+}
+
+.attachment-preview-item.loading {
+    color: var(--md-text-secondary);
+    font-style: italic;
+}
+
+.attachment-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.remove-attachment {
+    background: none;
+    border: none;
+    color: var(--md-text-secondary);
+    padding: 0.2rem;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.remove-attachment:hover {
+    background-color: rgba(var(--md-primary-rgb), 0.1);
+    color: var(--md-primary);
 }
 
 #message-text {

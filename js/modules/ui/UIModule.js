@@ -351,8 +351,10 @@ export class UIModule extends BaseModule {
     }
 
     setupMessageListeners() {
-        const sendButton = document.getElementById('send-button');
-        const messageInput = document.getElementById('message-text');
+        const messageInputArea = document.createElement('div');
+        messageInputArea.id = 'message-input-area';
+        messageInputArea.className = 'message-input';
+        
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.id = 'file-input';
@@ -361,22 +363,35 @@ export class UIModule extends BaseModule {
         fileInput.style.display = 'none';
         
         const attachButton = document.createElement('button');
-        attachButton.innerHTML = '<span class="material-icons">attach_file</span>';
-        attachButton.className = 'attach-button';
+        attachButton.className = 'attach-button md-button';
         attachButton.title = 'Attach files';
+        attachButton.innerHTML = '<span class="material-icons">attach_file</span>';
         
-        messageInput.parentNode.insertBefore(fileInput, messageInput);
-        messageInput.parentNode.insertBefore(attachButton, messageInput);
+        const messageInput = document.createElement('input');
+        messageInput.type = 'text';
+        messageInput.id = 'message-text';
+        messageInput.placeholder = 'Type a message...';
+        
+        const sendButton = document.createElement('button');
+        sendButton.id = 'send-button';
+        sendButton.className = 'md-button';
+        sendButton.innerHTML = '<span class="material-icons">send</span>';
+        
+        messageInputArea.appendChild(fileInput);
+        messageInputArea.appendChild(attachButton);
+        messageInputArea.appendChild(messageInput);
+        messageInputArea.appendChild(sendButton);
+        
+        document.querySelector('.chat-area').appendChild(messageInputArea);
         
         // Keep track of pending attachments
         this.pendingAttachments = [];
         
+        // Setup event listeners
         attachButton.addEventListener('click', () => fileInput.click());
         fileInput.addEventListener('change', () => this.handleFileSelection(fileInput.files));
-        
-        // Add other existing listeners...
-        sendButton?.addEventListener('click', () => this.handleSendMessage());
-        messageInput?.addEventListener('keypress', (e) => {
+        sendButton.addEventListener('click', () => this.handleSendMessage());
+        messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
                 this.handleSendMessage();
@@ -441,13 +456,16 @@ export class UIModule extends BaseModule {
     }
 
     createAttachmentPreviewArea() {
-        const previewArea = document.createElement('div');
-        previewArea.id = 'attachment-preview';
-        previewArea.className = 'attachment-preview-area';
+        let previewArea = document.getElementById('attachment-preview');
         
-        // Insert before the message input area
-        const messageInputArea = document.getElementById('message-input-area');
-        messageInputArea.insertBefore(previewArea, messageInputArea.firstChild);
+        if (!previewArea) {
+            previewArea = document.createElement('div');
+            previewArea.id = 'attachment-preview';
+            previewArea.className = 'attachment-preview-area';
+            
+            const messageInputArea = document.getElementById('message-input-area');
+            messageInputArea.parentNode.insertBefore(previewArea, messageInputArea);
+        }
         
         return previewArea;
     }
