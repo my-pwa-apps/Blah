@@ -840,17 +840,33 @@ export class DataModule extends BaseModule {
 
     async uploadAttachment(file, userId) {
         try {
+            if (!file || !userId) {
+                throw new Error('Missing file or user ID for upload');
+            }
+            
             this.logger.info(`Starting upload for file: ${file.name} (${file.size} bytes, ${file.type})`);
             
-            // Create optimized filename - ensure unique names with timestamp and sanitize
-            const safeFileName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-            const fileName = `${userId}/${Date.now()}-${safeFileName}`;
+            // Create a unique, sanitized filename
+            const timestamp = Date.now();
+            const fileExt = file.name.split('.').pop();
+            const safeFileName = `${timestamp}-${Math.random().toString(36).substring(2, 10)}.${fileExt}`;
+            const fileName = `${userId}/${safeFileName}`;
             
-            // Upload with retry logic
-            const { data, error } = await this._uploadWithRetry('attachments', fileName, file);
+            this.logger.info(`Uploading to path: ${fileName}`);
             
-            if (error) throw error;
-            this.logger.info(`File uploaded successfully: ${fileName}`);
+            // Direct upload without retry to simplify and identify the issue
+            const { data, error } = await this.supabase.storage
+                .from('attachments')
+                .upload(fileName, file, {
+                    cacheControl: '3600'
+                });
+            
+            if (error) {
+                this.logger.error('Supabase storage upload error:', error);
+                throw error;
+            }
+            
+            this.logger.info(`File uploaded successfully to: ${data.path}`);
 
             // Get public URL
             const { data: publicUrlData } = this.supabase
@@ -861,6 +877,8 @@ export class DataModule extends BaseModule {
             if (!publicUrlData?.publicUrl) {
                 throw new Error('Failed to get public URL for uploaded file');
             }
+            
+            this.logger.info(`Public URL generated: ${publicUrlData.publicUrl}`);
 
             return {
                 url: publicUrlData.publicUrl,
@@ -873,41 +891,6 @@ export class DataModule extends BaseModule {
             this.logger.error('Error uploading attachment:', error);
             throw error;
         }
-    }
-
-    // Add a helper method for upload with retry
-    async _uploadWithRetry(bucket, fileName, file, maxRetries = 2) {
-        let attempt = 0;
-        let lastError = null;
-        
-        while (attempt <= maxRetries) {
-            try {
-                const result = await this.supabase.storage
-                    .from(bucket)
-                    .upload(fileName, file, {
-                        cacheControl: '3600',
-                        upsert: attempt > 0 // Only upsert on retry attempts
-                    });
-                    
-                if (!result.error) {
-                    return result;
-                }
-                
-                lastError = result.error;
-                this.logger.warn(`Upload attempt ${attempt + 1}/${maxRetries + 1} failed:`, lastError);
-                
-            } catch (error) {
-                lastError = error;
-                this.logger.warn(`Upload attempt ${attempt + 1}/${maxRetries + 1} failed with exception:`, error);
-            }
-            
-            // Wait before retry (exponential backoff)
-            await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-            attempt++;
-        }
-        
-        // If we get here, all attempts failed
-        return { data: null, error: lastError };
     }
 
     // Helper to update conversation last message (extracted for clarity)

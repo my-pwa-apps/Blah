@@ -411,7 +411,10 @@ export class UIModule extends BaseModule {
     }
 
     async handleFileSelection(files) {
-        if (!files || files.length === 0) return;
+        if (!files || files.length === 0) {
+            this.logger.error('No files selected');
+            return;
+        }
         
         const dataModule = this.getModule('data');
         const maxSize = 10 * 1024 * 1024; // 10MB limit
@@ -427,28 +430,39 @@ export class UIModule extends BaseModule {
                 continue;
             }
             
+            // Create loading item variable in the correct scope
+            const loadingItem = document.createElement('div');
+            loadingItem.className = 'attachment-preview-item loading';
+            loadingItem.innerHTML = `<span>Uploading ${file.name}...</span>`;
+            previewArea.appendChild(loadingItem);
+            
             try {
-                // Show loading indicator
-                const loadingItem = document.createElement('div');
-                loadingItem.className = 'attachment-preview-item loading';
-                loadingItem.innerHTML = `<span>Uploading ${file.name}...</span>`;
-                previewArea.appendChild(loadingItem);
-                
+                this.logger.info(`Uploading file: ${file.name}, type: ${file.type}, size: ${file.size}`);
+
                 // Upload file
                 const attachment = await dataModule.uploadAttachment(file, this.currentUser.id);
+                
+                // Remove loading indicator
                 loadingItem.remove();
                 
                 // Initialize attachments array if needed
-                if (!this.pendingAttachments) this.pendingAttachments = [];
+                if (!this.pendingAttachments) {
+                    this.pendingAttachments = [];
+                }
                 
                 // Add to pending attachments and update UI
                 this.pendingAttachments.push(attachment);
                 this.showAttachmentPreview(attachment);
                 
+                this.logger.info(`Successfully uploaded and added attachment: ${attachment.name}`);
+                
             } catch (error) {
                 this.logger.error('Failed to upload file:', error);
                 this.showError(`Failed to upload ${file.name}`);
-                loadingItem?.remove();
+                // Only try to remove if it's still in the DOM
+                if (loadingItem.parentNode) {
+                    loadingItem.remove();
+                }
             }
         }
     }

@@ -758,13 +758,127 @@ body {
     justify-content: flex-end;
 }
 
+/* Fix message input styling */
 .message-input {
     display: flex;
     align-items: center;
     gap: 0.5rem;
-    padding: 1rem;
+    padding: 0.75rem 1rem;
     border-top: 1px solid var(--md-divider);
     background-color: var(--md-background);
+    position: relative;
+    min-height: 60px;
+    flex-wrap: nowrap;
+}
+
+#message-text {
+    flex: 1;
+    min-width: 0; /* Important: prevents flex item from overflowing */
+    padding: 0.75rem;
+    border: 1px solid var(--md-divider);
+    border-radius: 20px;
+    background-color: var(--md-surface);
+    color: var(--md-text);
+    font-size: 0.95rem;
+    resize: none;
+    outline: none;
+    transition: border-color 0.2s;
+}
+
+#message-text:focus {
+    border-color: var(--md-primary);
+}
+
+.attach-button {
+    background: none;
+    border: none;
+    color: var(--md-primary);
+    width: 40px;
+    height: 40px;
+    min-width: 40px; /* Prevent shrinking */
+    padding: 8px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+    flex-shrink: 0; /* Prevent button from shrinking */
+}
+
+.attach-button:hover {
+    background-color: rgba(var(--md-primary-rgb, 74, 103, 65), 0.1);
+}
+
+#send-button {
+    background-color: var(--md-primary);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    min-width: 40px; /* Prevent shrinking */
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+    flex-shrink: 0; /* Prevent button from shrinking */
+}
+
+#send-button:hover {
+    background-color: var(--md-primary-dark);
+    transform: scale(1.05);
+}
+
+#send-button .material-icons {
+    font-size: 20px; /* Fix icon size */
+}
+
+/* Improved attachment preview area styling */
+.attachment-preview-area {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    background-color: var(--md-surface);
+    border-top: 1px solid var(--md-divider);
+    border-bottom: 1px solid var(--md-divider);
+    max-height: 150px;
+    overflow-y: auto;
+    width: 100%;
+}
+
+.attachment-preview-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--md-background);
+    border-radius: 4px;
+    box-shadow: var(--elevation-1);
+    max-width: 100%;
+    width: auto;
+    flex: 0 1 auto;
+}
+
+/* Mobile-specific fixes */
+@media (max-width: 768px) {
+    .message-input {
+        padding: 0.5rem 0.75rem;
+    }
+    
+    #message-text {
+        padding: 0.6rem 0.75rem;
+    }
+    
+    .attach-button,
+    #send-button {
+        width: 36px;
+        height: 36px;
+        min-width: 36px;
+    }
 }
 
 .attach-button {
