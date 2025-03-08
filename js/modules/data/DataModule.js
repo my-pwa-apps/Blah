@@ -204,31 +204,37 @@ export class DataModule extends BaseModule {
     // Update the sendMessage method to accept metadata
     async sendMessage(conversationId, senderId, content, metadata = {}) {
         try {
+            const messageData = {
+                conversation_id: conversationId,
+                sender_id: senderId,
+                content,
+                metadata: {
+                    ...metadata,
+                    attachments: metadata.attachments || []
+                }
+            };
+
             const { data, error } = await this.supabase
                 .from('messages')
-                .insert({
-                    conversation_id: conversationId,
-                    sender_id: senderId,
-                    content,
-                    metadata  // Store the metadata (including device_id)
-                })
+                .insert(messageData)
                 .select()
                 .single();
-            
+
             if (error) throw error;
-            
+
             // Update conversation's last message
             await this.supabase
                 .from('conversations')
                 .update({
                     last_message: {
-                        content,
+                        content: metadata.attachments?.length ? 
+                            `📎 ${content || 'Attachment'}` : content,
                         sender_id: senderId,
                         created_at: new Date().toISOString()
                     }
                 })
                 .eq('id', conversationId);
-            
+
             return data;
         } catch (error) {
             this.logger.error('Error sending message:', error);
@@ -779,6 +785,38 @@ export class DataModule extends BaseModule {
             return true;
         } catch (error) {
             this.logger.error('Error deleting message:', error);
+            throw error;
+        }
+    }
+
+    async uploadFile(file, userId) {
+        try {
+            const fileName = `${userId}/${Date.now()}-${file.name}`;
+            const { data, error } = await this.supabase
+                .storage
+                .from('attachments')
+                .upload(fileName, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            if (error) throw error;
+
+            // Get public URL for the file
+            const { data: { publicUrl } } = this.supabase
+                .storage
+                .from('attachments')
+                .getPublicUrl(data.path);
+
+            return {
+                url: publicUrl,
+                path: data.path,
+                type: file.type,
+                size: file.size,
+                name: file.name
+            };
+        } catch (error) {
+            this.logger.error('Error uploading file:', error);
             throw error;
         }
     }

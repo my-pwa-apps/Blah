@@ -371,6 +371,27 @@ export class UIModule extends BaseModule {
     setupMessageListeners() {
         const sendButton = document.getElementById('send-button');
         const messageInput = document.getElementById('message-text');
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'file-input';
+        fileInput.multiple = true;
+        fileInput.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt';
+        fileInput.style.display = 'none';
+        
+        const attachButton = document.createElement('button');
+        attachButton.innerHTML = '<span class="material-icons">attach_file</span>';
+        attachButton.className = 'attach-button';
+        attachButton.title = 'Attach files';
+        
+        messageInput.parentNode.insertBefore(fileInput, messageInput);
+        messageInput.parentNode.insertBefore(attachButton, messageInput);
+        
+        // Keep track of pending attachments
+        this.pendingAttachments = [];
+        
+        attachButton.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => this.handleFileSelection(fileInput.files));
+        
         sendButton?.addEventListener('click', () => this.handleSendMessage());
         messageInput?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -380,55 +401,108 @@ export class UIModule extends BaseModule {
         });
     }
 
+    async handleFileSelection(files) {
+        const dataModule = this.getModule('data');
+        const maxSize = 10 * 1024 * 1024; // 10MB limit
+        
+        for (const file of files) {
+            if (file.size > maxSize) {
+                this.showError(`File ${file.name} is too large. Maximum size is 10MB.`);
+                continue;
+            }
+            
+            try {
+                const fileData = await dataModule.uploadFile(file, this.currentUser.id);
+                this.pendingAttachments.push(fileData);
+                this.showAttachmentPreview(fileData);
+            } catch (error) {
+                this.showError(`Failed to upload ${file.name}`);
+            }
+        }
+    }
+
+    showAttachmentPreview(fileData) {
+        const previewArea = document.getElementById('attachment-preview') || 
+            this.createAttachmentPreviewArea();
+        
+        const preview = document.createElement('div');
+        preview.className = 'attachment-preview-item';
+        preview.innerHTML = `
+            <span class="attachment-name">${fileData.name}</span>
+            <button class="remove-attachment" data-path="${fileData.path}">
+                <span class="material-icons">close</span>
+            </button>
+        `;
+        
+        preview.querySelector('.remove-attachment').addEventListener('click', () => {
+            this.pendingAttachments = this.pendingAttachments.filter(
+                a => a.path !== fileData.path
+            );
+            preview.remove();
+            if (this.pendingAttachments.length === 0) {
+                previewArea.remove();
+            }
+        });
+        
+        previewArea.appendChild(preview);
+    }
+
+    createAttachmentPreviewArea() {
+        const previewArea = document.createElement('div');
+        previewArea.id = 'attachment-preview';
+        previewArea.className = 'attachment-preview-area';
+        document.getElementById('message-input-area').appendChild(previewArea);
+        return previewArea;
+    }
+
     async handleSendMessage() {
         const messageInput = document.getElementById('message-text');
         const content = messageInput?.value.trim();
         const messageContainer = document.getElementById('message-container');
-        if (!content || !this.currentUser) return;
+        
+        // Allow sending with just attachments, no text required
+        if ((!content && this.pendingAttachments.length === 0) || !this.currentUser) return;
 
         try {
-            this.logger.info('Sending message');
+            this.logger.info('Sending message with attachments:', this.pendingAttachments.length);
             const dataModule = this.getModule('data');
+            
             // Create self-conversation if none exists
             if (!this.currentConversation) {
                 const conversation = await dataModule.createConversation([this.currentUser.id]);
                 this.currentConversation = conversation.id;
             }
             
-            // Add device_id metadata to help identify which device sent the message
+            // Send message with attachments
             const message = await dataModule.sendMessage(
                 this.currentConversation,
                 this.currentUser.id,
                 content,
-                { device_id: this.deviceId }  // Add this metadata
+                { 
+                    device_id: this.deviceId,
+                    attachments: this.pendingAttachments
+                }
             );
 
-            // CRITICAL FIX: Remove "no messages" placeholder if present
+            // Remove "no messages" placeholder if present
             const noMessagesEl = messageContainer.querySelector('.no-messages');
             if (noMessagesEl) {
-                this.logger.info('Removing "no messages" placeholder');
                 noMessagesEl.remove();
             }
 
             // Add message to UI
-            const messageEl = document.createElement('div');
-            messageEl.className = 'message sent';
-            messageEl.dataset.messageId = message.id;
-            messageEl.innerHTML = `
-                <div class="message-content">${content}</div>
-                <div class="message-info">
-                    ${new Date().toLocaleTimeString()}
-                </div>
-            `;
-            
+            const messageEl = this._createMessageElement(message);
             messageContainer.appendChild(messageEl);
             messageEl.scrollIntoView({ behavior: 'smooth' });
             
-            // Add to tracking set to avoid duplication from real-time events
+            // Clear input and attachments
+            messageInput.value = '';
+            this.pendingAttachments = [];
+            document.getElementById('attachment-preview')?.remove();
+            
+            // Track message
             this.displayedMessageIds.add(message.id);
             
-            // Clear input
-            messageInput.value = '';
             this.logger.info('Message sent successfully');
         } catch (error) {
             this.logger.error('Failed to send message:', error);
@@ -1078,6 +1152,33 @@ export class UIModule extends BaseModule {
                 e.stopPropagation();
                 this._handleMessageDelete(message.id);
             });
+        }
+
+        // Add attachments if present
+        const attachments = message.metadata?.attachments || [];
+        if (attachments.length > 0) {
+            const attachmentsHtml = attachments.map(attachment => {
+                const isImage = attachment.type.startsWith('image/');
+                if (isImage) {
+                    return `
+                        <div class="message-attachment">
+                            <img src="${attachment.url}" alt="${attachment.name}" 
+                                 onclick="window.open('${attachment.url}', '_blank')">
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="message-attachment">
+                            <a href="${attachment.url}" target="_blank" class="file-attachment">
+                                <span class="material-icons">attach_file</span>
+                                ${attachment.name}
+                            </a>
+                        </div>
+                    `;
+                }
+            }).join('');
+
+            messageEl.innerHTML += `<div class="attachments-container">${attachmentsHtml}</div>`;
         }
 
         return messageEl;
