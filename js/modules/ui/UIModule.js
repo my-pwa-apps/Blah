@@ -447,7 +447,6 @@ export class UIModule extends BaseModule {
     }
 
     async handleSendMessage() {
-        // Get UI elements
         const messageInput = document.getElementById('message-text');
         const sendButton = document.getElementById('send-button');
         const messageContainer = document.getElementById('message-container');
@@ -472,8 +471,26 @@ export class UIModule extends BaseModule {
                 const conversation = await dataModule.createConversation([this.currentUser.id]);
                 this.currentConversation = conversation.id;
             }
+
+            // Show temporary message element immediately
+            const tempMessage = {
+                id: 'temp-' + Date.now(),
+                content,
+                sender_id: this.currentUser.id,
+                created_at: new Date().toISOString(),
+                metadata: {
+                    attachments: this.pendingAttachments
+                }
+            };
             
-            // Send message with any attachments
+            // Add temporary message to UI
+            const tempEl = this._createMessageElement(tempMessage);
+            if (tempEl) {
+                messageContainer.appendChild(tempEl);
+                tempEl.scrollIntoView({ behavior: 'smooth' });
+            }
+            
+            // Send the actual message
             const message = await dataModule.sendMessage(
                 this.currentConversation,
                 this.currentUser.id,
@@ -481,21 +498,29 @@ export class UIModule extends BaseModule {
                 this.pendingAttachments
             );
             
+            // Replace temporary message with real one if needed
+            if (tempEl) {
+                const realEl = this._createMessageElement(message);
+                if (realEl) {
+                    tempEl.replaceWith(realEl);
+                }
+            }
+            
             // Clear input and attachments
             messageInput.value = '';
             this.pendingAttachments = [];
             document.getElementById('attachment-preview')?.remove();
             
-            // Add message to UI
-            const messageEl = this._createMessageElement(message);
-            messageContainer.appendChild(messageEl);
-            messageEl.scrollIntoView({ behavior: 'smooth' });
+            // Update the conversations list to show new message
+            this._updateConversationWithNewMessage(message);
             
             this.logger.info('Message sent successfully');
             
         } catch (error) {
             this.logger.error('Failed to send message:', error);
             this.showError('Failed to send message');
+            // Remove temporary message if it exists
+            document.querySelector(`[data-message-id="temp-${Date.now()}"]`)?.remove();
         } finally {
             // Re-enable input
             messageInput.disabled = false;

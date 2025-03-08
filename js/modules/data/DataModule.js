@@ -203,26 +203,50 @@ export class DataModule extends BaseModule {
 
     async sendMessage(conversationId, senderId, content, attachments = []) {
         try {
+            const timestamp = new Date().toISOString();
             const messageData = {
                 conversation_id: conversationId,
                 sender_id: senderId,
-                content,
+                content: content || '',
+                created_at: timestamp,
                 metadata: {
                     attachments,
-                    timestamp: new Date().toISOString()
+                    timestamp
                 }
             };
 
             const { data, error } = await this.supabase
                 .from('messages')
                 .insert(messageData)
-                .select()
+                .select(`
+                    id,
+                    content,
+                    created_at,
+                    sender_id,
+                    conversation_id,
+                    metadata,
+                    profiles:sender_id (
+                        id,
+                        email,
+                        display_name,
+                        avatar_url
+                    )
+                `)
                 .single();
 
             if (error) throw error;
             
             // Update conversation's last message
-            await this._updateConversationLastMessage(conversationId, content, senderId, attachments);
+            await this.supabase
+                .from('conversations')
+                .update({
+                    last_message: {
+                        content: content || 'Attachment',
+                        sender_id: senderId,
+                        created_at: timestamp
+                    }
+                })
+                .eq('id', conversationId);
             
             return data;
         } catch (error) {
