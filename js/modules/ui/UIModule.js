@@ -464,10 +464,26 @@ export class UIModule extends BaseModule {
                 
                 if (error.message) {
                     errorMessage = error.message;
-                } else if (error.error === 'Bucket not found') {
-                    errorMessage = 'Storage not configured. Please contact administrator.';
-                } else if (error.statusCode === '403') {
-                    errorMessage = 'Permission denied. You cannot upload files.';
+                    
+                    // Show storage setup dialog for storage configuration errors
+                    if (error.message.includes('storage') || error.message.includes('bucket') || 
+                        error.message.includes('Setup') || error.message.includes('storage')) {
+                        // Add a "Configure Storage" button to the error message
+                        setTimeout(() => {
+                            const errorEl = document.querySelector('.auth-error');
+                            if (errorEl) {
+                                const configBtn = document.createElement('button');
+                                configBtn.className = 'md-button small';
+                                configBtn.textContent = 'Storage Settings';
+                                configBtn.addEventListener('click', () => {
+                                    this.showStorageSetupDialog();
+                                    errorEl.remove();
+                                });
+                                errorEl.appendChild(document.createElement('br'));
+                                errorEl.appendChild(configBtn);
+                            }
+                        }, 100);
+                    }
                 }
                 
                 this.showError(`Error uploading ${file.name}: ${errorMessage}`);
@@ -884,7 +900,9 @@ export class UIModule extends BaseModule {
     setupProfileHandlers() {
         const userProfile = document.getElementById('user-profile');
         const profileModal = document.getElementById('profile-modal');
-        const closeProfileBtn = document.querySelectorAll('#close-profile, #cancel-profile');  // Get both close buttons    
+        const closeProfileBtn = document.querySelectorAll('#close-profile, #cancel-profile');  // Get both close buttons
+        const adminSettingsBtn = document.getElementById('admin-settings');
+        
         userProfile?.addEventListener('click', () => {
             profileModal?.classList.remove('hidden');
             if (this.currentUser) {
@@ -894,18 +912,141 @@ export class UIModule extends BaseModule {
                     this.currentUser.avatar_url || 'images/default-avatar.png';
             }
         });
+        
         // Add click handler to all close buttons
         closeProfileBtn?.forEach(btn => {
             btn.addEventListener('click', () => {
                 profileModal?.classList.add('hidden');
             });
         });
+        
         // Close when clicking outside
         profileModal?.addEventListener('click', (e) => {
             if (e.target === profileModal) {
                 profileModal.classList.add('hidden');
             }
         });
+        
+        // Add admin settings button if not already present
+        if (!adminSettingsBtn && this.currentUser?.email?.endsWith('@admin.com')) {
+            const settingsBtn = document.createElement('button');
+            settingsBtn.id = 'admin-settings';
+            settingsBtn.className = 'md-button secondary';
+            settingsBtn.textContent = 'Storage Settings';
+            settingsBtn.addEventListener('click', () => {
+                this.showStorageSetupDialog();
+            });
+            
+            // Add to profile modal
+            const modalButtons = profileModal?.querySelector('.modal-buttons');
+            if (modalButtons) {
+                modalButtons.appendChild(settingsBtn);
+            }
+        }
+    }
+
+    // Add a new method to show storage setup dialog
+    async showStorageSetupDialog() {
+        try {
+            const dataModule = this.getModule('data');
+            const storageStatus = await dataModule.checkStorageConfiguration();
+            
+            // Create dialog
+            const dialog = document.createElement('div');
+            dialog.className = 'modal';
+            dialog.id = 'storage-setup-modal';
+            
+            let statusHtml = '';
+            let buttonHtml = '';
+            
+            if (storageStatus.status === 'ok') {
+                statusHtml = `
+                    <div class="status-indicator success">
+                        <span class="material-icons">check_circle</span>
+                        Storage configured correctly
+                    </div>
+                    <p>Your attachments bucket is properly set up.</p>
+                `;
+            } else {
+                statusHtml = `
+                    <div class="status-indicator error">
+                        <span class="material-icons">error</span>
+                        Storage configuration issue
+                    </div>
+                    <p>${storageStatus.message}</p>
+                    <div class="code-block">
+                        <pre><code>-- Run this SQL in Supabase SQL Editor
+    INSERT INTO storage.buckets (id, name, public)
+    VALUES ('attachments', 'attachments', true)
+    ON CONFLICT (id) DO NOTHING;
+    
+    -- Set up policies
+    CREATE POLICY "Authenticated users can read attachments" 
+      ON storage.objects FOR SELECT
+      USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+    
+    CREATE POLICY "Users can upload their own attachments" 
+      ON storage.objects FOR INSERT 
+      WITH CHECK (bucket_id = 'attachments' AND 
+                  auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
+                    </div>
+                `;
+                
+                buttonHtml = `
+                    <button id="try-create-bucket" class="md-button">Try Creating Bucket</button>
+                    <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
+                        Open Supabase Dashboard
+                    </a>
+                `;
+            }
+            
+            dialog.innerHTML = `
+                <div class="modal-content">
+                    <h2>Storage Settings</h2>
+                    <div class="storage-status">
+                        ${statusHtml}
+                    </div>
+                    <div class="modal-buttons">
+                        ${buttonHtml}
+                        <button id="close-storage-setup" class="md-button secondary">Close</button>
+                    </div>
+                </div>
+            `;
+            
+            // Add to document
+            document.body.appendChild(dialog);
+            
+            // Add event listeners
+            dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
+                dialog.remove();
+            });
+            
+            const createBucketBtn = dialog.querySelector('#try-create-bucket');
+            if (createBucketBtn) {
+                createBucketBtn.addEventListener('click', async () => {
+                    createBucketBtn.disabled = true;
+                    createBucketBtn.textContent = 'Creating...';
+                    
+                    try {
+                        const result = await dataModule.runStorageSetupScript();
+                        
+                        if (result.status === 'success') {
+                            this.showMessage(result.message);
+                            dialog.remove();
+                        } else {
+                            this.showError(result.message);
+                        }
+                    } catch (error) {
+                        this.showError('Failed to create storage bucket');
+                    } finally {
+                        createBucketBtn.disabled = false;
+                        createBucketBtn.textContent = 'Try Creating Bucket';
+                    }
+                });
+            }
+        } catch (error) {
+            this.logger.error('Error showing storage setup dialog:', error);
+        }
     }
 
     setupMobileHandlers() {
@@ -1367,87 +1508,212 @@ export class UIModule extends BaseModule {
         }
     }
 
-    // Add a new message to the UI with improved error handling
-    _addMessageToUI(message) {
+    // Add a new method to show storage setup dialog
+    async showStorageSetupDialog() {
         try {
-            this.logger.info(`Adding message ${message.id} to UI`);
-            const messageContainer = document.getElementById('message-container');
-            if (!messageContainer) {
-                this.logger.error('Message container not found');
-                return;
+            const dataModule = this.getModule('data');
+            const storageStatus = await dataModule.checkStorageConfiguration();
+            
+            // Create dialog
+            const dialog = document.createElement('div');
+            dialog.className = 'modal';
+            dialog.id = 'storage-setup-modal';
+            
+            let statusHtml = '';
+            let buttonHtml = '';
+            
+            if (storageStatus.status === 'ok') {
+                statusHtml = `
+                    <div class="status-indicator success">
+                        <span class="material-icons">check_circle</span>
+                        Storage configured correctly
+                    </div>
+                    <p>Your attachments bucket is properly set up.</p>
+                `;
+            } else {
+                statusHtml = `
+                    <div class="status-indicator error">
+                        <span class="material-icons">error</span>
+                        Storage configuration issue
+                    </div>
+                    <p>${storageStatus.message}</p>
+                    <div class="code-block">
+                        <pre><code>-- Run this SQL in Supabase SQL Editor
+    INSERT INTO storage.buckets (id, name, public)
+    VALUES ('attachments', 'attachments', true)
+    ON CONFLICT (id) DO NOTHING;
+    
+    -- Set up policies
+    CREATE POLICY "Authenticated users can read attachments" 
+      ON storage.objects FOR SELECT
+      USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+    
+    CREATE POLICY "Users can upload their own attachments" 
+      ON storage.objects FOR INSERT 
+      WITH CHECK (bucket_id = 'attachments' AND 
+                  auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
+                    </div>
+                `;
+                
+                buttonHtml = `
+                    <button id="try-create-bucket" class="md-button">Try Creating Bucket</button>
+                    <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
+                        Open Supabase Dashboard
+                    </a>
+                `;
             }
-            // Check if this message is already in the UI
-            const existingMessage = document.querySelector(`.message[data-message-id="${message.id}"]`);
-            if (existingMessage) {
-                this.logger.info(`Message ${message.id} already exists in UI, skipping`);
-                return;
-            }
             
-            // Create message element
-            const messageEl = this._createMessageElement(message);
-            if (!messageEl) {
-                this.logger.error('Failed to create message element');
-                return;
-            }
+            dialog.innerHTML = `
+                <div class="modal-content">
+                    <h2>Storage Settings</h2>
+                    <div class="storage-status">
+                        ${statusHtml}
+                    </div>
+                    <div class="modal-buttons">
+                        ${buttonHtml}
+                        <button id="close-storage-setup" class="md-button secondary">Close</button>
+                    </div>
+                </div>
+            `;
             
-            // Remove "no messages" placeholder if present
-            const noMessagesEl = messageContainer.querySelector('.no-messages');
-            if (noMessagesEl) {
-                noMessagesEl.remove();
-            }
+            // Add to document
+            document.body.appendChild(dialog);
             
-            // Add message to container
-            messageContainer.appendChild(messageEl);
-            
-            // Scroll into view with a small delay to ensure rendering completes
-            setTimeout(() => {
-                messageEl.scrollIntoView({ behavior: 'smooth' });
-            }, 50);
-            
-            // Play notification sound for active conversation
-            this._playIncomingMessageSound();
-            
-            this.logger.info(`Message ${message.id} successfully added to UI`);
-        } catch (error) {
-            this.logger.error('Error adding message to UI:', error);
-        }
-    }
-
-    // Play a subtle sound for incoming messages
-    _playIncomingMessageSound() {
-        try {
-            const notificationModule = this.getModule('notification');
-            notificationModule.notify({
-                title: 'New Message',
-                message: '',
-                soundType: 'message',
-                showNotification: false
+            // Add event listeners
+            dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
+                dialog.remove();
             });
+            
+            const createBucketBtn = dialog.querySelector('#try-create-bucket');
+            if (createBucketBtn) {
+                createBucketBtn.addEventListener('click', async () => {
+                    createBucketBtn.disabled = true;
+                    createBucketBtn.textContent = 'Creating...';
+                    
+                    try {
+                        const result = await dataModule.runStorageSetupScript();
+                        
+                        if (result.status === 'success') {
+                            this.showMessage(result.message);
+                            dialog.remove();
+                        } else {
+                            this.showError(result.message);
+                        }
+                    } catch (error) {
+                        this.showError('Failed to create storage bucket');
+                    } finally {
+                        createBucketBtn.disabled = false;
+                        createBucketBtn.textContent = 'Try Creating Bucket';
+                    }
+                });
+            }
         } catch (error) {
-            this.logger.error('Error playing message sound:', error);
+            this.logger.error('Error showing storage setup dialog:', error);
         }
     }
 
-    // Add this new method to handle events from other modules
-    setupSpecialEvents() {
-        // Listen for notification click events
-        window.addEventListener('open-conversation', (event) => {
-            const { conversationId } = event.detail;
-            if (conversationId) {
-                this.logger.info(`Open conversation event received for: ${conversationId}`);
-                this.loadConversation(conversationId);
+    // Add a new method to show storage setup dialog
+    async showStorageSetupDialog() {
+        try {
+            const dataModule = this.getModule('data');
+            const storageStatus = await dataModule.checkStorageConfiguration();
+            
+            // Create dialog
+            const dialog = document.createElement('div');
+            dialog.className = 'modal';
+            dialog.id = 'storage-setup-modal';
+            
+            let statusHtml = '';
+            let buttonHtml = '';
+            
+            if (storageStatus.status === 'ok') {
+                statusHtml = `
+                    <div class="status-indicator success">
+                        <span class="material-icons">check_circle</span>
+                        Storage configured correctly
+                    </div>
+                    <p>Your attachments bucket is properly set up.</p>
+                `;
+            } else {
+                statusHtml = `
+                    <div class="status-indicator error">
+                        <span class="material-icons">error</span>
+                        Storage configuration issue
+                    </div>
+                    <p>${storageStatus.message}</p>
+                    <div class="code-block">
+                        <pre><code>-- Run this SQL in Supabase SQL Editor
+    INSERT INTO storage.buckets (id, name, public)
+    VALUES ('attachments', 'attachments', true)
+    ON CONFLICT (id) DO NOTHING;
+    
+    -- Set up policies
+    CREATE POLICY "Authenticated users can read attachments" 
+      ON storage.objects FOR SELECT
+      USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+    
+    CREATE POLICY "Users can upload their own attachments" 
+      ON storage.objects FOR INSERT 
+      WITH CHECK (bucket_id = 'attachments' AND 
+                  auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
+                    </div>
+                `;
+                
+                buttonHtml = `
+                    <button id="try-create-bucket" class="md-button">Try Creating Bucket</button>
+                    <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
+                        Open Supabase Dashboard
+                    </a>
+                `;
             }
-        });
-        
-        // Could add more special events here as needed
-
-        // Add debug panel for real-time connections
-        window.addEventListener('keydown', (event) => {
-            // Press Ctrl+Shift+D to toggle debug panel
-            if (event.ctrlKey && event.shiftKey && event.key === 'D') {
-                this._toggleDebugPanel();
+            
+            dialog.innerHTML = `
+                <div class="modal-content">
+                    <h2>Storage Settings</h2>
+                    <div class="storage-status">
+                        ${statusHtml}
+                    </div>
+                    <div class="modal-buttons">
+                        ${buttonHtml}
+                        <button id="close-storage-setup" class="md-button secondary">Close</button>
+                    </div>
+                </div>
+            `;
+            
+            // Add to document
+            document.body.appendChild(dialog);
+            
+            // Add event listeners
+            dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
+                dialog.remove();
+            });
+            
+            const createBucketBtn = dialog.querySelector('#try-create-bucket');
+            if (createBucketBtn) {
+                createBucketBtn.addEventListener('click', async () => {
+                    createBucketBtn.disabled = true;
+                    createBucketBtn.textContent = 'Creating...';
+                    
+                    try {
+                        const result = await dataModule.runStorageSetupScript();
+                        
+                        if (result.status === 'success') {
+                            this.showMessage(result.message);
+                            dialog.remove();
+                        } else {
+                            this.showError(result.message);
+                        }
+                    } catch (error) {
+                        this.showError('Failed to create storage bucket');
+                    } finally {
+                        createBucketBtn.disabled = false;
+                        createBucketBtn.textContent = 'Try Creating Bucket';
+                    }
+                });
             }
-        });
+        } catch (error) {
+            this.logger.error('Error showing storage setup dialog:', error);
+        }
     }
 
     // Improve subscription handling

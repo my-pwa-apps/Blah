@@ -859,8 +859,31 @@ export class DataModule extends BaseModule {
             const bucketExists = buckets?.some(bucket => bucket.name === 'attachments');
             
             if (!bucketExists) {
-                this.logger.error('Attachments bucket not found. Please create it in Supabase dashboard.');
-                throw new Error('Storage not configured properly. Please contact support.');
+                this.logger.error('Attachments bucket not found in Supabase.');
+                
+                // Try to create the bucket automatically if possible
+                try {
+                    this.logger.info('Attempting to create attachments bucket automatically...');
+                    
+                    // Create bucket
+                    const { error: createError } = await this.supabase
+                        .storage
+                        .createBucket('attachments', { public: true });
+                        
+                    if (createError) {
+                        this.logger.error('Failed to create bucket automatically:', createError);
+                        throw new Error('Storage bucket missing. Please run the setup script from README.md.');
+                    }
+                    
+                    this.logger.info('Successfully created attachments bucket!');
+                    
+                    // Wait a moment for the bucket to be ready
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                } catch (createBucketError) {
+                    this.logger.error('Failed to create bucket:', createBucketError);
+                    throw new Error('Storage not configured. Please visit Settings > Storage Setup for instructions.');
+                }
             }
             
             // Create a unique, sanitized filename
@@ -881,7 +904,15 @@ export class DataModule extends BaseModule {
             
             if (error) {
                 this.logger.error('Supabase storage upload error:', error);
-                throw error;
+                
+                // Provide more helpful error messages based on error status
+                if (error.statusCode === '404') {
+                    throw new Error('Storage bucket not found. Please check setup instructions.');
+                } else if (error.statusCode === '403') {
+                    throw new Error('Permission denied. Storage policy may not be configured correctly.');
+                } else {
+                    throw error;
+                }
             }
             
             this.logger.info(`File uploaded successfully to: ${data.path}`);
@@ -927,6 +958,74 @@ export class DataModule extends BaseModule {
         } catch (error) {
             this.logger.error('Error updating conversation last message:', error);
             // Don't rethrow - this is a background operation
+        }
+    }
+
+    // Add a helper method to check storage configuration
+    async checkStorageConfiguration() {
+        try {
+            const { data: buckets, error } = await this.supabase.storage.listBuckets();
+            
+            if (error) {
+                return {
+                    status: 'error',
+                    message: 'Failed to check storage configuration',
+                    error
+                };
+            }
+            
+            const attachmentsBucket = buckets?.find(bucket => bucket.name === 'attachments');
+            
+            if (!attachmentsBucket) {
+                return {
+                    status: 'missing',
+                    message: 'Attachments bucket not found',
+                    buckets: buckets || []
+                };
+            }
+            
+            return {
+                status: 'ok',
+                message: 'Storage configured correctly',
+                bucket: attachmentsBucket
+            };
+        } catch (error) {
+            this.logger.error('Error checking storage configuration:', error);
+            return {
+                status: 'error',
+                message: 'Failed to check storage configuration',
+                error
+            };
+        }
+    }
+
+    // Add a method to run setup SQL
+    async runStorageSetupScript() {
+        try {
+            this.logger.info('Running storage setup script');
+            
+            // Create the bucket
+            const { error: bucketError } = await this.supabase.storage
+                .createBucket('attachments', { public: true });
+                
+            if (bucketError && bucketError.message !== 'Bucket already exists') {
+                throw bucketError;
+            }
+            
+            // Add policies - unfortunately this requires more privileges than the client has
+            // We'll need to provide instructions for manual SQL setup instead
+            
+            return {
+                status: 'success', 
+                message: 'Created attachments bucket. Please complete setup by adding policies.'
+            };
+        } catch (error) {
+            this.logger.error('Failed to run storage setup script:', error);
+            return {
+                status: 'error', 
+                message: 'Failed to run setup script',
+                error
+            };
         }
     }
 }
