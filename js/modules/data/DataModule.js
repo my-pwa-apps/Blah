@@ -860,8 +860,10 @@ export class DataModule extends BaseModule {
             
             if (!bucketExists) {
                 this.logger.error('Attachments bucket not found in Supabase.');
-                // Don't try to create it automatically - this requires admin rights
-                throw new Error('Storage not configured. Please run the SQL setup script from README.md as a Supabase admin.');
+                throw new Error(
+                    'Storage not configured. An admin must create the "attachments" bucket in Supabase. ' +
+                    'Click "View Storage Setup Instructions" below for details.'
+                );
             }
             
             // Continue with file upload if bucket exists

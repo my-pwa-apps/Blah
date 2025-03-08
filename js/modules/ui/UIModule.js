@@ -469,19 +469,20 @@ export class UIModule extends BaseModule {
                     if (error.message.includes('Storage not configured') || 
                         error.message.includes('bucket not found') || 
                         error.message.includes('setup script')) {
-                        // Add a "View Setup Instructions" button to the error message
+                        // Add a "Configure Storage" button to the error message with better text
                         setTimeout(() => {
                             const errorEl = document.querySelector('.auth-error');
                             if (errorEl) {
-                                const configBtn = document.createElement('button');
-                                configBtn.className = 'md-button small';
-                                configBtn.textContent = 'View Setup Instructions';
-                                configBtn.addEventListener('click', () => {
+                                errorEl.innerHTML += `<br><br>
+                                    <button class="md-button small storage-settings-btn">
+                                        <span class="material-icons">settings</span> 
+                                        View Storage Setup Instructions
+                                    </button>`;
+                                
+                                errorEl.querySelector('.storage-settings-btn').addEventListener('click', () => {
                                     this.showStorageSetupDialog();
                                     errorEl.remove();
                                 });
-                                errorEl.appendChild(document.createElement('br'));
-                                errorEl.appendChild(configBtn);
                             }
                         }, 100);
                     }
@@ -952,6 +953,10 @@ export class UIModule extends BaseModule {
             const dataModule = this.getModule('data');
             const storageStatus = await dataModule.checkStorageConfiguration();
             
+            // Get Supabase URL from config to make instructions more precise
+            const supabaseUrl = dataModule.supabase.supabaseUrl || 'https://app.supabase.com/project/_';
+            const projectId = supabaseUrl.match(/https:\/\/([^.]+)\.supabase/)?.[1] || '_';
+            
             // Create dialog
             const dialog = document.createElement('div');
             dialog.className = 'modal';
@@ -974,15 +979,24 @@ export class UIModule extends BaseModule {
                         <span class="material-icons">error</span>
                         Storage Configuration Required
                     </div>
-                    <p><strong>Administrator Action Required</strong>: The attachments bucket is missing or not properly configured.</p>
-                    <p>A Supabase administrator needs to run the setup script in the SQL Editor:</p>
-                    <div class="code-block">
-                        <pre><code>-- Run this SQL in Supabase SQL Editor as an admin
+                    <p><strong>Administrator Action Required:</strong> The attachments bucket is missing.</p>
+                    
+                    <div class="setup-instructions">
+                        <h3>How to fix this issue:</h3>
+                        <ol>
+                            <li>Sign in to Supabase as an administrator</li>
+                            <li>Go to the <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank">SQL Editor</a></li>
+                            <li>Copy and paste the following SQL script:</li>
+                        </ol>
+                        
+                        <div class="code-block">
+                            <button class="copy-btn" onclick="navigator.clipboard.writeText(this.nextElementSibling.textContent)">Copy SQL</button>
+                            <pre><code>-- Create the attachments bucket
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('attachments', 'attachments', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Set up policies
+-- Set up policies for attachments
 CREATE POLICY "Authenticated users can read attachments" 
   ON storage.objects FOR SELECT
   USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
@@ -990,23 +1004,27 @@ CREATE POLICY "Authenticated users can read attachments"
 CREATE POLICY "Users can upload their own attachments" 
   ON storage.objects FOR INSERT 
   WITH CHECK (bucket_id = 'attachments' AND 
-              auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
+              auth.uid()::text = (storage.foldername(name))[1] AND
+              auth.role() = 'authenticated');</code></pre>
+                        </div>
+                        
+                        <p>After running the script, refresh this page and try uploading again.</p>
                     </div>
                 `;
                 
                 buttonHtml = `
-                    <a href="https://app.supabase.com/project/_/sql" target="_blank" class="md-button">
-                        Open SQL Editor
+                    <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank" class="md-button">
+                        <span class="material-icons">code</span> Open SQL Editor
                     </a>
-                    <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
-                        Open Storage Dashboard
+                    <a href="https://app.supabase.com/project/${projectId}/storage/buckets" target="_blank" class="md-button">
+                        <span class="material-icons">folder</span> Open Storage Dashboard
                     </a>
                 `;
             }
             
             dialog.innerHTML = `
                 <div class="modal-content">
-                    <h2>Storage Settings</h2>
+                    <h2><span class="material-icons">storage</span> Storage Settings</h2>
                     <div class="storage-status">
                         ${statusHtml}
                     </div>
@@ -1483,239 +1501,6 @@ CREATE POLICY "Users can upload their own attachments"
             });
             
             this.logger.info('Real-time subscription setup completed');
-        } catch (error) {
-            this.logger.error('Error setting up message subscription:', error);
-        }
-    }
-
-    // Add a new method to show storage setup dialog
-    async showStorageSetupDialog() {
-        try {
-            const dataModule = this.getModule('data');
-            const storageStatus = await dataModule.checkStorageConfiguration();
-            
-            // Create dialog
-            const dialog = document.createElement('div');
-            dialog.className = 'modal';
-            dialog.id = 'storage-setup-modal';
-            
-            let statusHtml = '';
-            let buttonHtml = '';
-            
-            if (storageStatus.status === 'ok') {
-                statusHtml = `
-                    <div class="status-indicator success">
-                        <span class="material-icons">check_circle</span>
-                        Storage configured correctly
-                    </div>
-                    <p>Your attachments bucket is properly set up.</p>
-                `;
-            } else {
-                statusHtml = `
-                    <div class="status-indicator error">
-                        <span class="material-icons">error</span>
-                        Storage Configuration Required
-                    </div>
-                    <p><strong>Administrator Action Required</strong>: The attachments bucket is missing or not properly configured.</p>
-                    <p>A Supabase administrator needs to run the setup script in the SQL Editor:</p>
-                    <div class="code-block">
-                        <pre><code>-- Run this SQL in Supabase SQL Editor as an admin
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('attachments', 'attachments', true)
-ON CONFLICT (id) DO NOTHING;
-
--- Set up policies
-CREATE POLICY "Authenticated users can read attachments" 
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
-
-CREATE POLICY "Users can upload their own attachments" 
-  ON storage.objects FOR INSERT 
-  WITH CHECK (bucket_id = 'attachments' AND 
-              auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
-                    </div>
-                `;
-                
-                buttonHtml = `
-                    <a href="https://app.supabase.com/project/_/sql" target="_blank" class="md-button">
-                        Open SQL Editor
-                    </a>
-                    <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
-                        Open Storage Dashboard
-                    </a>
-                `;
-            }
-            
-            dialog.innerHTML = `
-                <div class="modal-content">
-                    <h2>Storage Settings</h2>
-                    <div class="storage-status">
-                        ${statusHtml}
-                    </div>
-                    <div class="modal-buttons">
-                        ${buttonHtml}
-                        <button id="close-storage-setup" class="md-button secondary">Close</button>
-                    </div>
-                </div>
-            `;
-            
-            // Add to document
-            document.body.appendChild(dialog);
-            
-            // Add event listeners
-            dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
-                dialog.remove();
-            });
-        } catch (error) {
-            this.logger.error('Error showing storage setup dialog:', error);
-        }
-    }
-
-    // Add a new method to show storage setup dialog
-    async showStorageSetupDialog() {
-        try {
-            const dataModule = this.getModule('data');
-            const storageStatus = await dataModule.checkStorageConfiguration();
-            
-            // Create dialog
-            const dialog = document.createElement('div');
-            dialog.className = 'modal';
-            dialog.id = 'storage-setup-modal';
-            
-            let statusHtml = '';
-            let buttonHtml = '';
-            
-            if (storageStatus.status === 'ok') {
-                statusHtml = `
-                    <div class="status-indicator success">
-                        <span class="material-icons">check_circle</span>
-                        Storage configured correctly
-                    </div>
-                    <p>Your attachments bucket is properly set up.</p>
-                `;
-            } else {
-                statusHtml = `
-                    <div class="status-indicator error">
-                        <span class="material-icons">error</span>
-                        Storage configuration issue
-                    </div>
-                    <p>${storageStatus.message}</p>
-                    <div class="code-block">
-                        <pre><code>-- Run this SQL in Supabase SQL Editor
-    INSERT INTO storage.buckets (id, name, public)
-    VALUES ('attachments', 'attachments', true)
-    ON CONFLICT (id) DO NOTHING;
-    
-    -- Set up policies
-    CREATE POLICY "Authenticated users can read attachments" 
-      ON storage.objects FOR SELECT
-      USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
-    
-    CREATE POLICY "Users can upload their own attachments" 
-      ON storage.objects FOR INSERT 
-      WITH CHECK (bucket_id = 'attachments' AND 
-                  auth.uid()::text = (storage.foldername(name))[1]);</code></pre>
-                    </div>
-                `;
-                
-                buttonHtml = `
-                    <a href="https://app.supabase.com/project/_/sql" target="_blank" class="md-button">
-                        Open SQL Editor
-                    </a>
-                    <a href="https://app.supabase.com/project/_/storage/buckets" target="_blank" class="md-button">
-                        Open Storage Dashboard
-                    </a>
-                `;
-            }
-            
-            dialog.innerHTML = `
-                <div class="modal-content">
-                    <h2>Storage Settings</h2>
-                    <div class="storage-status">
-                        ${statusHtml}
-                    </div>
-                    <div class="modal-buttons">
-                        ${buttonHtml}
-                        <button id="close-storage-setup" class="md-button secondary">Close</button>
-                    </div>
-                </div>
-            `;
-            
-            // Add to document
-            document.body.appendChild(dialog);
-            
-            // Add event listeners
-            dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
-                dialog.remove();
-            });
-            
-            const createBucketBtn = dialog.querySelector('#try-create-bucket');
-            if (createBucketBtn) {
-                createBucketBtn.addEventListener('click', async () => {
-                    createBucketBtn.disabled = true;
-                    createBucketBtn.textContent = 'Creating...';
-                    
-                    try {
-                        const result = await dataModule.runStorageSetupScript();
-                        
-                        if (result.status === 'success') {
-                            this.showMessage(result.message);
-                            dialog.remove();
-                        } else {
-                            this.showError(result.message);
-                        }
-                    } catch (error) {
-                        this.showError('Failed to create storage bucket');
-                    } finally {
-                        createBucketBtn.disabled = false;
-                        createBucketBtn.textContent = 'Try Creating Bucket';
-                    }
-                });
-            }
-        } catch (error) {
-            this.logger.error('Error showing storage setup dialog:', error);
-        }
-    }
-
-    // Improve subscription handling
-    _setupMessageSubscription(conversationId) {
-        try {
-            // Clean up existing subscription
-            if (this.currentSubscription) {
-                this.logger.info(`Cleaning up previous subscription: ${this.currentSubscription.conversationId}`);
-                this.currentSubscription.unsubscribe();
-                this.currentSubscription = null;
-            }
-            
-            this.logger.info(`Setting up new subscription for conversation: ${conversationId}`);
-            const dataModule = this.getModule('data');
-            
-            // Set up new subscription
-            this.currentSubscription = dataModule.subscribeToNewMessages(conversationId, (message) => {
-                this.logger.info(`Received message in conversation ${conversationId}:`, message.id);
-                
-                // Ignore if we've navigated away
-                if (this.currentConversation !== conversationId) {
-                    this.logger.info('Message is for a different conversation, showing notification');
-                    this._showMessageNotification(message);
-                    this.renderConversationsList();
-                    return;
-                }
-                
-                // Don't show our own messages twice
-                if (message.sender_id === this.currentUser.id) {
-                    this.logger.info('Ignoring own message from subscription');
-                    return;
-                }
-                
-                // Add message to UI and mark as read
-                this._addMessageToUI(message);
-                dataModule.markMessagesAsRead(conversationId, this.currentUser.id);
-                
-                // Play notification sound
-                this._playIncomingMessageSound();
-            });
-            
         } catch (error) {
             this.logger.error('Error setting up message subscription:', error);
         }
