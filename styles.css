@@ -1727,3 +1727,32 @@ body {
 .conversation-item.unread .conversation-name {
     font-weight: bold;
 }
+
+/* Conversation list styles */
+.conversation-item {
+    position: relative;
+    /* ...existing code... */
+}
+
+/* Improve unread indicator visibility */
+.unread-indicator {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #4a6741;
+    transition: all 0.3s ease;
+}
+
+/* Highlight unread conversations */
+.conversation-item.unread {
+    background-color: rgba(74, 103, 65, 0.1);
+}
+
+.conversation-item.unread .conversation-name {
+    font-weight: bold;
+    color: #4a6741;
+}

@@ -1611,25 +1611,23 @@ export class UIModule extends BaseModule {
 
     // FIX: Improve conversation list updates to properly show unread indicators
     _updateConversationWithNewMessage(message) {
-        if (!message || !message.conversation_id) {
-            this.logger.warn('Invalid message in _updateConversationWithNewMessage');
-            return;
-        }
+        if (!message || !message.conversation_id) return;
         
         const conversationId = message.conversation_id;
-        this.logger.info(`Updating conversation list for message in ${conversationId}`);
+        this.logger.info(`Updating conversation ${conversationId} with new message`);
         
         try {
-            // Find the conversation element in the list
-            const conversationEl = document.querySelector(`.conversation-item[data-conversation-id="${conversationId}"]`);
+            const conversationEl = document.querySelector(
+                `.conversation-item[data-conversation-id="${conversationId}"]`
+            );
             
             if (!conversationEl) {
-                this.logger.info(`Conversation ${conversationId} not found in list, refreshing all conversations`);
+                this.logger.info('Conversation not found, refreshing list');
                 this.renderConversationsList();
                 return;
             }
-            
-            // Update the last message text
+
+            // Update last message text
             const lastMessageEl = conversationEl.querySelector('.conversation-last-message');
             if (lastMessageEl) {
                 const hasAttachments = message.metadata?.attachments?.length > 0;
@@ -1637,34 +1635,28 @@ export class UIModule extends BaseModule {
                     `📎 ${message.content || 'Attachment'}` : 
                     message.content || 'New message';
             }
-            
-            // CRITICAL FIX: Add unread indicator if this is not the current conversation
-            // and the message is from someone else
-            if (conversationId !== this.currentConversation && message.sender_id !== this.currentUser.id) {
-                this.logger.info(`Adding unread indicator for conversation ${conversationId}`);
+
+            // Add unread indicator if needed
+            if (message.sender_id !== this.currentUser.id && 
+                conversationId !== this.currentConversation) {
                 
-                // Add unread class
                 conversationEl.classList.add('unread');
                 
-                // Add unread indicator element if not already present
                 if (!conversationEl.querySelector('.unread-indicator')) {
                     const indicator = document.createElement('div');
                     indicator.className = 'unread-indicator';
                     conversationEl.appendChild(indicator);
-                    this.logger.info(`Added unread indicator element to conversation ${conversationId}`);
                 }
             }
-            
-            // Move conversation to top of list (newest first)
+
+            // Move to top of list
             const conversationsList = document.getElementById('conversations-list');
-            if (conversationsList && conversationsList.firstChild !== conversationEl) {
-                conversationsList.removeChild(conversationEl);
+            if (conversationsList.firstChild !== conversationEl) {
                 conversationsList.insertBefore(conversationEl, conversationsList.firstChild);
-                this.logger.info(`Moved conversation ${conversationId} to top of list`);
             }
+            
         } catch (error) {
-            this.logger.error(`Error updating conversation in list: ${error.message}`);
-            // Fall back to full refresh on error
+            this.logger.error('Error updating conversation:', error);
             this.renderConversationsList();
         }
     }

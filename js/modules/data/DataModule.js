@@ -367,131 +367,59 @@ export class DataModule extends BaseModule {
             
             if (conversationIds.length === 0) return [];
             
-            // Get all conversations by their IDs
-            const { data: conversations, error: conversationsError } = await this.supabase
+            // Get last read timestamps for all conversations
+            const { data: lastReadData } = await this.supabase
+                .from('participants')
+                .select('conversation_id, last_read_at')
+                .eq('user_id', userId);
+                
+            const lastReadMap = new Map(
+                lastReadData?.map(d => [d.conversation_id, d.last_read_at]) || []
+            );
+            
+            // Get conversations with their last messages
+            const { data: conversations, error } = await this.supabase
                 .from('conversations')
                 .select(`
-                    id, 
+                    id,
                     created_at,
                     is_self_chat,
-                    last_message
-                `)
-                .in('id', conversationIds);
-                
-            if (conversationsError) throw conversationsError;
-            
-            // For each conversation, get all participants with their profiles
-            const conversationsWithDetails = await Promise.all(conversations.map(async (conv) => {
-                const { data: participants, error: participantsError } = await this.supabase
-                    .from('participants')
-                    .select(`
+                    last_message,
+                    participants (
                         user_id,
                         last_read_at,
-                        profiles:user_id (
+                        profiles (
                             id,
-                            email,
                             display_name,
+                            email,
                             avatar_url
                         )
-                    `)
-                    .eq('conversation_id', conv.id);
-                    
-                if (participantsError) {
-                    this.logger.error(`Error fetching participants for conversation ${conv.id}:`, participantsError);
-                    return { ...conv, participants: [] };
-                }
-                
-                // Add the current user's last read time from our earlier query
-                const currentUserEntry = participantEntries.find(p => 
-                    p.conversation_id === conv.id && p.user_id === userId
-                );
-                
-                // CRITICAL FIX: Properly identify self chats vs. regular chats
-                const isSelfChat = conv.is_self_chat || 
-                                  (participants.length === 1 && participants[0].user_id === userId);
-                
-                return { 
-                    ...conv, 
-                    participants,
-                    userLastRead: currentUserEntry?.last_read_at || null,
-                    isSelfChat // Explicitly store this property
-                };
+                    )
+                `);
+            
+            if (error) throw error;
+            
+            // Add lastReadAt to each conversation
+            return conversations.map(conv => ({
+                ...conv,
+                lastReadAt: lastReadMap.get(conv.id),
+                hasUnread: this._hasUnreadMessages(conv, lastReadMap.get(conv.id))
             }));
             
-            // Separate self-chats and regular chats for different handling
-            const selfChats = [];
-            const regularChats = new Map(); // Use Map to deduplicate by other user ID
-            
-            for (const conv of conversationsWithDetails) {
-                if (conv.isSelfChat) {
-                    selfChats.push(conv);
-                } else {
-                    // For regular chats, identify the "other" users
-                    const otherUsers = conv.participants.filter(p => p.user_id !== userId);
-                    
-                    // If there are other users, use the first one as the key for deduplication
-                    if (otherUsers.length > 0) {
-                        const otherUser = otherUsers[0];
-                        const otherUserId = otherUser.user_id;
-                        
-                        // Only keep the most recent conversation with each person
-                        const existingConv = regularChats.get(otherUserId);
-                        const convLastMessageTime = conv.last_message?.created_at 
-                            ? new Date(conv.last_message.created_at) 
-                            : new Date(conv.created_at);
-                        
-                        if (!existingConv) {
-                            regularChats.set(otherUserId, conv);
-                        } else {
-                            // Compare message timestamps and keep the more recent one
-                            const existingLastMessageTime = existingConv.last_message?.created_at 
-                                ? new Date(existingConv.last_message.created_at) 
-                                : new Date(existingConv.created_at);
-                            
-                            if (convLastMessageTime > existingLastMessageTime) {
-                                regularChats.set(otherUserId, conv);
-                            }
-                        }
-                    } else {
-                        // This shouldn't happen, but handle just in case
-                        regularChats.set(`unknown-${conv.id}`, conv);
-                    }
-                }
-            }
-            
-            // Choose only the most recent self-chat
-            let mostRecentSelfChat = null;
-            if (selfChats.length > 0) {
-                mostRecentSelfChat = selfChats.reduce((latest, current) => {
-                    const latestTime = latest.last_message?.created_at 
-                        ? new Date(latest.last_message.created_at) 
-                        : new Date(latest.created_at);
-                    const currentTime = current.last_message?.created_at 
-                        ? new Date(current.last_message.created_at) 
-                        : new Date(current.created_at);
-                    return currentTime > latestTime ? current : latest;
-                }, selfChats[0]);
-            }
-            
-            // Combine results, putting self-chat first if it exists
-            const result = [...regularChats.values()];
-            if (mostRecentSelfChat) {
-                result.unshift(mostRecentSelfChat);
-            }
-            
-            // Sort by most recent message
-            result.sort((a, b) => {
-                const aTime = a.last_message?.created_at ? new Date(a.last_message.created_at) : new Date(a.created_at);
-                const bTime = b.last_message?.created_at ? new Date(b.last_message.created_at) : new Date(b.created_at);
-                return bTime - aTime; // newest first
-            });
-            
-            this.logger.info(`Returning ${result.length} conversations (${selfChats.length > 0 ? '1 self-chat' : 'no self-chat'}, ${regularChats.size} regular chats)`);
-            return result;
         } catch (error) {
-            this.logger.error('Error in fetchConversations:', error);
+            this.logger.error('Error fetching conversations:', error);
             return [];
         }
+    }
+
+    _hasUnreadMessages(conversation, lastReadAt) {
+        if (!conversation.last_message) return false;
+        if (conversation.last_message.sender_id === this.currentUser?.id) return false;
+        
+        const lastMessageTime = new Date(conversation.last_message.created_at);
+        if (!lastReadAt) return true;
+        
+        return lastMessageTime > new Date(lastReadAt);
     }
 
     // Update the subscription handler to include metadata in the query
