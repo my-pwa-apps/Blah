@@ -204,41 +204,53 @@ export class DataModule extends BaseModule {
     // Update the sendMessage method to accept metadata
     async sendMessage(conversationId, senderId, content, metadata = {}) {
         try {
-            const messageData = {
-                conversation_id: conversationId,
-                sender_id: senderId,
-                content,
-                metadata: {
-                    ...metadata,
-                    attachments: metadata.attachments || []
-                }
+            // Ensure metadata is a plain object
+            const safeMetadata = {
+                ...metadata,
+                attachments: metadata.attachments || [],
+                device_id: metadata.device_id,
+                timestamp: new Date().toISOString()
             };
 
             const { data, error } = await this.supabase
                 .from('messages')
-                .insert(messageData)
-                .select()
+                .insert({
+                    conversation_id: conversationId,
+                    sender_id: senderId,
+                    content,
+                    metadata: safeMetadata // Make sure this is a valid JSONB object
+                })
+                .select('*')
                 .single();
 
             if (error) throw error;
-
+            
             // Update conversation's last message
-            await this.supabase
-                .from('conversations')
-                .update({
-                    last_message: {
-                        content: metadata.attachments?.length ? 
-                            `📎 ${content || 'Attachment'}` : content,
-                        sender_id: senderId,
-                        created_at: new Date().toISOString()
-                    }
-                })
-                .eq('id', conversationId);
-
+            await this._updateConversationLastMessage(conversationId, content, senderId, safeMetadata);
+            
             return data;
         } catch (error) {
             this.logger.error('Error sending message:', error);
             throw error;
+        }
+    }
+
+    // Add helper method for updating last message
+    async _updateConversationLastMessage(conversationId, content, senderId, metadata) {
+        try {
+            const lastMessage = {
+                content: metadata.attachments?.length ? 
+                    `📎 ${content || 'Attachment'}` : content,
+                sender_id: senderId,
+                created_at: new Date().toISOString()
+            };
+
+            await this.supabase
+                .from('conversations')
+                .update({ last_message: lastMessage })
+                .eq('id', conversationId);
+        } catch (error) {
+            this.logger.error('Error updating last message:', error);
         }
     }
 
@@ -251,6 +263,7 @@ export class DataModule extends BaseModule {
                     content,
                     created_at,
                     sender_id,
+                    metadata,
                     profiles (*)
                 `)
                 .eq('conversation_id', conversationId)

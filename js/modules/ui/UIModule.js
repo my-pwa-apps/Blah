@@ -940,35 +940,44 @@ export class UIModule extends BaseModule {
         const isSent = message.sender_id === this.currentUser.id;
         
         // Don't show our own messages again (already added when sent)
-        if (isSent) return;
+        if (isSent && message.metadata?.device_id === this.deviceId) {
+            this.logger.info('Ignoring own message from this device:', message.id);
+            return;
+        }
         
-        const messageEl = document.createElement('div');
-        messageEl.className = `message received`;
-        messageEl.dataset.messageId = message.id;
-        messageEl.innerHTML = `
-            <div class="message-content">${message.content}</div>
-            <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
-        `;
-        messageContainer.appendChild(messageEl);
-        messageEl.scrollIntoView({ behavior: 'smooth' });
+        // Check if we've already displayed this message
+        if (this.displayedMessageIds.has(message.id)) {
+            this.logger.info('Message already displayed:', message.id);
+            return;
+        }
         
-        // Mark as read since we're viewing it
-        const dataModule = this.getModule('data');
-        dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
-        
-        // Play notification sound for active conversation
-        try {
-            const notificationModule = this.getModule('notification');
-            notificationModule.notify({
-                title: 'New Message',
-                message: message.content.substring(0, 50) + (message.content.length > 50 ? '...' : ''),
-                soundType: 'message',
-                showNotification: false
-            });
-        } catch (error) {
-            this.logger.error('Error playing notification sound:', error);
-            // Fallback to simple notification sound
-            this.playNotificationSound();
+        const messageEl = this._createMessageElement(message);
+        if (messageEl) {
+            messageContainer.appendChild(messageEl);
+            messageEl.scrollIntoView({ behavior: 'smooth' });
+            this.displayedMessageIds.add(message.id);
+            
+            // Mark as read if it's a received message
+            if (!isSent) {
+                const dataModule = this.getModule('data');
+                dataModule.markMessagesAsRead(this.currentConversation, this.currentUser.id);
+                
+                // Play notification sound and show notification
+                try {
+                    const notificationModule = this.getModule('notification');
+                    notificationModule.notify({
+                        title: 'New Message',
+                        message: message.content.substring(0, 50) + (message.content.length > 50 ? '...' : ''),
+                        conversationId: this.currentConversation,
+                        soundType: 'message',
+                        showNotification: !document.hasFocus()
+                    });
+                } catch (error) {
+                    this.logger.error('Error handling notification:', error);
+                    // Fallback to simple notification sound
+                    this.playNotificationSound();
+                }
+            }
         }
     }
 
@@ -1130,6 +1139,10 @@ export class UIModule extends BaseModule {
         messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
         messageEl.dataset.messageId = message.id;
 
+        // Safely access metadata
+        const metadata = message.metadata || {};
+        const attachments = metadata.attachments || [];
+
         // Add delete button for sent messages
         const deleteButton = isSent ? `
             <button class="message-delete" aria-label="Delete message">
@@ -1145,20 +1158,10 @@ export class UIModule extends BaseModule {
             </div>
         `;
 
-        // Add delete handler
-        if (isSent) {
-            const deleteBtn = messageEl.querySelector('.message-delete');
-            deleteBtn?.addEventListener('click', (e) => {
-                e.stopPropagation();
-                this._handleMessageDelete(message.id);
-            });
-        }
-
         // Add attachments if present
-        const attachments = message.metadata?.attachments || [];
         if (attachments.length > 0) {
             const attachmentsHtml = attachments.map(attachment => {
-                const isImage = attachment.type.startsWith('image/');
+                const isImage = attachment.type?.startsWith('image/');
                 if (isImage) {
                     return `
                         <div class="message-attachment">
@@ -1179,6 +1182,15 @@ export class UIModule extends BaseModule {
             }).join('');
 
             messageEl.innerHTML += `<div class="attachments-container">${attachmentsHtml}</div>`;
+        }
+
+        // Add delete handler
+        if (isSent) {
+            const deleteBtn = messageEl.querySelector('.message-delete');
+            deleteBtn?.addEventListener('click', (e) => {
+                e.stopPropagation();
+                this._handleMessageDelete(message.id);
+            });
         }
 
         return messageEl;
