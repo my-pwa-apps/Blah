@@ -347,17 +347,9 @@ export class DataModule extends BaseModule {
     // Modify fetchConversations to deduplicate self-chats in the query
     async fetchConversations(userId, skipCache = false) {
         try {
-            // Get last read timestamps for messages
-            const { data: lastReadData } = await this.supabase
-                .from('participants')
-                .select('conversation_id, last_read_at')
-                .eq('user_id', userId);
-                
-            const lastReadMap = new Map(
-                lastReadData?.map(d => [d.conversation_id, d.last_read_at]) || []
-            );
+            this.logger.info(`Fetching conversations for user ${userId}`);
             
-            // Get conversations with last messages
+            // Get conversations with all related data
             const { data: conversations, error } = await this.supabase
                 .from('conversations')
                 .select(`
@@ -365,26 +357,60 @@ export class DataModule extends BaseModule {
                     created_at,
                     is_self_chat,
                     last_message,
-                    participants (
+                    participants!inner (
                         user_id,
                         last_read_at,
-                        profiles (*)
+                        profiles (
+                            id,
+                            email,
+                            display_name,
+                            avatar_url
+                        )
                     )
                 `)
+                .eq('participants.user_id', userId)
                 .order('last_message->created_at', { ascending: false });
-                
+
             if (error) throw error;
 
-            // Process conversations with unread status
-            return conversations.map(conv => ({
-                ...conv,
-                lastReadAt: lastReadMap.get(conv.id),
-                hasUnread: this._hasUnreadMessages(
-                    conv.last_message,
-                    lastReadMap.get(conv.id),
-                    userId
-                )
-            }));
+            // Create a map for deduplication
+            const uniqueConversations = new Map();
+
+            conversations.forEach(conv => {
+                // For self-chats, use a special key and keep the most recent
+                if (conv.is_self_chat) {
+                    if (!uniqueConversations.has('self') || 
+                        new Date(conv.created_at) > new Date(uniqueConversations.get('self').created_at)) {
+                        uniqueConversations.set('self', conv);
+                    }
+                    return;
+                }
+
+                // For regular chats, create a unique key based on sorted participant IDs
+                const participantIds = conv.participants
+                    .map(p => p.user_id)
+                    .sort()
+                    .join(',');
+
+                // Only update if this is a newer conversation
+                if (!uniqueConversations.has(participantIds) ||
+                    new Date(conv.last_message?.created_at || conv.created_at) > 
+                    new Date(uniqueConversations.get(participantIds).last_message?.created_at || 
+                            uniqueConversations.get(participantIds).created_at)) {
+                    uniqueConversations.set(participantIds, conv);
+                }
+            });
+
+            // Convert map back to array and sort by last message/creation time
+            const result = Array.from(uniqueConversations.values())
+                .sort((a, b) => {
+                    const timeA = a.last_message?.created_at || a.created_at;
+                    const timeB = b.last_message?.created_at || b.created_at;
+                    return new Date(timeB) - new Date(timeA);
+                });
+
+            this.logger.info(`Returning ${result.length} unique conversations`);
+            return result;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
             return [];
