@@ -246,11 +246,9 @@ export class UIModule extends BaseModule {
         if (!conversationsList) return;
 
         try {
-            this.logger.info('Fetching conversations');
             const dataModule = this.getModule('data');
             const conversations = await dataModule.fetchConversations(this.currentUser.id);
             
-            // Clear existing conversations
             conversationsList.innerHTML = '';
             
             if (!conversations || conversations.length === 0) {
@@ -259,44 +257,53 @@ export class UIModule extends BaseModule {
             }
 
             conversations.forEach(conv => {
-                const isSelfChat = Boolean(conv.is_self_chat);
                 let displayName, avatarUrl;
-
-                if (isSelfChat) {
+                
+                if (conv.isSelfChat) {
                     displayName = 'Notes to Self';
                     avatarUrl = this.currentUser.avatar_url;
                 } else {
-                    const otherParticipant = conv.participants.find(p => 
-                        p.user_id !== this.currentUser.id
-                    );
-                    displayName = otherParticipant?.profiles?.display_name || 
-                                otherParticipant?.profiles?.email || 
-                                'Unknown User';
-                    avatarUrl = otherParticipant?.profiles?.avatar_url;
+                    // Find the other participant (not the current user)
+                    const otherParticipant = conv.participants?.find(p => !p.isCurrentUser);
+                    if (otherParticipant?.profiles) {
+                        displayName = otherParticipant.profiles.display_name || 
+                                    otherParticipant.profiles.email;
+                        avatarUrl = otherParticipant.profiles.avatar_url;
+                    } else {
+                        displayName = 'Unknown User';
+                        avatarUrl = null;
+                    }
                 }
 
                 const hasUnread = this._hasUnreadMessages(conv);
                 
                 const conversationEl = document.createElement('div');
-                conversationEl.className = `conversation-item${hasUnread ? ' unread' : ''}`;
+                conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}`;
                 conversationEl.dataset.conversationId = conv.id;
-                
-                const lastMessageText = conv.last_message?.content || 'No messages yet';
-                
                 conversationEl.innerHTML = `
                     <div class="conversation-avatar">
                         <img src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">
                     </div>
                     <div class="conversation-details">
                         <div class="conversation-name">${displayName}</div>
-                        <div class="conversation-last-message">${lastMessageText}</div>
+                        <div class="conversation-last-message">
+                            ${conv.last_message?.content || 'No messages yet'}
+                        </div>
                     </div>
                     ${hasUnread ? '<div class="unread-indicator"></div>' : ''}
                 `;
                 
+                // Add unread class if needed
+                if (hasUnread) {
+                    conversationEl.classList.add('unread');
+                }
+                
                 conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
                 conversationsList.appendChild(conversationEl);
             });
+            
+            this.adjustLayoutForScreenSize();
+            
         } catch (error) {
             this.logger.error('Failed to render conversations:', error);
             this.showError('Failed to load conversations');

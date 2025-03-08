@@ -349,7 +349,7 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Fetching conversations for user ${userId}`);
             
-            // Get conversations with all related data
+            // Get conversations with participants and their profiles
             const { data: conversations, error } = await this.supabase
                 .from('conversations')
                 .select(`
@@ -369,47 +369,36 @@ export class DataModule extends BaseModule {
                     )
                 `)
                 .eq('participants.user_id', userId)
-                .order('last_message->created_at', { ascending: false });
+                .order('created_at', { ascending: false });
 
             if (error) throw error;
 
-            // Create a map for deduplication
-            const uniqueConversations = new Map();
-
+            // Process each conversation
+            const uniqueConvs = new Map();
             conversations.forEach(conv => {
-                // For self-chats, use a special key and keep the most recent
-                if (conv.is_self_chat) {
-                    if (!uniqueConversations.has('self') || 
-                        new Date(conv.created_at) > new Date(uniqueConversations.get('self').created_at)) {
-                        uniqueConversations.set('self', conv);
-                    }
-                    return;
-                }
-
-                // For regular chats, create a unique key based on sorted participant IDs
-                const participantIds = conv.participants
-                    .map(p => p.user_id)
-                    .sort()
-                    .join(',');
-
-                // Only update if this is a newer conversation
-                if (!uniqueConversations.has(participantIds) ||
-                    new Date(conv.last_message?.created_at || conv.created_at) > 
-                    new Date(uniqueConversations.get(participantIds).last_message?.created_at || 
-                            uniqueConversations.get(participantIds).created_at)) {
-                    uniqueConversations.set(participantIds, conv);
+                const key = conv.is_self_chat ? 'self' : conv.id;
+                
+                // Only update if newer or doesn't exist
+                if (!uniqueConvs.has(key) || 
+                    new Date(conv.created_at) > new Date(uniqueConvs.get(key).created_at)) {
+                    uniqueConvs.set(key, {
+                        ...conv,
+                        isSelfChat: conv.is_self_chat, // Explicit flag for UI
+                        participants: conv.participants?.map(p => ({
+                            ...p,
+                            isCurrentUser: p.user_id === userId
+                        }))
+                    });
                 }
             });
 
-            // Convert map back to array and sort by last message/creation time
-            const result = Array.from(uniqueConversations.values())
-                .sort((a, b) => {
-                    const timeA = a.last_message?.created_at || a.created_at;
-                    const timeB = b.last_message?.created_at || b.created_at;
-                    return new Date(timeB) - new Date(timeA);
-                });
+            // Convert back to array and sort by last message time
+            const result = Array.from(uniqueConvs.values()).sort((a, b) => {
+                const timeA = a.last_message?.created_at || a.created_at;
+                const timeB = b.last_message?.created_at || b.created_at;
+                return new Date(timeB) - new Date(timeA);
+            });
 
-            this.logger.info(`Returning ${result.length} unique conversations`);
             return result;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
