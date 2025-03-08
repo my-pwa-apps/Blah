@@ -263,13 +263,15 @@ export class UIModule extends BaseModule {
                     displayName = 'Notes to Self';
                     avatarUrl = this.currentUser.avatar_url;
                 } else {
-                    // Find the other participant (not the current user)
+                    // Find other participant's profile
                     const otherParticipant = conv.participants?.find(p => !p.isCurrentUser);
-                    if (otherParticipant?.profiles) {
-                        displayName = otherParticipant.profiles.display_name || 
-                                    otherParticipant.profiles.email;
-                        avatarUrl = otherParticipant.profiles.avatar_url;
+                    
+                    if (otherParticipant?.profile) {
+                        displayName = otherParticipant.profile.display_name || 
+                                    otherParticipant.profile.email;
+                        avatarUrl = otherParticipant.profile.avatar_url;
                     } else {
+                        this.logger.warn(`Missing profile for participant in conversation ${conv.id}`);
                         displayName = 'Unknown User';
                         avatarUrl = null;
                     }
@@ -278,8 +280,10 @@ export class UIModule extends BaseModule {
                 const hasUnread = this._hasUnreadMessages(conv);
                 
                 const conversationEl = document.createElement('div');
-                conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}`;
+                conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
                 conversationEl.dataset.conversationId = conv.id;
+                conversationEl.dataset.isSelfChat = String(conv.isSelfChat);
+                
                 conversationEl.innerHTML = `
                     <div class="conversation-avatar">
                         <img src="${avatarUrl || 'images/default-avatar.png'}" alt="Avatar">
@@ -293,17 +297,9 @@ export class UIModule extends BaseModule {
                     ${hasUnread ? '<div class="unread-indicator"></div>' : ''}
                 `;
                 
-                // Add unread class if needed
-                if (hasUnread) {
-                    conversationEl.classList.add('unread');
-                }
-                
                 conversationEl.addEventListener('click', () => this.loadConversation(conv.id));
                 conversationsList.appendChild(conversationEl);
             });
-            
-            this.adjustLayoutForScreenSize();
-            
         } catch (error) {
             this.logger.error('Failed to render conversations:', error);
             this.showError('Failed to load conversations');
