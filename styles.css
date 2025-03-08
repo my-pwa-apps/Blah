@@ -1731,28 +1731,39 @@ body {
 /* Conversation list styles */
 .conversation-item {
     position: relative;
-    /* ...existing code... */
+    display: flex;
+    align-items: center;
+    padding: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
 }
 
-/* Improve unread indicator visibility */
+.conversation-item:hover {
+    background-color: rgba(74, 103, 65, 0.05);
+}
+
+/* Unread indicators */
 .unread-indicator {
     position: absolute;
     right: 12px;
     top: 50%;
     transform: translateY(-50%);
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
+    width: 8px;
+    height: 8px;
     background: #4a6741;
-    transition: all 0.3s ease;
+    border-radius: 50%;
+    transition: transform 0.2s ease;
 }
 
-/* Highlight unread conversations */
 .conversation-item.unread {
     background-color: rgba(74, 103, 65, 0.1);
 }
 
 .conversation-item.unread .conversation-name {
-    font-weight: bold;
+    font-weight: 600;
     color: #4a6741;
+}
+
+.conversation-item.unread .unread-indicator {
+    transform: translateY(-50%) scale(1.2);
 }

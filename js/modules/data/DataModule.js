@@ -424,54 +424,44 @@ export class DataModule extends BaseModule {
 
     // Update the subscription handler to include metadata in the query
     subscribeToNewMessages(conversationId, callback) {
-        this.logger.info(`Setting up real-time subscription for conversation: ${conversationId}`);
+        if (!conversationId || !callback) return { unsubscribe: () => {} };
         
         try {
-            const uniqueId = new Date().getTime();
-            const channelName = `message_updates:${conversationId}:${uniqueId}`;
-            
+            const channelId = `messages:${conversationId}:${Date.now()}`;
             const channel = this.supabase
-                .channel(channelName)
+                .channel(channelId)
                 .on('postgres_changes', {
                     event: '*',
                     schema: 'public',
                     table: 'messages',
                     filter: `conversation_id=eq.${conversationId}`
-                }, async (payload) => {
-                    // Always fetch full message data to get metadata and profile
+                }, payload => {
                     if (payload.new) {
-                        const { data: message } = await this.supabase
-                            .from('messages')
-                            .select(`
-                                id,
-                                content,
-                                created_at,
-                                sender_id,
-                                metadata,
-                                conversation_id,
-                                profiles (*)
-                            `)
-                            .eq('id', payload.new.id)
-                            .single();
-
-                        if (message) {
-                            callback(message);
-                        }
+                        callback(payload.new);
+                    }
+                })
+                .subscribe(status => {
+                    if (status === 'SUBSCRIBED') {
+                        this.logger.info(`Subscribed to messages for conversation ${conversationId}`);
+                    } else if (status === 'CHANNEL_ERROR') {
+                        this.logger.error(`Channel error for conversation ${conversationId}`);
+                        this._handleSubscriptionError(channel, conversationId);
                     }
                 });
-            
-            channel.subscribe();
-            
+
             return {
-                unsubscribe: () => channel.unsubscribe(),
+                unsubscribe: () => {
+                    try {
+                        channel.unsubscribe();
+                    } catch (err) {
+                        this.logger.error('Error unsubscribing:', err);
+                    }
+                },
                 conversationId
             };
         } catch (error) {
-            this.logger.error(`Failed to create subscription:`, error);
-            return {
-                unsubscribe: () => {},
-                conversationId
-            };
+            this.logger.error('Subscription setup failed:', error);
+            return { unsubscribe: () => {}, conversationId };
         }
     }
 
