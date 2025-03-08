@@ -671,6 +671,7 @@ body {
     align-items: center;
     gap: 0.8rem;
     transition: background-color var(--animation-standard);
+    position: relative; /* Required for absolute positioning of unread indicator */
 }
 
 .conversation-item:hover {
