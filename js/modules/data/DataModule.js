@@ -349,7 +349,7 @@ export class DataModule extends BaseModule {
         try {
             this.logger.info(`Fetching conversations for user ${userId}`);
             
-            // Get conversations with all related data
+            // Get conversations with better profile data joining
             const { data: conversations, error } = await this.supabase
                 .from('conversations')
                 .select(`
@@ -360,7 +360,7 @@ export class DataModule extends BaseModule {
                     participants!inner (
                         user_id,
                         last_read_at,
-                        profiles:user_id (
+                        user:profiles!inner (
                             id,
                             email,
                             display_name,
@@ -368,31 +368,51 @@ export class DataModule extends BaseModule {
                         )
                     )
                 `)
-                .eq('participants.user_id', userId)
-                .order('last_message->created_at', { ascending: false });
+                .eq('participants.user_id', userId);
 
             if (error) throw error;
 
-            // Process each conversation to ensure proper data
-            const result = conversations.map(conv => ({
-                ...conv,
-                isSelfChat: conv.is_self_chat,
-                participants: conv.participants.map(p => ({
-                    ...p,
-                    isCurrentUser: p.user_id === userId,
-                    profile: p.profiles // Ensure profile data is accessible
-                }))
-            }));
+            // Process conversations to include proper participant data
+            const processedConversations = conversations.map(conv => {
+                // Get the other participant's profile for regular chats
+                const otherParticipant = conv.participants.find(p => p.user_id !== userId);
+                const currentUserParticipant = conv.participants.find(p => p.user_id === userId);
+
+                return {
+                    ...conv,
+                    isSelfChat: conv.is_self_chat,
+                    participants: conv.participants.map(p => ({
+                        userId: p.user_id,
+                        lastReadAt: p.last_read_at,
+                        isCurrentUser: p.user_id === userId,
+                        profile: p.user || null // This is now properly joined from the query
+                    })),
+                    // Add these fields for easier access
+                    otherUser: otherParticipant?.user || null,
+                    currentUser: currentUserParticipant?.user || null
+                };
+            });
+
+            // Filter out conversations with missing user data (except self-chats)
+            const validConversations = processedConversations.filter(conv => {
+                if (conv.isSelfChat) return true;
+                return conv.otherUser !== null;
+            });
+
+            // Log any conversations that were filtered out
+            const filteredCount = processedConversations.length - validConversations.length;
+            if (filteredCount > 0) {
+                this.logger.warn(`Filtered out ${filteredCount} conversations with missing user data`);
+            }
 
             // Sort by last message time
-            result.sort((a, b) => {
+            validConversations.sort((a, b) => {
                 const timeA = a.last_message?.created_at || a.created_at;
                 const timeB = b.last_message?.created_at || b.created_at;
                 return new Date(timeB) - new Date(timeA);
             });
 
-            this.logger.info(`Fetched ${result.length} conversations`);
-            return result;
+            return validConversations;
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
             return [];

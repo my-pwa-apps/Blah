@@ -263,26 +263,24 @@ export class UIModule extends BaseModule {
                     displayName = 'Notes to Self';
                     avatarUrl = this.currentUser.avatar_url;
                 } else {
-                    // Find other participant's profile
-                    const otherParticipant = conv.participants?.find(p => !p.isCurrentUser);
+                    // Use the otherUser data that we added in DataModule
+                    const otherUser = conv.otherUser;
+                    displayName = otherUser.display_name || otherUser.email;
+                    avatarUrl = otherUser.avatar_url;
                     
-                    if (otherParticipant?.profile) {
-                        displayName = otherParticipant.profile.display_name || 
-                                    otherParticipant.profile.email;
-                        avatarUrl = otherParticipant.profile.avatar_url;
-                    } else {
-                        this.logger.warn(`Missing profile for participant in conversation ${conv.id}`);
-                        displayName = 'Unknown User';
-                        avatarUrl = null;
-                    }
+                    this.logger.info(`Rendering conversation with: ${displayName}`);
                 }
 
                 const hasUnread = this._hasUnreadMessages(conv);
                 
                 const conversationEl = document.createElement('div');
-                conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}${hasUnread ? ' unread' : ''}`;
+                conversationEl.className = `conversation-item${conv.id === this.currentConversation ? ' active' : ''}`;
                 conversationEl.dataset.conversationId = conv.id;
                 conversationEl.dataset.isSelfChat = String(conv.isSelfChat);
+                
+                if (!conv.isSelfChat) {
+                    conversationEl.dataset.otherUserId = conv.otherUser.id;
+                }
                 
                 conversationEl.innerHTML = `
                     <div class="conversation-avatar">
