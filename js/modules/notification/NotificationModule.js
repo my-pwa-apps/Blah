@@ -59,11 +59,28 @@ export class NotificationModule extends BaseModule {
     
     _preloadSound(name, path) {
         try {
-            this.notificationSound = new Audio(path);
-            this.notificationSound.load(); // Preload audio
-            this.logger.info(`Preloaded sound: ${name}`);
+            // Create new Audio instance only if not already loaded
+            if (!this.notificationSound) {
+                this.notificationSound = new Audio(path);
+                
+                // Add load error handling
+                this.notificationSound.onerror = (error) => {
+                    this.logger.error(`Error loading sound "${name}":`, error);
+                    this.notificationSound = null;
+                };
+                
+                // Handle iOS audio initialization
+                document.addEventListener('touchstart', () => {
+                    // iOS requires user interaction to load audio
+                    this.notificationSound.load();
+                }, { once: true });
+                
+                this.logger.info(`Preloading sound: ${name}`);
+                this.notificationSound.load();
+            }
         } catch (error) {
-            this.logger.error(`Error preloading sound "${name}":`, error);
+            this.logger.error(`Error setting up sound "${name}":`, error);
+            this.notificationSound = null;
         }
     }
     
@@ -184,28 +201,21 @@ export class NotificationModule extends BaseModule {
     }
     
     _playSound(type) {
+        if (!this.notificationSound || !this.soundsEnabled) return false;
+        
         try {
-            if (!this.notificationSound) {
-                this.logger.warn('No sound loaded');
-                return false;
-            }
-            
-            // Set volume based on platform
+            // Reset and play
+            this.notificationSound.currentTime = 0;
             this.notificationSound.volume = this.platform.isMobile ? 0.7 : 0.5;
             
-            // Reset audio to beginning
-            this.notificationSound.currentTime = 0;
-            
-            // Play with platform-specific adjustments
             const playPromise = this.notificationSound.play();
-            
-            // Handle play promise for browsers that return one
-            if (playPromise !== undefined) {
+            if (playPromise) {
                 playPromise.catch(error => {
-                    this.logger.error('Error playing notification sound:', error);
+                    this.logger.error('Error playing sound:', error);
+                    // Retry once on error
+                    setTimeout(() => this.notificationSound.play().catch(() => {}), 100);
                 });
             }
-            
             return true;
         } catch (error) {
             this.logger.error('Error playing sound:', error);
