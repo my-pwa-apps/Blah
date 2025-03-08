@@ -1566,3 +1566,61 @@ body {
 #back-button .material-icons {
     pointer-events: none;
 }
+
+.message .attachment {
+    margin-top: 0.5rem;
+}
+
+.message .attachment.image img {
+    max-width: 200px;
+    max-height: 200px;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.message .attachment.file a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    background-color: rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    text-decoration: none;
+    color: inherit;
+}
+
+.message-delete {
+    background: none;
+    border: none;
+    color: inherit;
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 0.2rem;
+    margin-left: 0.5rem;
+    display: none;
+}
+
+.message:hover .message-delete {
+    display: inline-block;
+}
+
+.message-delete:hover {
+    opacity: 1;
+}
+
+.attachment-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-top: 1px solid var(--md-divider);
+}
+
+.attachment-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
+    background-color: var(--md-surface);
+    border-radius: 4px;
+}

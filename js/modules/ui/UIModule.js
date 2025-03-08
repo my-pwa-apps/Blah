@@ -353,6 +353,28 @@ export class UIModule extends BaseModule {
     setupMessageListeners() {
         const sendButton = document.getElementById('send-button');
         const messageInput = document.getElementById('message-text');
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.id = 'file-input';
+        fileInput.multiple = true;
+        fileInput.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt';
+        fileInput.style.display = 'none';
+        
+        const attachButton = document.createElement('button');
+        attachButton.innerHTML = '<span class="material-icons">attach_file</span>';
+        attachButton.className = 'attach-button';
+        attachButton.title = 'Attach files';
+        
+        messageInput.parentNode.insertBefore(fileInput, messageInput);
+        messageInput.parentNode.insertBefore(attachButton, messageInput);
+        
+        // Keep track of pending attachments
+        this.pendingAttachments = [];
+        
+        attachButton.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', () => this.handleFileSelection(fileInput.files));
+        
+        // Add other existing listeners...
         sendButton?.addEventListener('click', () => this.handleSendMessage());
         messageInput?.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -360,6 +382,26 @@ export class UIModule extends BaseModule {
                 this.handleSendMessage();
             }
         });
+    }
+
+    async handleFileSelection(files) {
+        const dataModule = this.getModule('data');
+        const maxSize = 10 * 1024 * 1024; // 10MB limit
+        
+        for (const file of files) {
+            if (file.size > maxSize) {
+                this.showError(`File ${file.name} is too large. Maximum size is 10MB.`);
+                continue;
+            }
+            
+            try {
+                const attachment = await dataModule.uploadAttachment(file, this.currentUser.id);
+                this.pendingAttachments.push(attachment);
+                this.showAttachmentPreview(attachment);
+            } catch (error) {
+                this.showError(`Failed to upload ${file.name}`);
+            }
+        }
     }
 
     async handleSendMessage() {
@@ -376,11 +418,15 @@ export class UIModule extends BaseModule {
                 const conversation = await dataModule.createConversation([this.currentUser.id]);
                 this.currentConversation = conversation.id;
             }
-            await dataModule.sendMessage(
+            const message = await dataModule.sendMessage(
                 this.currentConversation,
                 this.currentUser.id,
-                content
+                content,
+                this.pendingAttachments
             );
+            // Clear attachments after sending
+            this.pendingAttachments = [];
+            document.getElementById('attachment-preview')?.remove();
             // Add message to UI
             const messageEl = document.createElement('div');
             messageEl.className = 'message sent';
@@ -993,6 +1039,9 @@ export class UIModule extends BaseModule {
                 messageContainer.appendChild(messageEl);
             }
         });
+        
+        // Scroll to the latest message
+        messageContainer.scrollTop = messageContainer.scrollHeight;
     }
 
     // Create a message element based on message data
@@ -1003,10 +1052,60 @@ export class UIModule extends BaseModule {
         const messageEl = document.createElement('div');
         messageEl.className = `message ${isSent ? 'sent' : 'received'}`;
         messageEl.dataset.messageId = message.id;
+
+        // Add delete button for sent messages
+        const deleteButton = isSent ? `
+            <button class="message-delete" aria-label="Delete message">
+                <span class="material-icons">delete</span>
+            </button>
+        ` : '';
+
+        // Add attachments if present
+        const attachments = message.metadata?.attachments || [];
+        const attachmentsHtml = attachments.map(attachment => {
+            if (attachment.type.startsWith('image/')) {
+                return `
+                    <div class="attachment image">
+                        <img src="${attachment.url}" alt="${attachment.name}" 
+                             onclick="window.open('${attachment.url}', '_blank')">
+                    </div>
+                `;
+            } else {
+                return `
+                    <div class="attachment file">
+                        <a href="${attachment.url}" target="_blank">
+                            <span class="material-icons">attach_file</span>
+                            ${attachment.name}
+                        </a>
+                    </div>
+                `;
+            }
+        }).join('');
+
         messageEl.innerHTML = `
             <div class="message-content">${message.content}</div>
-            <div class="message-info">${new Date(message.created_at).toLocaleTimeString()}</div>
+            ${attachmentsHtml}
+            <div class="message-info">
+                ${new Date(message.created_at).toLocaleTimeString()}
+                ${deleteButton}
+            </div>
         `;
+
+        // Add delete handler
+        if (isSent) {
+            const deleteBtn = messageEl.querySelector('.message-delete');
+            deleteBtn?.addEventListener('click', async () => {
+                if (confirm('Are you sure you want to delete this message?')) {
+                    try {
+                        await this.getModule('data').deleteMessage(message.id, this.currentUser.id);
+                        messageEl.remove();
+                    } catch (error) {
+                        this.showError('Failed to delete message');
+                    }
+                }
+            });
+        }
+
         return messageEl;
     }
 

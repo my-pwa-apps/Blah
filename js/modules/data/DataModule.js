@@ -201,31 +201,28 @@ export class DataModule extends BaseModule {
         }
     }
 
-    async sendMessage(conversationId, senderId, content) {
+    async sendMessage(conversationId, senderId, content, attachments = []) {
         try {
+            const messageData = {
+                conversation_id: conversationId,
+                sender_id: senderId,
+                content,
+                metadata: {
+                    attachments,
+                    timestamp: new Date().toISOString()
+                }
+            };
+
             const { data, error } = await this.supabase
                 .from('messages')
-                .insert({
-                    conversation_id: conversationId,
-                    sender_id: senderId,
-                    content
-                })
+                .insert(messageData)
                 .select()
                 .single();
-            
+
             if (error) throw error;
             
             // Update conversation's last message
-            await this.supabase
-                .from('conversations')
-                .update({
-                    last_message: {
-                        content,
-                        sender_id: senderId,
-                        created_at: new Date().toISOString()
-                    }
-                })
-                .eq('id', conversationId);
+            await this._updateConversationLastMessage(conversationId, content, senderId, attachments);
             
             return data;
         } catch (error) {
@@ -737,6 +734,93 @@ export class DataModule extends BaseModule {
             return {
                 unsubscribe: () => {}
             };
+        }
+    }
+
+    async deleteMessage(messageId, userId) {
+        try {
+            // Verify user owns the message first
+            const { data: message, error: fetchError } = await this.supabase
+                .from('messages')
+                .select('sender_id, conversation_id')
+                .eq('id', messageId)
+                .single();
+
+            if (fetchError) throw fetchError;
+            if (!message || message.sender_id !== userId) {
+                throw new Error('Cannot delete message: Not the sender');
+            }
+
+            // Delete the message
+            const { error: deleteError } = await this.supabase
+                .from('messages')
+                .delete()
+                .eq('id', messageId);
+
+            if (deleteError) throw deleteError;
+            
+            // Update conversation's last message if needed
+            await this._updateConversationAfterDelete(message.conversation_id);
+            
+            return true;
+        } catch (error) {
+            this.logger.error('Error deleting message:', error);
+            throw error;
+        }
+    }
+
+    async _updateConversationAfterDelete(conversationId) {
+        try {
+            // Get the latest message for this conversation
+            const { data: latestMessage } = await this.supabase
+                .from('messages')
+                .select('*')
+                .eq('conversation_id', conversationId)
+                .order('created_at', { ascending: false })
+                .limit(1)
+                .single();
+
+            // Update conversation's last_message
+            await this.supabase
+                .from('conversations')
+                .update({
+                    last_message: latestMessage || null
+                })
+                .eq('id', conversationId);
+        } catch (error) {
+            this.logger.error('Error updating conversation after delete:', error);
+        }
+    }
+
+    async uploadAttachment(file, userId) {
+        try {
+            const fileName = `${userId}/${Date.now()}-${file.name}`;
+            const { data, error } = await this.supabase
+                .storage
+                .from('attachments')
+                .upload(fileName, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                });
+
+            if (error) throw error;
+
+            // Get public URL
+            const { data: { publicUrl } } = this.supabase
+                .storage
+                .from('attachments')
+                .getPublicUrl(data.path);
+
+            return {
+                url: publicUrl,
+                path: data.path,
+                type: file.type,
+                size: file.size,
+                name: file.name
+            };
+        } catch (error) {
+            this.logger.error('Error uploading attachment:', error);
+            throw error;
         }
     }
 }
