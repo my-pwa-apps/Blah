@@ -821,24 +821,29 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 0.5rem;
-    padding: 0.5rem;
-    border-top: 1px solid var(--md-divider);
+    padding: 0.75rem;
     background-color: var(--md-surface);
+    border-top: 1px solid var(--md-divider);
+    margin-bottom: 0;
 }
 
 .attachment-preview-item {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 0.5rem;
-    padding: 0.5rem;
+    padding: 0.5rem 0.75rem;
     background-color: var(--md-background);
     border-radius: 4px;
     box-shadow: var(--elevation-1);
+    max-width: 100%;
 }
 
 .attachment-preview-item.loading {
     color: var(--md-text-secondary);
     font-style: italic;
+    padding-right: 1rem;
+    animation: pulse 1.5s infinite;
 }
 
 .attachment-name {
@@ -849,6 +854,7 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: var(--md-text);
 }
 
 .remove-attachment {
@@ -861,6 +867,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    transition: all 0.2s ease;
 }
 
 .remove-attachment:hover {
@@ -868,14 +875,32 @@ body {
     color: var(--md-primary);
 }
 
-#message-text {
-    flex: 1;
-    padding: 0.8rem;
-    border: 1px solid var(--md-divider);
-    border-radius: 2rem;
-    outline: none;
+.remove-attachment:active {
+    transform: scale(0.9);
+}
+
+/* Add a subtle pulse animation for loading items */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+.attachment-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    border-top: 1px solid var(--md-divider);
+}
+
+.attachment-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.5rem;
     background-color: var(--md-surface);
-    color: var(--md-text);
+    border-radius: 4px;
 }
 
 /* Chat area styles */

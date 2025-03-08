@@ -411,8 +411,15 @@ export class UIModule extends BaseModule {
     }
 
     async handleFileSelection(files) {
+        if (!files || files.length === 0) {
+            this.logger.error('No files selected');
+            return;
+        }
+        
         const dataModule = this.getModule('data');
         const maxSize = 10 * 1024 * 1024; // 10MB limit
+        
+        this.logger.info(`Processing ${files.length} selected files`);
         
         for (const file of files) {
             if (file.size > maxSize) {
@@ -421,12 +428,16 @@ export class UIModule extends BaseModule {
             }
             
             try {
+                // Ensure we have a preview area
+                const previewArea = this.createAttachmentPreviewArea();
+                
                 // Show loading indicator
-                const previewArea = document.getElementById('attachment-preview') || this.createAttachmentPreviewArea();
                 const loadingItem = document.createElement('div');
                 loadingItem.className = 'attachment-preview-item loading';
                 loadingItem.innerHTML = `<span>Uploading ${file.name}...</span>`;
                 previewArea.appendChild(loadingItem);
+                
+                this.logger.info(`Uploading file: ${file.name}, type: ${file.type}, size: ${file.size}`);
 
                 // Upload file
                 const attachment = await dataModule.uploadAttachment(file, this.currentUser.id);
@@ -434,9 +445,16 @@ export class UIModule extends BaseModule {
                 // Remove loading indicator
                 loadingItem.remove();
                 
+                // Ensure pendingAttachments exists
+                if (!this.pendingAttachments) {
+                    this.pendingAttachments = [];
+                }
+                
                 // Update UI with successful upload
                 this.pendingAttachments.push(attachment);
                 this.showAttachmentPreview(attachment);
+                
+                this.logger.info(`Successfully uploaded and added attachment: ${attachment.name}`);
                 
             } catch (error) {
                 this.logger.error('Failed to upload file:', error);
@@ -444,6 +462,79 @@ export class UIModule extends BaseModule {
                 loadingItem?.remove();
             }
         }
+    }
+
+    createAttachmentPreviewArea() {
+        let previewArea = document.getElementById('attachment-preview');
+        
+        if (!previewArea) {
+            previewArea = document.createElement('div');
+            previewArea.id = 'attachment-preview';
+            previewArea.className = 'attachment-preview-area';
+            
+            // Insert before the message input area
+            const messageInputArea = document.getElementById('message-input-area');
+            if (messageInputArea && messageInputArea.parentNode) {
+                messageInputArea.parentNode.insertBefore(previewArea, messageInputArea);
+            } else {
+                // Fallback insertion into chat area if message input area not found
+                const chatArea = document.querySelector('.chat-area');
+                if (chatArea) {
+                    chatArea.insertBefore(previewArea, chatArea.lastChild);
+                } else {
+                    this.logger.error('Could not find parent to insert attachment preview area');
+                }
+            }
+            
+            this.logger.info('Created new attachment preview area');
+        }
+        
+        return previewArea;
+    }
+
+    showAttachmentPreview(attachment) {
+        if (!attachment) {
+            this.logger.error('No attachment provided for preview');
+            return;
+        }
+        
+        const previewArea = this.createAttachmentPreviewArea();
+        
+        const preview = document.createElement('div');
+        preview.className = 'attachment-preview-item';
+        preview.dataset.path = attachment.path;
+        
+        // Create HTML based on file type
+        preview.innerHTML = `
+            <span class="attachment-name">
+                <span class="material-icons">${this.getAttachmentIcon(attachment.type)}</span>
+                ${attachment.name}
+            </span>
+            <button class="remove-attachment" data-path="${attachment.path}" aria-label="Remove attachment">
+                <span class="material-icons">close</span>
+            </button>
+        `;
+        
+        // Add event listener to remove button
+        const removeButton = preview.querySelector('.remove-attachment');
+        if (removeButton) {
+            removeButton.addEventListener('click', () => {
+                this.logger.info(`Removing attachment: ${attachment.name}`);
+                this.pendingAttachments = this.pendingAttachments.filter(a => a.path !== attachment.path);
+                preview.remove();
+                
+                // If no more attachments, remove the preview area
+                if (this.pendingAttachments.length === 0) {
+                    previewArea.remove();
+                    this.logger.info('Removed attachment preview area - no attachments left');
+                }
+            });
+        }
+        
+        previewArea.appendChild(preview);
+        this.logger.info(`Added attachment preview for: ${attachment.name}`);
+        
+        return preview;
     }
 
     async handleSendMessage() {
@@ -455,9 +546,13 @@ export class UIModule extends BaseModule {
         const content = messageInput?.value?.trim() || '';
         
         // Check if we have anything to send
-        if (!content && this.pendingAttachments.length === 0) {
+        if (!content && (!this.pendingAttachments || this.pendingAttachments.length === 0)) {
+            this.logger.warn('Nothing to send - no content or attachments');
             return;
         }
+
+        // Log what we're about to send
+        this.logger.info(`Sending message: content length=${content.length}, attachments=${this.pendingAttachments?.length || 0}`);
         
         // Disable input while sending
         messageInput.disabled = true;
@@ -470,16 +565,17 @@ export class UIModule extends BaseModule {
             if (!this.currentConversation) {
                 const conversation = await dataModule.createConversation([this.currentUser.id]);
                 this.currentConversation = conversation.id;
+                this.logger.info(`Created new self-conversation: ${this.currentConversation}`);
             }
 
-            // Show temporary message element immediately
+            // Create temporary message object
             const tempMessage = {
                 id: 'temp-' + Date.now(),
                 content,
                 sender_id: this.currentUser.id,
                 created_at: new Date().toISOString(),
                 metadata: {
-                    attachments: this.pendingAttachments
+                    attachments: this.pendingAttachments || []
                 }
             };
             
@@ -488,21 +584,28 @@ export class UIModule extends BaseModule {
             if (tempEl) {
                 messageContainer.appendChild(tempEl);
                 tempEl.scrollIntoView({ behavior: 'smooth' });
+                this.logger.info('Added temporary message to UI');
             }
+            
+            // Deep copy the attachments array to avoid potential reference issues
+            const attachmentsCopy = this.pendingAttachments ? [...this.pendingAttachments] : [];
             
             // Send the actual message
             const message = await dataModule.sendMessage(
                 this.currentConversation,
                 this.currentUser.id,
                 content,
-                this.pendingAttachments
+                attachmentsCopy
             );
             
-            // Replace temporary message with real one if needed
-            if (tempEl) {
+            this.logger.info(`Message sent successfully with ID: ${message.id}`);
+            
+            // Replace temporary message with real one
+            if (tempEl && message) {
                 const realEl = this._createMessageElement(message);
                 if (realEl) {
                     tempEl.replaceWith(realEl);
+                    this.logger.info('Replaced temporary message with real message');
                 }
             }
             
@@ -511,18 +614,17 @@ export class UIModule extends BaseModule {
             this.pendingAttachments = [];
             document.getElementById('attachment-preview')?.remove();
             
-            // Update the conversations list to show new message
+            // Update conversations list with new message
             this._updateConversationWithNewMessage(message);
-            
-            this.logger.info('Message sent successfully');
             
         } catch (error) {
             this.logger.error('Failed to send message:', error);
             this.showError('Failed to send message');
+            
             // Remove temporary message if it exists
-            document.querySelector(`[data-message-id="temp-${Date.now()}"]`)?.remove();
+            document.querySelector(`.message[data-message-id^="temp-"]`)?.remove();
         } finally {
-            // Re-enable input
+            // Re-enable input controls
             messageInput.disabled = false;
             sendButton.disabled = false;
             messageInput.focus();
