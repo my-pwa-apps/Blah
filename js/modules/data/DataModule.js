@@ -347,8 +347,17 @@ export class DataModule extends BaseModule {
     // Modify fetchConversations to deduplicate self-chats in the query
     async fetchConversations(userId, skipCache = false) {
         try {
-            this.logger.info(`Fetching conversations for user: ${userId}`);
+            // Get last read timestamps for messages
+            const { data: lastReadData } = await this.supabase
+                .from('participants')
+                .select('conversation_id, last_read_at')
+                .eq('user_id', userId);
+                
+            const lastReadMap = new Map(
+                lastReadData?.map(d => [d.conversation_id, d.last_read_at]) || []
+            );
             
+            // Get conversations with last messages
             const { data: conversations, error } = await this.supabase
                 .from('conversations')
                 .select(`
@@ -359,65 +368,33 @@ export class DataModule extends BaseModule {
                     participants (
                         user_id,
                         last_read_at,
-                        profiles (
-                            id,
-                            display_name,
-                            email,
-                            avatar_url
-                        )
+                        profiles (*)
                     )
                 `)
-                .order('created_at', { ascending: false });
-
+                .order('last_message->created_at', { ascending: false });
+                
             if (error) throw error;
 
-            // Create a map to deduplicate conversations
-            const uniqueConversations = new Map();
-
-            conversations.forEach(conv => {
-                // For self-chats, only keep the most recent one
-                if (conv.is_self_chat) {
-                    const existing = uniqueConversations.get('self');
-                    if (!existing || new Date(conv.created_at) > new Date(existing.created_at)) {
-                        uniqueConversations.set('self', conv);
-                    }
-                } else {
-                    // For regular chats, check if participants match exactly
-                    const participantIds = conv.participants
-                        .map(p => p.user_id)
-                        .sort()
-                        .join(',');
-                        
-                    const existing = uniqueConversations.get(participantIds);
-                    if (!existing || new Date(conv.created_at) > new Date(existing.created_at)) {
-                        uniqueConversations.set(participantIds, conv);
-                    }
-                }
-            });
-
-            // Convert back to array and sort by last message time
-            const uniqueConvsArray = Array.from(uniqueConversations.values())
-                .sort((a, b) => {
-                    const timeA = a.last_message?.created_at || a.created_at;
-                    const timeB = b.last_message?.created_at || b.created_at;
-                    return new Date(timeB) - new Date(timeA);
-                });
-
-            return uniqueConvsArray;
+            // Process conversations with unread status
+            return conversations.map(conv => ({
+                ...conv,
+                lastReadAt: lastReadMap.get(conv.id),
+                hasUnread: this._hasUnreadMessages(
+                    conv.last_message,
+                    lastReadMap.get(conv.id),
+                    userId
+                )
+            }));
         } catch (error) {
             this.logger.error('Error fetching conversations:', error);
             return [];
         }
     }
 
-    _hasUnreadMessages(conversation, lastReadAt) {
-        if (!conversation.last_message) return false;
-        if (conversation.last_message.sender_id === this.currentUser?.id) return false;
-        
-        const lastMessageTime = new Date(conversation.last_message.created_at);
+    _hasUnreadMessages(lastMessage, lastReadAt, userId) {
+        if (!lastMessage || lastMessage.sender_id === userId) return false;
         if (!lastReadAt) return true;
-        
-        return lastMessageTime > new Date(lastReadAt);
+        return new Date(lastMessage.created_at) > new Date(lastReadAt);
     }
 
     // Update the subscription handler to include metadata in the query

@@ -1742,6 +1742,44 @@ body {
     background-color: rgba(74, 103, 65, 0.05);
 }
 
+/* Unread conversation styles */
+.conversation-item.unread {
+    background-color: rgba(74, 103, 65, 0.1);
+}
+
+.conversation-item.unread .conversation-name {
+    font-weight: 600;
+    color: var(--md-primary);
+}
+
+.unread-indicator {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 8px;
+    height: 8px;
+    background: var(--md-primary);
+    border-radius: 50%;
+    transition: transform 0.2s ease;
+}
+
+/* Animation for moving conversation to top */
+.animate-move {
+    animation: slideToTop 0.3s ease-out;
+}
+
+@keyframes slideToTop {
+    from {
+        transform: translateY(-100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
 /* Unread indicators */
 .unread-indicator {
     position: absolute;
