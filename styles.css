@@ -774,7 +774,7 @@ body {
     padding: 0.5rem;
     border-radius: 50%;
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -784,8 +784,37 @@ body {
     background-color: rgba(var(--md-primary-rgb), 0.1);
 }
 
-.attach-button .material-icons {
-    font-size: 24px;
+.attach-button:active {
+    transform: scale(0.95);
+}
+
+#send-button {
+    background-color: var(--md-primary);
+    color: white;
+    border: none;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#send-button:hover {
+    background-color: var(--md-primary-dark);
+    transform: scale(1.05);
+}
+
+#send-button:active {
+    transform: scale(0.95);
+}
+
+#send-button:disabled {
+    background-color: var(--md-text-secondary);
+    cursor: not-allowed;
+    transform: none;
 }
 
 .attachment-preview-area {
@@ -847,18 +876,6 @@ body {
     outline: none;
     background-color: var(--md-surface);
     color: var(--md-text);
-}
-
-#send-button {
-    padding: 0.8rem 1.2rem;
-    background-color: var(--md-primary);
-    color: white;
-    border: none;
-    border-radius: 2rem;
-    margin-left: 0.5rem;
-    cursor: pointer;
-    box-shadow: var(--elevation-1);
-    transition: all var(--animation-standard);
 }
 
 /* Chat area styles */

@@ -814,7 +814,10 @@ export class DataModule extends BaseModule {
 
     async uploadAttachment(file, userId) {
         try {
+            this.logger.info(`Starting upload for file: ${file.name}`);
             const fileName = `${userId}/${Date.now()}-${file.name}`;
+            
+            // Upload the file
             const { data, error } = await this.supabase
                 .storage
                 .from('attachments')
@@ -825,14 +828,20 @@ export class DataModule extends BaseModule {
 
             if (error) throw error;
 
-            // Get public URL
-            const { data: { publicUrl } } = this.supabase
+            this.logger.info(`File uploaded successfully: ${fileName}`);
+
+            // Get public URL immediately after upload
+            const { data: publicUrlData } = this.supabase
                 .storage
                 .from('attachments')
                 .getPublicUrl(data.path);
 
+            if (!publicUrlData?.publicUrl) {
+                throw new Error('Failed to get public URL for uploaded file');
+            }
+
             return {
-                url: publicUrl,
+                url: publicUrlData.publicUrl,
                 path: data.path,
                 type: file.type,
                 size: file.size,

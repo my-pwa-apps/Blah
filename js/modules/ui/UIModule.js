@@ -351,10 +351,12 @@ export class UIModule extends BaseModule {
     }
 
     setupMessageListeners() {
+        // Create message input area
         const messageInputArea = document.createElement('div');
         messageInputArea.id = 'message-input-area';
         messageInputArea.className = 'message-input';
         
+        // Create file input
         const fileInput = document.createElement('input');
         fileInput.type = 'file';
         fileInput.id = 'file-input';
@@ -362,9 +364,9 @@ export class UIModule extends BaseModule {
         fileInput.accept = 'image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.txt';
         fileInput.style.display = 'none';
         
+        // Create buttons and input
         const attachButton = document.createElement('button');
-        attachButton.className = 'attach-button md-button';
-        attachButton.title = 'Attach files';
+        attachButton.className = 'attach-button';
         attachButton.innerHTML = '<span class="material-icons">attach_file</span>';
         
         const messageInput = document.createElement('input');
@@ -374,22 +376,31 @@ export class UIModule extends BaseModule {
         
         const sendButton = document.createElement('button');
         sendButton.id = 'send-button';
-        sendButton.className = 'md-button';
+        sendButton.className = 'md-button primary';
         sendButton.innerHTML = '<span class="material-icons">send</span>';
         
+        // Assemble the input area
         messageInputArea.appendChild(fileInput);
         messageInputArea.appendChild(attachButton);
         messageInputArea.appendChild(messageInput);
         messageInputArea.appendChild(sendButton);
         
+        // Add to chat area
         document.querySelector('.chat-area').appendChild(messageInputArea);
         
-        // Keep track of pending attachments
+        // Initialize attachments array
         this.pendingAttachments = [];
         
-        // Setup event listeners
+        // Add event listeners
         attachButton.addEventListener('click', () => fileInput.click());
-        fileInput.addEventListener('change', () => this.handleFileSelection(fileInput.files));
+        fileInput.addEventListener('change', () => {
+            if (fileInput.files.length > 0) {
+                this.handleFileSelection(fileInput.files);
+                fileInput.value = ''; // Clear the input for future selections
+            }
+        });
+        
+        // Add message send handlers
         sendButton.addEventListener('click', () => this.handleSendMessage());
         messageInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -417,77 +428,42 @@ export class UIModule extends BaseModule {
                 loadingItem.innerHTML = `<span>Uploading ${file.name}...</span>`;
                 previewArea.appendChild(loadingItem);
 
+                // Upload file
                 const attachment = await dataModule.uploadAttachment(file, this.currentUser.id);
+                
+                // Remove loading indicator
                 loadingItem.remove();
                 
+                // Update UI with successful upload
                 this.pendingAttachments.push(attachment);
                 this.showAttachmentPreview(attachment);
+                
             } catch (error) {
+                this.logger.error('Failed to upload file:', error);
                 this.showError(`Failed to upload ${file.name}`);
                 loadingItem?.remove();
             }
         }
     }
 
-    showAttachmentPreview(attachment) {
-        const previewArea = document.getElementById('attachment-preview') || this.createAttachmentPreviewArea();
-        
-        const preview = document.createElement('div');
-        preview.className = 'attachment-preview-item';
-        preview.innerHTML = `
-            <span class="attachment-name">
-                <span class="material-icons">${this.getAttachmentIcon(attachment.type)}</span>
-                ${attachment.name}
-            </span>
-            <button class="remove-attachment" data-path="${attachment.path}">
-                <span class="material-icons">close</span>
-            </button>
-        `;
-        
-        preview.querySelector('.remove-attachment').addEventListener('click', () => {
-            this.pendingAttachments = this.pendingAttachments.filter(a => a.path !== attachment.path);
-            preview.remove();
-            if (this.pendingAttachments.length === 0) {
-                previewArea.remove();
-            }
-        });
-        
-        previewArea.appendChild(preview);
-    }
-
-    createAttachmentPreviewArea() {
-        let previewArea = document.getElementById('attachment-preview');
-        
-        if (!previewArea) {
-            previewArea = document.createElement('div');
-            previewArea.id = 'attachment-preview';
-            previewArea.className = 'attachment-preview-area';
-            
-            const messageInputArea = document.getElementById('message-input-area');
-            messageInputArea.parentNode.insertBefore(previewArea, messageInputArea);
-        }
-        
-        return previewArea;
-    }
-
-    getAttachmentIcon(type) {
-        if (type.startsWith('image/')) return 'image';
-        if (type.startsWith('video/')) return 'videocam';
-        if (type.startsWith('audio/')) return 'audiotrack';
-        if (type.includes('pdf')) return 'picture_as_pdf';
-        if (type.includes('word') || type.includes('document')) return 'description';
-        if (type.includes('excel') || type.includes('spreadsheet')) return 'table_chart';
-        return 'attach_file';
-    }
-
     async handleSendMessage() {
+        // Get UI elements
         const messageInput = document.getElementById('message-text');
-        const content = messageInput?.value.trim();
+        const sendButton = document.getElementById('send-button');
         const messageContainer = document.getElementById('message-container');
         
-        // Allow sending with just attachments, no text required
-        if ((!content && this.pendingAttachments.length === 0) || !this.currentUser) return;
-
+        // Get message content
+        const content = messageInput?.value?.trim() || '';
+        
+        // Check if we have anything to send
+        if (!content && this.pendingAttachments.length === 0) {
+            return;
+        }
+        
+        // Disable input while sending
+        messageInput.disabled = true;
+        sendButton.disabled = true;
+        
         try {
             const dataModule = this.getModule('data');
             
@@ -496,15 +472,15 @@ export class UIModule extends BaseModule {
                 const conversation = await dataModule.createConversation([this.currentUser.id]);
                 this.currentConversation = conversation.id;
             }
-
-            // Send message with attachments
+            
+            // Send message with any attachments
             const message = await dataModule.sendMessage(
                 this.currentConversation,
                 this.currentUser.id,
-                content || '', // Empty string if no content
+                content,
                 this.pendingAttachments
             );
-
+            
             // Clear input and attachments
             messageInput.value = '';
             this.pendingAttachments = [];
@@ -516,9 +492,15 @@ export class UIModule extends BaseModule {
             messageEl.scrollIntoView({ behavior: 'smooth' });
             
             this.logger.info('Message sent successfully');
+            
         } catch (error) {
             this.logger.error('Failed to send message:', error);
             this.showError('Failed to send message');
+        } finally {
+            // Re-enable input
+            messageInput.disabled = false;
+            sendButton.disabled = false;
+            messageInput.focus();
         }
     }
 
