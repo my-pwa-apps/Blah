@@ -12,12 +12,15 @@ export class DataModule extends BaseModule {
 
     async init() {
         try {
-            this.firebase = window.firebase.initializeApp(FIREBASE_CONFIG);
-            this.db = window.firebase.getDatabase(this.firebase);
+            // Use global Firebase modules
+            const { initializeApp, getDatabase } = window.FirebaseModules;
+            
+            this.firebase = initializeApp(FIREBASE_CONFIG);
+            this.db = getDatabase(this.firebase);
             
             // Monitor connection status
-            const connectedRef = this.db.ref('.info/connected');
-            connectedRef.on('value', (snap) => {
+            const connectedRef = ref(this.db, '.info/connected');
+            onValue(connectedRef, (snap) => {
                 this.connectionStatus = snap.val() ? 'CONNECTED' : 'DISCONNECTED';
                 this.logger.info(`Database connection status: ${this.connectionStatus}`);
             });

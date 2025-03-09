@@ -11,10 +11,12 @@ export class AuthModule extends BaseModule {
 
     async init() {
         try {
-            this.firebase = window.firebase.initializeApp(FIREBASE_CONFIG);
-            this.auth = window.firebase.getAuth(this.firebase);
+            // Use global Firebase modules
+            const { initializeApp, getAuth } = window.FirebaseModules;
             
-            // Set up auth state listener
+            this.firebase = initializeApp(FIREBASE_CONFIG);
+            this.auth = getAuth(this.firebase);
+            
             this.auth.onAuthStateChanged((user) => {
                 this.currentUser = user;
                 this._notifyAuthStateListeners(user);

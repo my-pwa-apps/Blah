@@ -132,18 +132,22 @@
         </div>
     </div>
     
-    <!-- Firebase SDKs -->
+    <!-- Add Firebase SDKs before your app code -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js" type="module"></script>
+
+    <!-- Initialize Firebase -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
-        import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
         import { getAuth } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
-        import { getMessaging, getToken, onMessage } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging.js';
-        
-        window.firebase = { 
-            initializeApp, 
-            getDatabase, 
+        import { getDatabase } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js';
+
+        // Make Firebase available globally
+        window.FirebaseModules = {
+            initializeApp,
             getAuth,
-            messaging: { getMessaging, getToken, onMessage }
+            getDatabase
         };
     </script>
 
