@@ -4,7 +4,6 @@ import { FIREBASE_CONFIG } from '../../config.js';
 export class DataModule extends BaseModule {
     constructor(app) {
         super(app);
-        this.firebase = null;
         this.db = null;
         this.connectionStatus = 'CONNECTING';
         this.activeListeners = new Map();
@@ -12,15 +11,11 @@ export class DataModule extends BaseModule {
 
     async init() {
         try {
-            // Use global Firebase modules
-            const { initializeApp, getDatabase } = window.FirebaseModules;
-            
-            this.firebase = initializeApp(FIREBASE_CONFIG);
-            this.db = getDatabase(this.firebase);
+            this.db = firebase.database();
             
             // Monitor connection status
-            const connectedRef = ref(this.db, '.info/connected');
-            onValue(connectedRef, (snap) => {
+            const connectedRef = this.db.ref('.info/connected');
+            connectedRef.on('value', (snap) => {
                 this.connectionStatus = snap.val() ? 'CONNECTED' : 'DISCONNECTED';
                 this.logger.info(`Database connection status: ${this.connectionStatus}`);
             });

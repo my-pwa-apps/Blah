@@ -1,22 +1,17 @@
 import { BaseModule } from '../BaseModule.js';
-import { FIREBASE_CONFIG } from '../../config.js';
 
 export class AuthModule extends BaseModule {
     constructor(app) {
         super(app);
         this.auth = null;
-        this.firebase = null;
         this.currentUser = null;
     }
 
     async init() {
         try {
-            // Use global Firebase modules
-            const { initializeApp, getAuth } = window.FirebaseModules;
+            this.auth = firebase.auth();
             
-            this.firebase = initializeApp(FIREBASE_CONFIG);
-            this.auth = getAuth(this.firebase);
-            
+            // Set up auth state listener
             this.auth.onAuthStateChanged((user) => {
                 this.currentUser = user;
                 this._notifyAuthStateListeners(user);
@@ -31,7 +26,7 @@ export class AuthModule extends BaseModule {
 
     async signUp(email, password) {
         try {
-            const userCredential = await window.firebase.createUserWithEmailAndPassword(this.auth, email, password);
+            const userCredential = await this.auth.createUserWithEmailAndPassword(email, password);
             return { data: userCredential.user };
         } catch (error) {
             this.logger.error('Sign up failed:', error);
@@ -41,7 +36,7 @@ export class AuthModule extends BaseModule {
 
     async signIn(email, password) {
         try {
-            const userCredential = await window.firebase.signInWithEmailAndPassword(this.auth, email, password);
+            const userCredential = await this.auth.signInWithEmailAndPassword(email, password);
             return { data: userCredential.user };
         } catch (error) {
             this.logger.error('Sign in failed:', error);
@@ -51,7 +46,7 @@ export class AuthModule extends BaseModule {
 
     async signOut() {
         try {
-            await window.firebase.signOut(this.auth);
+            await this.auth.signOut();
             return true;
         } catch (error) {
             this.logger.error('Sign out failed:', error);

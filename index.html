@@ -12,6 +12,24 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    <!-- Add Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.7.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.7.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.7.0/firebase-database-compat.js"></script>
+    
+    <!-- Initialize Firebase -->
+    <script>
+        const firebaseConfig = {
+            apiKey: "AIzaSyAVKfDJ5Lpw4sF8Cl0y5zBbx9Ro1gBSjC8",
+            authDomain: "blah-4b896.firebaseapp.com",
+            projectId: "blah-4b896",
+            databaseURL: "https://blah-4b896-default-rtdb.firebaseio.com",
+            messagingSenderId: "356253945822",
+            appId: "1:356253945822:web:aaabf3fc342df9248c174f",
+            measurementId: "G-E3S399FC6E"
+        };
+        firebase.initializeApp(firebaseConfig);
+    </script>
 </head>
 <body data-theme="light">
     <div class="app-container full-width">
