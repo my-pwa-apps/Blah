@@ -7,9 +7,3 @@ export const FIREBASE_CONFIG = {
     appId: "1:356253945822:web:aaabf3fc342df9248c174f",
     measurementId: "G-E3S399FC6E"
 };
-
-export const APP_CONFIG = {
-    NAME: 'Message PWA',
-    VERSION: '1.0.0',
-    CACHE_NAME: 'message-pwa-v1'
-};

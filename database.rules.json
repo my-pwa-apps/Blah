@@ -3,7 +3,8 @@
     "profiles": {
       "$uid": {
         ".read": "auth !== null",
-        ".write": "auth !== null && auth.uid === $uid"
+        ".write": "auth !== null && auth.uid === $uid",
+        ".validate": "newData.hasChildren(['email', 'display_name'])"
       }
     },
     "messages": {
@@ -17,11 +18,11 @@
     },
     "conversations": {
       "$conversationId": {
-        ".read": "auth !== null && data.child('participantIds').child(auth.uid).exists()",
+        ".read": "auth !== null && (data.child('participantIds').child(auth.uid).exists() || !data.exists())",
         ".write": "auth !== null",
         "participantIds": {
           "$uid": {
-            ".validate": "auth !== null && ($uid === auth.uid || root.child('conversations').child($parent.key).child('participantIds').child(auth.uid).exists())"
+            ".validate": "auth !== null"
           }
         },
         "last_message": {
