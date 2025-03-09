@@ -1,5 +1,4 @@
 import { BaseModule } from '../BaseModule.js';
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 export class NotificationModule extends BaseModule {
     constructor(app) {
