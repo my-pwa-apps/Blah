@@ -984,6 +984,12 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('attachments', 'attachments', true)
 ON CONFLICT (id) DO NOTHING;
 
+-- Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Authenticated users can read attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
+
 -- Set up policies for attachments
 CREATE POLICY "Authenticated users can read attachments" 
   ON storage.objects FOR SELECT
@@ -997,7 +1003,8 @@ CREATE POLICY "Users can upload their own attachments"
                         </div>
                         
                         <p>After running the script, refresh this page and try uploading again.</p>
-                        <p class="help-text">Note: Only Supabase administrators can create storage buckets. Regular users cannot create buckets due to Row-Level Security (RLS) policies.</p>
+                        <p class="help-text">Note: If you see "policy already exists" errors, you can safely ignore them - 
+                           the bucket should still work properly.</p>
                     </div>
                 `;
                 

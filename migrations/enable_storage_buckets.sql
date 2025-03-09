@@ -19,93 +19,44 @@ VALUES
   ('attachments', 'attachments', true)
 ON CONFLICT (id) DO NOTHING;
 
+-- Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Authenticated users can read attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
+
 -- Set up security policies for the attachments bucket
 -- Allow authenticated users to read all objects
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'objects' 
-    AND policyname = 'Authenticated users can read attachments'
-  ) THEN
-    CREATE POLICY "Authenticated users can read attachments" 
-      ON storage.objects FOR SELECT
-      USING (
-        bucket_id = 'attachments' AND 
-        auth.role() = 'authenticated'
-      );
-    RAISE NOTICE 'Created SELECT policy for attachments bucket';
-  ELSE
-    RAISE NOTICE 'SELECT policy already exists for attachments bucket';
-  END IF;
-END
-$$;
+CREATE POLICY "Authenticated users can read attachments" 
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
 
 -- Allow users to upload their own files (under their user ID path)
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'objects' 
-    AND policyname = 'Users can upload their own attachments'
-  ) THEN
-    CREATE POLICY "Users can upload their own attachments" 
-      ON storage.objects FOR INSERT 
-      WITH CHECK (
-        bucket_id = 'attachments' AND
-        auth.uid()::text = (storage.foldername(name))[1] AND
-        auth.role() = 'authenticated'
-      );
-    RAISE NOTICE 'Created INSERT policy for attachments bucket';
-  ELSE
-    RAISE NOTICE 'INSERT policy already exists for attachments bucket';
-  END IF;
-END
-$$;
+CREATE POLICY "Users can upload their own attachments" 
+  ON storage.objects FOR INSERT 
+  WITH CHECK (
+    bucket_id = 'attachments' AND
+    auth.uid()::text = (storage.foldername(name))[1] AND
+    auth.role() = 'authenticated'
+  );
 
 -- Allow users to update only their own files
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'objects' 
-    AND policyname = 'Users can update their own attachments'
-  ) THEN
-    CREATE POLICY "Users can update their own attachments" 
-      ON storage.objects FOR UPDATE
-      USING (
-        bucket_id = 'attachments' AND
-        auth.uid()::text = (storage.foldername(name))[1] AND
-        auth.role() = 'authenticated'
-      );
-    RAISE NOTICE 'Created UPDATE policy for attachments bucket';
-  ELSE
-    RAISE NOTICE 'UPDATE policy already exists for attachments bucket';
-  END IF;
-END
-$$;
+CREATE POLICY "Users can update their own attachments" 
+  ON storage.objects FOR UPDATE
+  USING (
+    bucket_id = 'attachments' AND
+    auth.uid()::text = (storage.foldername(name))[1] AND
+    auth.role() = 'authenticated'
+  );
 
 -- Allow users to delete only their own files
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies 
-    WHERE tablename = 'objects' 
-    AND policyname = 'Users can delete their own attachments'
-  ) THEN
-    CREATE POLICY "Users can delete their own attachments" 
-      ON storage.objects FOR DELETE
-      USING (
-        bucket_id = 'attachments' AND
-        auth.uid()::text = (storage.foldername(name))[1] AND
-        auth.role() = 'authenticated'
-      );
-    RAISE NOTICE 'Created DELETE policy for attachments bucket';
-  ELSE
-    RAISE NOTICE 'DELETE policy already exists for attachments bucket';
-  END IF;
-END
-$$;
+CREATE POLICY "Users can delete their own attachments" 
+  ON storage.objects FOR DELETE
+  USING (
+    bucket_id = 'attachments' AND
+    auth.uid()::text = (storage.foldername(name))[1] AND
+    auth.role() = 'authenticated'
+  );
 
 -- Verify the bucket exists
 DO $$
