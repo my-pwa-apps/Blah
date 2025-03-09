@@ -962,6 +962,63 @@ export class UIModule extends BaseModule {
                     </div>
                     <p>Your attachments bucket is properly set up.</p>
                 `;
+            } else if (storageStatus.status === 'limited') {
+                statusHtml = `
+                    <div class="status-indicator warning">
+                        <span class="material-icons">warning</span>
+                        Limited Storage Mode
+                    </div>
+                    <p>Your app is currently using Base64 fallback storage because the Supabase Storage bucket is not accessible.</p>
+                    <p><strong>Limitations:</strong></p>
+                    <ul>
+                        <li>Maximum file size: 2MB</li>
+                        <li>Files are embedded directly in messages</li>
+                        <li>Less efficient for storage and bandwidth</li>
+                    </ul>
+                    
+                    <div class="setup-instructions">
+                        <h3>How to enable full storage:</h3>
+                        <ol>
+                            <li>Sign in to Supabase as an administrator</li>
+                            <li>Go to the SQL Editor</li>
+                            <li>Copy and paste the following SQL script:</li>
+                        </ol>
+                        
+                        <div class="code-block">
+                            <button class="copy-btn" id="copy-sql-btn">Copy SQL</button>
+                            <pre id="sql-setup-code">-- Create the attachments bucket
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('attachments', 'attachments', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Drop existing policies to avoid conflicts
+DROP POLICY IF EXISTS "Authenticated users can read attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can upload their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can update their own attachments" ON storage.objects;
+DROP POLICY IF EXISTS "Users can delete their own attachments" ON storage.objects;
+
+-- Set up policies for attachments
+CREATE POLICY "Authenticated users can read attachments" 
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'attachments' AND auth.role() = 'authenticated');
+
+CREATE POLICY "Users can upload their own attachments" 
+  ON storage.objects FOR INSERT 
+  WITH CHECK (bucket_id = 'attachments' AND 
+              auth.uid()::text = (storage.foldername(name))[1] AND
+              auth.role() = 'authenticated');</pre>
+                        </div>
+                    </div>
+                `;
+                
+                buttonHtml = `
+                    <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank" class="md-button primary">
+                        <span class="material-icons">code</span> Open SQL Editor
+                    </a>
+                    <a href="https://app.supabase.com/project/${projectId}/storage/buckets" target="_blank" class="md-button">
+                        <span class="material-icons">folder</span> Open Storage Dashboard
+                    </a>
+                `;
             } else {
                 statusHtml = `
                     <div class="status-indicator error">
@@ -1577,22 +1634,45 @@ CREATE POLICY "Users can upload their own attachments"
         // Add attachments if present
         const attachments = message.metadata?.attachments || [];
         const attachmentsHtml = attachments.map(attachment => {
-            if (attachment.type.startsWith('image/')) {
-                return `
-                    <div class="attachment image">
-                        <img src="${attachment.url}" alt="${attachment.name}" 
-                             onclick="window.open('${attachment.url}', '_blank')">
-                    </div>
-                `;
+            // Handle base64 attachments differently
+            if (attachment.storage === 'base64') {
+                if (attachment.type.startsWith('image/')) {
+                    return `
+                        <div class="attachment image">
+                            <img src="${attachment.url}" alt="${attachment.name}" 
+                                 onclick="window.open('${attachment.url}', '_blank')">
+                            <div class="attachment-info">${attachment.name} (Embedded)</div>
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="attachment file">
+                            <a href="${attachment.url}" download="${attachment.name}">
+                                <span class="material-icons">${this.getAttachmentIcon(attachment.type)}</span>
+                                ${attachment.name} (Embedded)
+                            </a>
+                        </div>
+                    `;
+                }
             } else {
-                return `
-                    <div class="attachment file">
-                        <a href="${attachment.url}" target="_blank">
-                            <span class="material-icons">attach_file</span>
-                            ${attachment.name}
-                        </a>
-                    </div>
-                `;
+                // Regular URL attachments (Supabase Storage)
+                if (attachment.type.startsWith('image/')) {
+                    return `
+                        <div class="attachment image">
+                            <img src="${attachment.url}" alt="${attachment.name}" 
+                                 onclick="window.open('${attachment.url}', '_blank')">
+                        </div>
+                    `;
+                } else {
+                    return `
+                        <div class="attachment file">
+                            <a href="${attachment.url}" target="_blank">
+                                <span class="material-icons">${this.getAttachmentIcon(attachment.type)}</span>
+                                ${attachment.name}
+                            </a>
+                        </div>
+                    `;
+                }
             }
         }).join('');
 

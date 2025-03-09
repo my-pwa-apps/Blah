@@ -24,6 +24,10 @@ export class DataModule extends BaseModule {
             this.logger.warn('Could not determine Supabase client version');
         }
         
+        // Initialize storage manager
+        this.storageManager = new StorageManager(this.app);
+        await this.storageManager.init();
+        
         // Set up a status channel to monitor real-time connection status
         this._setupConnectionMonitoring();
         
@@ -859,93 +863,8 @@ export class DataModule extends BaseModule {
             
             this.logger.info(`Starting upload for file: ${file.name} (${file.size} bytes, ${file.type})`);
             
-            // First check if the bucket exists with improved approach
-            try {
-                // Get bucket information directly rather than using listBuckets
-                const { data: bucketInfo, error: bucketError } = await this.supabase
-                    .storage
-                    .getBucket('attachments');
-                
-                if (bucketError) {
-                    this.logger.error('Error checking attachments bucket:', bucketError);
-                    
-                    // Fall back to listing all buckets as a secondary check
-                    const { data: buckets, error: listError } = await this.supabase
-                        .storage
-                        .listBuckets();
-                        
-                    if (listError) {
-                        this.logger.error('Error listing storage buckets:', listError);
-                        throw new Error('Unable to access storage. Check Supabase connection.');
-                    }
-                    
-                    this.logger.info(`Found ${buckets?.length || 0} buckets in storage`);
-                    buckets?.forEach(b => this.logger.info(`- Bucket: ${b.name} (id: ${b.id})`));
-                    
-                    const bucketExists = buckets?.some(bucket => 
-                        bucket.name.toLowerCase() === 'attachments' || 
-                        bucket.id.toLowerCase() === 'attachments');
-                    
-                    if (!bucketExists) {
-                        this.logger.error('Attachments bucket not found in bucket list');
-                        throw new Error(
-                            'Storage not configured. An admin must create the "attachments" bucket in Supabase. ' +
-                            'The storage bucket is required to upload files.'
-                        );
-                    }
-                    
-                    this.logger.info('Attachments bucket found in bucket list');
-                } else {
-                    this.logger.info('Attachments bucket verified:', bucketInfo);
-                }
-            } catch (storageError) {
-                // If we reach here directly from a storage error (not our thrown errors above)
-                if (storageError.message.includes('bucket not found')) {
-                    this.logger.error('Explicit bucket not found error from Supabase');
-                }
-                throw storageError;
-            }
-            
-            // Proceed with file upload now that we know bucket exists
-            this.logger.info('Proceeding with file upload');
-            
-            // Create a unique, sanitized filename
-            const timestamp = Date.now();
-            const fileExt = file.name.split('.').pop() || '';
-            const safeFileName = `${timestamp}-${Math.random().toString(36).substring(2, 10)}${fileExt ? '.' + fileExt : ''}`;
-            const filePath = `${userId}/${safeFileName}`;
-            
-            this.logger.info(`Uploading to path: ${filePath}`);
-            
-            // Upload the file
-            const { data, error } = await this.supabase.storage
-                .from('attachments')
-                .upload(filePath, file, {
-                    cacheControl: '3600',
-                    upsert: false
-                });
-            
-            if (error) {
-                this.logger.error('Supabase storage upload error:', error);
-                throw error;
-            }
-            
-            // Get the public URL
-            const { data: publicUrlData } = this.supabase.storage
-                .from('attachments')
-                .getPublicUrl(filePath);
-                
-            if (!publicUrlData || !publicUrlData.publicUrl) {
-                throw new Error('Failed to get public URL for uploaded file');
-            }
-            
-            return {
-                name: file.name,
-                path: filePath,
-                size: file.size,
-                type: file.type,
-                url: publicUrlData.publicUrl
-            };
+            // Use storage manager to handle upload with fallback
+            return await this.storageManager.uploadFile(file, userId);
         } catch (error) {
             this.logger.error('Error uploading attachment:', error);
             throw error;
@@ -955,67 +874,28 @@ export class DataModule extends BaseModule {
     // Alternative bucket access method using different approaches
     async checkStorageConfiguration() {
         try {
-            // Try multiple approaches to find the bucket
+            const bucketExists = await this.storageManager._checkBucketExists();
             
-            // 1. First try direct bucket API (newer clients)
-            try {
-                const { data: bucketInfo, error: bucketError } = await this.supabase
-                    .storage
-                    .getBucket('attachments');
-                    
-                if (!bucketError) {
-                    this.logger.info('Storage bucket exists via direct API:', bucketInfo);
-                    return { status: 'ok', message: 'Storage configured correctly', bucket: bucketInfo };
-                } else {
-                    this.logger.warn('Direct bucket API check failed:', bucketError);
-                }
-            } catch (directError) {
-                this.logger.warn('Direct bucket check not supported:', directError);
+            if (bucketExists) {
+                return { 
+                    status: 'ok', 
+                    message: 'Supabase Storage bucket configured correctly',
+                    provider: 'supabase'
+                };
+            } else {
+                return {
+                    status: 'limited',
+                    message: 'Using base64 fallback for file storage (limit 2MB per file)',
+                    provider: 'base64'
+                };
             }
-            
-            // 2. Try SQL approach (might work when API doesn't)
-            try {
-                const { data: sqlBucket, error: sqlError } = await this.supabase
-                    .from('storage.buckets')
-                    .select('*')
-                    .eq('id', 'attachments')
-                    .single();
-                    
-                if (!sqlError && sqlBucket) {
-                    this.logger.info('Storage bucket exists via SQL:', sqlBucket);
-                    return { status: 'ok', message: 'Storage configured correctly via SQL', bucket: sqlBucket };
-                } else {
-                    this.logger.warn('SQL bucket check failed:', sqlError);
-                }
-            } catch (sqlError) {
-                this.logger.warn('SQL bucket approach failed:', sqlError);
-            }
-            
-            // 3. Fall back to listing buckets
-            const { data: buckets, error } = await this.supabase.storage.listBuckets();
-            
-            if (error) {
-                // Handle error cases...
-            }
-            
-            // Log all buckets for debugging
-            this.logger.info(`Found ${buckets?.length || 0} storage buckets`);
-            buckets?.forEach(bucket => {
-                this.logger.info(`- Bucket: ${bucket.name} (ID: ${bucket.id})`);
-            });
-            
-            // Check case-insensitive match
-            const attachmentsBucket = buckets?.find(bucket => 
-                bucket.name.toLowerCase() === 'attachments' || 
-                bucket.id.toLowerCase() === 'attachments');
-            
-            if (!attachmentsBucket) {
-                // No bucket found...
-            }
-            
-            // Rest of the function...
         } catch (error) {
-            // Error handling...
+            this.logger.error('Error checking storage configuration:', error);
+            return {
+                status: 'error',
+                message: 'An unexpected error occurred while checking storage configuration.',
+                error
+            };
         }
     }
 
