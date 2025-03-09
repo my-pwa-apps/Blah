@@ -37,8 +37,8 @@ export class NotificationModule extends BaseModule {
         // Initialize Firebase Cloud Messaging
         if ('Notification' in window) {
             try {
-                this.messaging = getMessaging(this.app.getModule('auth').firebase);
-                const token = await getToken(this.messaging);
+                this.messaging = window.firebase.messaging.getMessaging(this.app.getModule('auth').firebase);
+                const token = await window.firebase.messaging.getToken(this.messaging);
                 if (token) {
                     this.logger.info('FCM registration token:', token);
                     // Store token in user's profile
@@ -46,7 +46,7 @@ export class NotificationModule extends BaseModule {
                 }
                 
                 // Handle incoming messages
-                onMessage(this.messaging, (payload) => {
+                window.firebase.messaging.onMessage(this.messaging, (payload) => {
                     this.notify({
                         title: payload.notification.title,
                         message: payload.notification.body,
