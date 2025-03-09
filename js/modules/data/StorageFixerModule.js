@@ -95,8 +95,63 @@ export class StorageFixerModule extends BaseModule {
     async testBucketAccess() {
         const tests = [];
         
-        // Test 1: Check if bucket exists
+        // Test 0: Check client configuration
+        tests.push({
+            name: 'Supabase client config',
+            success: Boolean(this.supabase?.storageUrl),
+            details: `Storage URL: ${this.supabase?.storageUrl || 'Not configured'}`,
+            error: null
+        });
+        
+        // Test 1: Check if bucket exists using direct API
         try {
+            // First try the newer API method
+            try {
+                const { data: bucketInfo, error: bucketError } = await this.supabase
+                    .storage
+                    .getBucket('attachments');
+                    
+                tests.push({
+                    name: 'Direct bucket access',
+                    success: !bucketError,
+                    details: bucketError ? 'Failed to access bucket directly' : 
+                              `Bucket access successful: ${JSON.stringify(bucketInfo)}`,
+                    error: bucketError?.message || null
+                });
+            } catch (methodError) {
+                // Method might not exist in this version
+                tests.push({
+                    name: 'Direct bucket access',
+                    success: false,
+                    details: 'API method not available in this Supabase client version',
+                    error: methodError.message
+                });
+            }
+            
+            // Test 1.5: Try alternative bucket access method
+            try {
+                const { data: bucketInfo, error: bucketError } = await this.supabase
+                    .from('storage.buckets')
+                    .select('*')
+                    .eq('id', 'attachments')
+                    .single();
+                    
+                tests.push({
+                    name: 'SQL bucket access',
+                    success: !bucketError && bucketInfo,
+                    details: bucketInfo ? `Found bucket via SQL: ${bucketInfo.id}` : 'Bucket not found via SQL',
+                    error: bucketError?.message || null
+                });
+            } catch (sqlError) {
+                tests.push({
+                    name: 'SQL bucket access',
+                    success: false,
+                    details: 'SQL access to buckets failed',
+                    error: sqlError.message
+                });
+            }
+
+            // Existing bucket listing test
             const { data: buckets, error } = await this.supabase.storage.listBuckets();
             const foundBucket = buckets?.find(b => 
                 b.name.toLowerCase() === 'attachments' || 
@@ -173,5 +228,27 @@ export class StorageFixerModule extends BaseModule {
         }
         
         return tests;
+    }
+
+    // Add a function to try fixing specific bucket access issues
+    async fixBucketPermissions() {
+        try {
+            // Try executing a custom stored procedure to grant permissions
+            const { data, error } = await this.supabase.rpc('grant_bucket_access', {
+                bucket_name: 'attachments'
+            });
+            
+            return {
+                success: !error,
+                message: error ? `Failed to fix permissions: ${error.message}` : 
+                         'Successfully updated bucket permissions',
+                data
+            };
+        } catch (error) {
+            return {
+                success: false,
+                message: `Error in permission fix attempt: ${error.message}`
+            };
+        }
     }
 }

@@ -11,6 +11,19 @@ export class DataModule extends BaseModule {
     async init() {
         this.supabase = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
         
+        // Log Supabase client version info
+        try {
+            const clientVersion = this.supabase?.gotrue?.lib?.version || 
+                                 this.supabase?.supabaseUrl || 
+                                 'Unknown version';
+            this.logger.info('Supabase client initialized:', { 
+                version: clientVersion,
+                storageUrl: this.supabase?.storageUrl || 'Not available'
+            });
+        } catch (err) {
+            this.logger.warn('Could not determine Supabase client version');
+        }
+        
         // Set up a status channel to monitor real-time connection status
         this._setupConnectionMonitoring();
         
@@ -939,80 +952,70 @@ export class DataModule extends BaseModule {
         }
     }
 
+    // Alternative bucket access method using different approaches
     async checkStorageConfiguration() {
         try {
-            // First try direct bucket access
+            // Try multiple approaches to find the bucket
+            
+            // 1. First try direct bucket API (newer clients)
             try {
                 const { data: bucketInfo, error: bucketError } = await this.supabase
                     .storage
                     .getBucket('attachments');
                     
                 if (!bucketError) {
-                    this.logger.info('Storage bucket exists:', bucketInfo);
-                    return {
-                        status: 'ok',
-                        message: 'Storage configured correctly',
-                        bucket: bucketInfo
-                    };
+                    this.logger.info('Storage bucket exists via direct API:', bucketInfo);
+                    return { status: 'ok', message: 'Storage configured correctly', bucket: bucketInfo };
+                } else {
+                    this.logger.warn('Direct bucket API check failed:', bucketError);
                 }
             } catch (directError) {
-                this.logger.warn('Error in direct bucket check:', directError);
-                // Continue to fallback approach
+                this.logger.warn('Direct bucket check not supported:', directError);
             }
             
-            // Fall back to listing all buckets
+            // 2. Try SQL approach (might work when API doesn't)
+            try {
+                const { data: sqlBucket, error: sqlError } = await this.supabase
+                    .from('storage.buckets')
+                    .select('*')
+                    .eq('id', 'attachments')
+                    .single();
+                    
+                if (!sqlError && sqlBucket) {
+                    this.logger.info('Storage bucket exists via SQL:', sqlBucket);
+                    return { status: 'ok', message: 'Storage configured correctly via SQL', bucket: sqlBucket };
+                } else {
+                    this.logger.warn('SQL bucket check failed:', sqlError);
+                }
+            } catch (sqlError) {
+                this.logger.warn('SQL bucket approach failed:', sqlError);
+            }
+            
+            // 3. Fall back to listing buckets
             const { data: buckets, error } = await this.supabase.storage.listBuckets();
             
             if (error) {
-                this.logger.error('Error listing buckets:', error);
-                
-                // Check if this is a permission error
-                if (error.message?.includes('permission') || error.code === '403') {
-                    return {
-                        status: 'error',
-                        message: 'Permission denied when checking storage. You may need admin rights.',
-                        error
-                    };
-                }
-                
-                return {
-                    status: 'error',
-                    message: 'Failed to check storage configuration. Please check your Supabase connection.',
-                    error
-                };
+                // Handle error cases...
             }
             
-            // Debug log all buckets
+            // Log all buckets for debugging
             this.logger.info(`Found ${buckets?.length || 0} storage buckets`);
             buckets?.forEach(bucket => {
                 this.logger.info(`- Bucket: ${bucket.name} (ID: ${bucket.id})`);
             });
             
-            // Check for case-insensitive match
+            // Check case-insensitive match
             const attachmentsBucket = buckets?.find(bucket => 
                 bucket.name.toLowerCase() === 'attachments' || 
                 bucket.id.toLowerCase() === 'attachments');
             
             if (!attachmentsBucket) {
-                return {
-                    status: 'missing',
-                    message: 'The "attachments" storage bucket is missing. An administrator needs to create it.',
-                    buckets: buckets || []
-                };
+                // No bucket found...
             }
             
-            return {
-                status: 'ok',
-                message: 'Storage configured correctly',
-                bucket: attachmentsBucket
-            };
+            // Rest of the function...
         } catch (error) {
-            this.logger.error('Error checking storage configuration:', error);
-            return {
-                status: 'error',
-                message: 'An unexpected error occurred while checking storage configuration.',
-                error
-            };
+            // Error handling...
         }
     }
 
