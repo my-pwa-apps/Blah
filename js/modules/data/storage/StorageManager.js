@@ -1,40 +1,49 @@
 import { BaseModule } from '../../BaseModule.js';
+import { FIREBASE_CONFIG } from '../../../config.js';
+import { initializeApp } from 'firebase/app';
+import { 
+    getStorage, 
+    ref, 
+    uploadBytes, 
+    getDownloadURL,
+    deleteObject 
+} from 'firebase/storage';
 
-export class StorageManager extends BaseModule {
+export class AttachmentStorageManager extends BaseModule {
     constructor(app) {
         super(app);
-        this.supabase = null;
-        this.maxBase64Size = 2 * 1024 * 1024; // 2MB limit for base64 fallback
+        this.firebase = null;
+        this.storage = null;
+        this.maxBase64Size = 2 * 1024 * 1024;
     }
-    
+
     async init() {
-        // Get supabase client from DataModule
-        this.supabase = this.getModule('data').supabase;
-        this.logger.info('StorageManager initialized');
+        try {
+            this.firebase = initializeApp(FIREBASE_CONFIG, 'storage');
+            this.storage = getStorage(this.firebase);
+            this.logger.info('Firebase Storage initialized');
+        } catch (error) {
+            this.logger.error('Failed to initialize Firebase Storage:', error);
+            throw error;
+        }
     }
-    
+
     async uploadFile(file, userId) {
         try {
             if (!file || !userId) {
                 throw new Error('Missing file or user ID for upload');
             }
-            
-            this.logger.info(`Starting upload for file: ${file.name} (${file.size} bytes, ${file.type})`);
-            
-            // First try Supabase storage
+
+            // Try Firebase Storage first
             try {
-                const attachment = await this._uploadToSupabaseStorage(file, userId);
-                this.logger.info('File uploaded to Supabase storage successfully');
-                return attachment;
-            } catch (storageError) {
-                this.logger.warn('Supabase storage upload failed, trying base64 fallback', storageError);
+                return await this._uploadToFirebaseStorage(file, userId);
+            } catch (error) {
+                this.logger.warn('Firebase upload failed, trying base64 fallback', error);
                 
-                // If file is too large for base64, we can't fall back
                 if (file.size > this.maxBase64Size) {
-                    throw new Error(`File too large for base64 fallback (max ${this.maxBase64Size/1024/1024}MB). Storage bucket error: ${storageError.message}`);
+                    throw new Error(`File too large for base64 fallback (max ${this.maxBase64Size/1024/1024}MB)`);
                 }
                 
-                // Try base64 fallback for smaller files
                 return await this._uploadAsBase64(file, userId);
             }
         } catch (error) {
@@ -42,54 +51,27 @@ export class StorageManager extends BaseModule {
             throw error;
         }
     }
-    
-    async _uploadToSupabaseStorage(file, userId) {
-        // First check if the bucket exists with improved approach
-        const bucketExists = await this._checkBucketExists();
-        
-        if (!bucketExists) {
-            throw new Error('Supabase storage bucket not available');
-        }
-        
-        // Create a unique, sanitized filename
+
+    async _uploadToFirebaseStorage(file, userId) {
         const timestamp = Date.now();
         const fileExt = file.name.split('.').pop() || '';
         const safeFileName = `${timestamp}-${Math.random().toString(36).substring(2, 10)}${fileExt ? '.' + fileExt : ''}`;
-        const filePath = `${userId}/${safeFileName}`;
+        const filePath = `attachments/${userId}/${safeFileName}`;
         
-        this.logger.info(`Uploading to path: ${filePath}`);
-        
-        // Upload the file
-        const { data, error } = await this.supabase.storage
-            .from('attachments')
-            .upload(filePath, file, {
-                cacheControl: '3600',
-                upsert: false
-            });
-        
-        if (error) {
-            throw error;
-        }
-        
-        // Get the public URL
-        const { data: publicUrlData } = this.supabase.storage
-            .from('attachments')
-            .getPublicUrl(filePath);
-            
-        if (!publicUrlData || !publicUrlData.publicUrl) {
-            throw new Error('Failed to get public URL for uploaded file');
-        }
+        const fileRef = ref(this.storage, filePath);
+        await uploadBytes(fileRef, file);
+        const url = await getDownloadURL(fileRef);
         
         return {
             name: file.name,
             path: filePath,
             size: file.size,
             type: file.type,
-            url: publicUrlData.publicUrl,
-            storage: 'supabase'
+            url: url,
+            storage: 'firebase'
         };
     }
-    
+
     async _uploadAsBase64(file, userId) {
         this.logger.info(`Using base64 fallback for file: ${file.name}`);
         
@@ -126,54 +108,14 @@ export class StorageManager extends BaseModule {
             reader.readAsDataURL(file);
         });
     }
-    
-    async _checkBucketExists() {
+
+    async deleteFile(filePath) {
         try {
-            // Try different approaches to check if bucket exists
-            
-            // 1. First try direct bucket API
-            try {
-                const { data, error } = await this.supabase.storage.getBucket('attachments');
-                if (!error) {
-                    return true;
-                }
-            } catch (directError) {
-                this.logger.debug('Direct bucket check failed:', directError);
-            }
-            
-            // 2. Try listing all buckets
-            try {
-                const { data: buckets, error } = await this.supabase.storage.listBuckets();
-                
-                if (error) {
-                    return false;
-                }
-                
-                const bucketExists = buckets?.some(bucket => 
-                    bucket.name.toLowerCase() === 'attachments' || 
-                    bucket.id.toLowerCase() === 'attachments');
-                
-                if (bucketExists) {
-                    return true;
-                }
-            } catch (listError) {
-                this.logger.debug('Bucket listing failed:', listError);
-            }
-            
-            // 3. Try a simple list operation as a last resort
-            try {
-                const { data, error } = await this.supabase.storage
-                    .from('attachments')
-                    .list();
-                
-                return !error;
-            } catch (listError) {
-                return false;
-            }
-            
-            return false;
+            const fileRef = ref(this.storage, filePath);
+            await deleteObject(fileRef);
+            return true;
         } catch (error) {
-            this.logger.error('Error checking bucket existence:', error);
+            this.logger.error('Error deleting file:', error);
             return false;
         }
     }

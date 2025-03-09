@@ -1,0 +1,13 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /attachments/{userId}/{filename} {
+      // Allow authenticated users to read all attachments
+      allow read: if request.auth != null;
+      
+      // Allow users to upload to their own folder
+      allow create, update, delete: if request.auth != null && 
+        request.auth.uid == userId;
+    }
+  }
+}

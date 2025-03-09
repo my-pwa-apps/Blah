@@ -1,25 +1,44 @@
 import { BaseModule } from '../BaseModule.js';
-import { SUPABASE_CONFIG } from '../../config.js';
+import { FIREBASE_CONFIG } from '../../config.js';
+import { initializeApp } from 'firebase/app';
+import { 
+    getAuth, 
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut as firebaseSignOut,
+    onAuthStateChanged 
+} from 'firebase/auth';
 
 export class AuthModule extends BaseModule {
     constructor(app) {
         super(app);
-        this.supabase = null;
+        this.auth = null;
+        this.firebase = null;
+        this.currentUser = null;
     }
 
     async init() {
-        this.supabase = window.supabase.createClient(SUPABASE_CONFIG.URL, SUPABASE_CONFIG.ANON_KEY);
-        this.logger.info('Auth module initialized');
+        try {
+            this.firebase = initializeApp(FIREBASE_CONFIG);
+            this.auth = getAuth(this.firebase);
+            
+            // Set up auth state listener
+            onAuthStateChanged(this.auth, (user) => {
+                this.currentUser = user;
+                this._notifyAuthStateListeners(user);
+            });
+            
+            this.logger.info('Auth module initialized with Firebase');
+        } catch (error) {
+            this.logger.error('Failed to initialize Firebase Auth:', error);
+            throw error;
+        }
     }
 
     async signUp(email, password) {
         try {
-            const { data, error } = await this.supabase.auth.signUp({
-                email,
-                password
-            });
-            if (error) throw error;
-            return data;
+            const userCredential = await createUserWithEmailAndPassword(this.auth, email, password);
+            return { data: userCredential.user };
         } catch (error) {
             this.logger.error('Sign up failed:', error);
             throw error;
@@ -28,14 +47,8 @@ export class AuthModule extends BaseModule {
 
     async signIn(email, password) {
         try {
-            this.logger.info('Attempting sign in for:', email);
-            const { data, error } = await this.supabase.auth.signInWithPassword({
-                email,
-                password
-            });
-            if (error) throw error;
-            this.logger.info('Sign in successful');
-            return data;
+            const userCredential = await signInWithEmailAndPassword(this.auth, email, password);
+            return { data: userCredential.user };
         } catch (error) {
             this.logger.error('Sign in failed:', error);
             throw error;
@@ -44,8 +57,7 @@ export class AuthModule extends BaseModule {
 
     async signOut() {
         try {
-            const { error } = await this.supabase.auth.signOut();
-            if (error) throw error;
+            await firebaseSignOut(this.auth);
             return true;
         } catch (error) {
             this.logger.error('Sign out failed:', error);
@@ -54,12 +66,6 @@ export class AuthModule extends BaseModule {
     }
 
     onAuthStateChange(callback) {
-        return this.supabase.auth.onAuthStateChange((event, session) => {
-            if (event === 'SIGNED_IN' && session) {
-                callback(session.user);
-            } else if (event === 'SIGNED_OUT') {
-                callback(null);
-            }
-        });
+        return onAuthStateChanged(this.auth, callback);
     }
 }

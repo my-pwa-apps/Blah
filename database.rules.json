@@ -1,0 +1,30 @@
+{
+  "rules": {
+    "profiles": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid == $uid"
+      }
+    },
+    "messages": {
+      "$conversationId": {
+        ".read": "auth != null && root.child('conversations').child($conversationId).child('participantIds').child(auth.uid).exists()",
+        ".write": "auth != null && root.child('conversations').child($conversationId).child('participantIds').child(auth.uid).exists()"
+      }
+    },
+    "conversations": {
+      "$conversationId": {
+        ".read": "auth != null && data.child('participantIds').child(auth.uid).exists()",
+        ".write": "auth != null && (data.child('participantIds').child(auth.uid).exists() || !data.exists())"
+      }
+    },
+    "participants": {
+      "$conversationId": {
+        "$uid": {
+          ".read": "auth != null",
+          ".write": "auth != null && auth.uid == $uid"
+        }
+      }
+    }
+  }
+}

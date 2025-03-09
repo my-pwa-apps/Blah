@@ -1,4 +1,5 @@
 import { BaseModule } from '../BaseModule.js';
+import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 
 export class NotificationModule extends BaseModule {
     constructor(app) {
@@ -8,6 +9,7 @@ export class NotificationModule extends BaseModule {
         this.vibrationEnabled = true;
         this.notificationSound = null;
         this.platform = this._detectPlatform();
+        this.messaging = null;
     }
     
     async init() {
@@ -31,6 +33,31 @@ export class NotificationModule extends BaseModule {
         
         // Load user preferences from storage
         this._loadPreferences();
+        
+        // Initialize Firebase Cloud Messaging
+        if ('Notification' in window) {
+            try {
+                this.messaging = getMessaging(this.app.getModule('auth').firebase);
+                const token = await getToken(this.messaging);
+                if (token) {
+                    this.logger.info('FCM registration token:', token);
+                    // Store token in user's profile
+                    await this._updateFcmToken(token);
+                }
+                
+                // Handle incoming messages
+                onMessage(this.messaging, (payload) => {
+                    this.notify({
+                        title: payload.notification.title,
+                        message: payload.notification.body,
+                        icon: payload.notification.icon,
+                        data: payload.data
+                    });
+                });
+            } catch (error) {
+                this.logger.error('Failed to initialize FCM:', error);
+            }
+        }
         
         this.logger.info('Notification module initialized', {
             platform: this.platform,
