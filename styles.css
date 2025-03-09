@@ -2168,3 +2168,135 @@ body {
     transform: translateY(-2px);
     box-shadow: var(--elevation-2);
 }
+
+/* Troubleshooting styles */
+.troubleshoot-section {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background-color: rgba(var(--md-primary-rgb, 74, 103, 65), 0.05);
+    border-radius: 8px;
+    border-left: 4px solid var(--md-secondary);
+}
+
+.troubleshoot-section h3 {
+    margin-top: 0;
+    color: var(--md-text);
+    font-weight: 500;
+}
+
+.troubleshoot-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin: 1rem 0;
+}
+
+.troubleshoot-results {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: var(--md-surface);
+    border-radius: 6px;
+    border: 1px solid var(--md-divider);
+}
+
+.troubleshoot-results h4 {
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+    color: var(--md-text);
+}
+
+.test-result {
+    display: flex;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+    border-radius: 6px;
+    background-color: var(--md-background);
+    border-left: 3px solid transparent;
+}
+
+.test-result:last-child {
+    margin-bottom: 0;
+}
+
+.test-result.success {
+    border-left-color: #4caf50;
+}
+
+.test-result.error {
+    border-left-color: #f44336;
+}
+
+.test-result.warning {
+    border-left-color: #ff9800;
+}
+
+.test-result .material-icons {
+    font-size: 1.5rem;
+}
+
+.test-result.success .material-icons {
+    color: #4caf50;
+}
+
+.test-result.error .material-icons {
+    color: #f44336;
+}
+
+.test-result.warning .material-icons {
+    color: #ff9800;
+}
+
+.result-details {
+    flex: 1;
+}
+
+.result-details strong {
+    display: block;
+    margin-bottom: 0.25rem;
+}
+
+.result-details p {
+    margin: 0.25rem 0;
+    font-size: 0.9rem;
+}
+
+.error-message {
+    color: #f44336;
+    font-family: monospace;
+    font-size: 0.85rem !important;
+    padding: 0.5rem;
+    background-color: rgba(244, 67, 54, 0.1);
+    border-radius: 4px;
+    margin-top: 0.5rem !important;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.refresh-prompt {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+@keyframes rotate {
+    from {
+        transform: rotate(0deg);
+    }
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.rotating {
+    animation: rotate 1s linear infinite;
+}
+
+.md-button.warning {
+    background-color: #ff9800;
+    color: white;
+}
+
+.md-button.warning:hover {
+    background-color: #f57c00;
+}

@@ -935,7 +935,7 @@ export class UIModule extends BaseModule {
         }
     }
 
-    // Add a new method to show storage setup dialog
+    // Update the storage setup dialog to include the automatic fix button
     async showStorageSetupDialog() {
         try {
             const dataModule = this.getModule('data');
@@ -952,6 +952,7 @@ export class UIModule extends BaseModule {
             
             let statusHtml = '';
             let buttonHtml = '';
+            let troubleshootHtml = '';
             
             if (storageStatus.status === 'ok') {
                 statusHtml = `
@@ -1016,6 +1017,29 @@ CREATE POLICY "Users can upload their own attachments"
                         <span class="material-icons">folder</span> Open Storage Dashboard
                     </a>
                 `;
+
+                troubleshootHtml = `
+                    <div class="troubleshoot-section">
+                        <h3>Troubleshooting</h3>
+                        <p>If you're still having issues after running the SQL script, try the following:</p>
+
+                        <div class="troubleshoot-actions">
+                            <button id="test-storage-access" class="md-button secondary">
+                                <span class="material-icons">bug_report</span> Test Storage Access
+                            </button>
+                            <button id="auto-create-bucket" class="md-button warning">
+                                <span class="material-icons">build</span> Try Automatic Fix
+                            </button>
+                        </div>
+                        
+                        <div id="troubleshoot-results" class="troubleshoot-results hidden">
+                            <h4>Test Results</h4>
+                            <div class="results-container">
+                                <p>Running tests...</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
             }
             
             dialog.innerHTML = `
@@ -1027,6 +1051,7 @@ CREATE POLICY "Users can upload their own attachments"
                     <div class="storage-status">
                         ${statusHtml}
                     </div>
+                    ${storageStatus.status !== 'ok' ? troubleshootHtml : ''}
                     <div class="modal-buttons">
                         ${buttonHtml}
                         <button id="close-storage-setup" class="md-button secondary">Close</button>
@@ -1065,6 +1090,126 @@ CREATE POLICY "Users can upload their own attachments"
                             copyButton.textContent = 'Failed';
                             copyButton.classList.add('error');
                         });
+                });
+            }
+
+            // Add troubleshooting button handlers
+            const testStorageBtn = dialog.querySelector('#test-storage-access');
+            if (testStorageBtn) {
+                testStorageBtn.addEventListener('click', async () => {
+                    const resultsContainer = dialog.querySelector('#troubleshoot-results');
+                    resultsContainer.classList.remove('hidden');
+                    
+                    const storageFixer = this.getModule('storageFixer');
+                    const testResults = await storageFixer.testBucketAccess();
+                    
+                    const resultsHtml = testResults.map(result => `
+                        <div class="test-result ${result.success ? 'success' : 'error'}">
+                            <span class="material-icons">${result.success ? 'check_circle' : 'error'}</span>
+                            <div class="result-details">
+                                <strong>${result.name}</strong>
+                                <p>${result.details}</p>
+                                ${result.error ? `<p class="error-message">${result.error}</p>` : ''}
+                            </div>
+                        </div>
+                    `).join('');
+                    
+                    dialog.querySelector('.results-container').innerHTML = resultsHtml;
+                });
+            }
+            
+            const autoFixBtn = dialog.querySelector('#auto-create-bucket');
+            if (autoFixBtn) {
+                autoFixBtn.addEventListener('click', async () => {
+                    try {
+                        autoFixBtn.disabled = true;
+                        autoFixBtn.innerHTML = '<span class="material-icons rotating">refresh</span> Attempting Fix...';
+                        
+                        const storageFixer = this.getModule('storageFixer');
+                        const result = await storageFixer.createAttachmentsBucket();
+                        
+                        const resultsContainer = dialog.querySelector('#troubleshoot-results');
+                        resultsContainer.classList.remove('hidden');
+                        
+                        if (result.success) {
+                            dialog.querySelector('.results-container').innerHTML = `
+                                <div class="test-result success">
+                                    <span class="material-icons">check_circle</span>
+                                    <div class="result-details">
+                                        <strong>Bucket Created</strong>
+                                        <p>The "attachments" bucket was created successfully!</p>
+                                        <p>Please refresh the page and try uploading again.</p>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            // Also try to create policies
+                            const policyResults = await storageFixer.createDefaultPolicies();
+                            const allSuccess = policyResults.every(r => r.success);
+                            
+                            if (allSuccess) {
+                                dialog.querySelector('.results-container').innerHTML += `
+                                    <div class="test-result success">
+                                        <span class="material-icons">check_circle</span>
+                                        <div class="result-details">
+                                            <strong>Policies Created</strong>
+                                            <p>Storage policies were created successfully!</p>
+                                        </div>
+                                    </div>
+                                    <div class="refresh-prompt">
+                                        <button id="refresh-page" class="md-button primary">
+                                            <span class="material-icons">refresh</span> Refresh Page
+                                        </button>
+                                    </div>
+                                `;
+                                
+                                dialog.querySelector('#refresh-page')?.addEventListener('click', () => {
+                                    window.location.reload();
+                                });
+                            }
+                        } else {
+                            dialog.querySelector('.results-container').innerHTML = `
+                                <div class="test-result error">
+                                    <span class="material-icons">error</span>
+                                    <div class="result-details">
+                                        <strong>Failed to Create Bucket</strong>
+                                        <p>${result.error || 'Unknown error'}</p>
+                                        <p>You may need administrator privileges to create storage buckets.</p>
+                                    </div>
+                                </div>
+                            `;
+                            
+                            if (result.needsPolicy) {
+                                dialog.querySelector('.results-container').innerHTML += `
+                                    <div class="test-result warning">
+                                        <span class="material-icons">policy</span>
+                                        <div class="result-details">
+                                            <strong>Policy Required</strong>
+                                            <p>This appears to be a permission policy issue.</p>
+                                            <p>Please use the SQL Editor method with administrator privileges.</p>
+                                        </div>
+                                    </div>
+                                `;
+                            }
+                        }
+                    } catch (error) {
+                        this.logger.error('Error in automatic fix:', error);
+                        
+                        const resultsContainer = dialog.querySelector('#troubleshoot-results');
+                        resultsContainer.classList.remove('hidden');
+                        dialog.querySelector('.results-container').innerHTML = `
+                            <div class="test-result error">
+                                <span class="material-icons">error</span>
+                                <div class="result-details">
+                                    <strong>Error</strong>
+                                    <p>${error.message || 'An unexpected error occurred'}</p>
+                                </div>
+                            </div>
+                        `;
+                    } finally {
+                        autoFixBtn.disabled = false;
+                        autoFixBtn.innerHTML = '<span class="material-icons">build</span> Try Automatic Fix';
+                    }
                 });
             }
         } catch (error) {

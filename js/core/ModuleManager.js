@@ -2,6 +2,7 @@ import { AuthModule } from '../modules/auth/AuthModule.js';
 import { DataModule } from '../modules/data/DataModule.js';
 import { UIModule } from '../modules/ui/UIModule.js';
 import { NotificationModule } from '../modules/notification/NotificationModule.js';
+import { StorageFixerModule } from '../modules/data/StorageFixerModule.js';
 
 export class ModuleManager {
     constructor(app) {
@@ -10,7 +11,8 @@ export class ModuleManager {
         this.moduleDefinitions = [
             { name: 'auth', Class: AuthModule },
             { name: 'data', Class: DataModule },
-            { name: 'notification', Class: NotificationModule }, // Add notification module
+            { name: 'notification', Class: NotificationModule },
+            { name: 'storageFixer', Class: StorageFixerModule }, // Add the storage fixer module
             { name: 'ui', Class: UIModule } // UI should be initialized last
         ];
     }
