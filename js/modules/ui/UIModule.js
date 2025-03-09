@@ -459,32 +459,20 @@ export class UIModule extends BaseModule {
             } catch (error) {
                 this.logger.error('Failed to upload file:', error);
                 
-                // Extract error message for common Supabase errors
                 let errorMessage = 'Failed to upload file';
                 
                 if (error.message) {
                     errorMessage = error.message;
                     
-                    // Show storage setup dialog for storage configuration errors with clearer message
+                    // Immediately show storage setup dialog for storage configuration errors
                     if (error.message.includes('Storage not configured') || 
-                        error.message.includes('bucket not found') || 
-                        error.message.includes('setup script')) {
-                        // Add a "Configure Storage" button to the error message with better text
-                        setTimeout(() => {
-                            const errorEl = document.querySelector('.auth-error');
-                            if (errorEl) {
-                                errorEl.innerHTML += `<br><br>
-                                    <button class="md-button small storage-settings-btn">
-                                        <span class="material-icons">settings</span> 
-                                        View Storage Setup Instructions
-                                    </button>`;
-                                
-                                errorEl.querySelector('.storage-settings-btn').addEventListener('click', () => {
-                                    this.showStorageSetupDialog();
-                                    errorEl.remove();
-                                });
-                            }
-                        }, 100);
+                        error.message.includes('bucket not found')) {
+                        
+                        this.showError(`${errorMessage}`);
+                        
+                        // Show the storage setup dialog immediately
+                        setTimeout(() => this.showStorageSetupDialog(), 500);
+                        return; // Exit early
                     }
                 }
                 
@@ -979,19 +967,19 @@ export class UIModule extends BaseModule {
                         <span class="material-icons">error</span>
                         Storage Configuration Required
                     </div>
-                    <p><strong>Administrator Action Required:</strong> The attachments bucket is missing.</p>
+                    <p><strong>Administrator Action Required:</strong> The storage bucket for file attachments is missing.</p>
                     
                     <div class="setup-instructions">
                         <h3>How to fix this issue:</h3>
                         <ol>
                             <li>Sign in to Supabase as an administrator</li>
-                            <li>Go to the <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank">SQL Editor</a></li>
+                            <li>Go to the SQL Editor</li>
                             <li>Copy and paste the following SQL script:</li>
                         </ol>
                         
                         <div class="code-block">
-                            <button class="copy-btn" onclick="navigator.clipboard.writeText(this.nextElementSibling.textContent)">Copy SQL</button>
-                            <pre><code>-- Create the attachments bucket
+                            <button class="copy-btn" id="copy-sql-btn">Copy SQL</button>
+                            <pre id="sql-setup-code">-- Create the attachments bucket
 INSERT INTO storage.buckets (id, name, public)
 VALUES ('attachments', 'attachments', true)
 ON CONFLICT (id) DO NOTHING;
@@ -1005,15 +993,16 @@ CREATE POLICY "Users can upload their own attachments"
   ON storage.objects FOR INSERT 
   WITH CHECK (bucket_id = 'attachments' AND 
               auth.uid()::text = (storage.foldername(name))[1] AND
-              auth.role() = 'authenticated');</code></pre>
+              auth.role() = 'authenticated');</pre>
                         </div>
                         
                         <p>After running the script, refresh this page and try uploading again.</p>
+                        <p class="help-text">Note: Only Supabase administrators can create storage buckets. Regular users cannot create buckets due to Row-Level Security (RLS) policies.</p>
                     </div>
                 `;
                 
                 buttonHtml = `
-                    <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank" class="md-button">
+                    <a href="https://app.supabase.com/project/${projectId}/sql" target="_blank" class="md-button primary">
                         <span class="material-icons">code</span> Open SQL Editor
                     </a>
                     <a href="https://app.supabase.com/project/${projectId}/storage/buckets" target="_blank" class="md-button">
@@ -1024,7 +1013,10 @@ CREATE POLICY "Users can upload their own attachments"
             
             dialog.innerHTML = `
                 <div class="modal-content">
-                    <h2><span class="material-icons">storage</span> Storage Settings</h2>
+                    <div class="modal-header">
+                        <h2><span class="material-icons">storage</span> Storage Settings</h2>
+                        <button id="close-storage-setup-x" class="close-button"><span class="material-icons">close</span></button>
+                    </div>
                     <div class="storage-status">
                         ${statusHtml}
                     </div>
@@ -1042,6 +1034,32 @@ CREATE POLICY "Users can upload their own attachments"
             dialog.querySelector('#close-storage-setup')?.addEventListener('click', () => {
                 dialog.remove();
             });
+            
+            dialog.querySelector('#close-storage-setup-x')?.addEventListener('click', () => {
+                dialog.remove();
+            });
+            
+            // Copy button functionality
+            const copyButton = dialog.querySelector('#copy-sql-btn');
+            if (copyButton) {
+                copyButton.addEventListener('click', () => {
+                    const sqlCode = document.getElementById('sql-setup-code').textContent;
+                    navigator.clipboard.writeText(sqlCode)
+                        .then(() => {
+                            copyButton.textContent = 'Copied!';
+                            copyButton.classList.add('success');
+                            setTimeout(() => {
+                                copyButton.textContent = 'Copy SQL';
+                                copyButton.classList.remove('success');
+                            }, 2000);
+                        })
+                        .catch(err => {
+                            this.logger.error('Failed to copy SQL:', err);
+                            copyButton.textContent = 'Failed';
+                            copyButton.classList.add('error');
+                        });
+                });
+            }
         } catch (error) {
             this.logger.error('Error showing storage setup dialog:', error);
         }

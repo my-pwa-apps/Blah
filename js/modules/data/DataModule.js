@@ -862,7 +862,7 @@ export class DataModule extends BaseModule {
                 this.logger.error('Attachments bucket not found in Supabase.');
                 throw new Error(
                     'Storage not configured. An admin must create the "attachments" bucket in Supabase. ' +
-                    'Click "View Storage Setup Instructions" below for details.'
+                    'The storage bucket is required to upload files.'
                 );
             }
             
@@ -911,7 +911,7 @@ export class DataModule extends BaseModule {
             if (error) {
                 return {
                     status: 'error',
-                    message: 'Failed to check storage configuration',
+                    message: 'Failed to check storage configuration. Please check your Supabase connection.',
                     error
                 };
             }
@@ -921,7 +921,7 @@ export class DataModule extends BaseModule {
             if (!attachmentsBucket) {
                 return {
                     status: 'missing',
-                    message: 'Attachments bucket not found. An administrator needs to run the setup script.',
+                    message: 'The "attachments" storage bucket is missing. An administrator needs to create it.',
                     buckets: buckets || []
                 };
             }
@@ -935,7 +935,7 @@ export class DataModule extends BaseModule {
             this.logger.error('Error checking storage configuration:', error);
             return {
                 status: 'error',
-                message: 'Failed to check storage configuration',
+                message: 'An unexpected error occurred while checking storage configuration.',
                 error
             };
         }
