@@ -12,7 +12,6 @@ export class DataModule extends BaseModule {
 
     async init() {
         try {
-            // Initialize Firebase using the global firebase object
             this.firebase = window.firebase.initializeApp(FIREBASE_CONFIG);
             this.db = window.firebase.getDatabase(this.firebase);
             
