@@ -1,20 +1,5 @@
 import { BaseModule } from '../BaseModule.js';
 import { FIREBASE_CONFIG } from '../../config.js';
-import { initializeApp } from 'firebase/app';
-import { 
-    getDatabase, 
-    ref,
-    set,
-    get,
-    push,
-    onValue,
-    query,
-    orderByChild,
-    equalTo,
-    update,
-    remove,
-    serverTimestamp 
-} from 'firebase/database';
 
 export class DataModule extends BaseModule {
     constructor(app) {
@@ -27,12 +12,13 @@ export class DataModule extends BaseModule {
 
     async init() {
         try {
-            this.firebase = initializeApp(FIREBASE_CONFIG);
-            this.db = getDatabase(this.firebase);
+            // Initialize Firebase using the global firebase object
+            this.firebase = window.firebase.initializeApp(FIREBASE_CONFIG);
+            this.db = window.firebase.getDatabase(this.firebase);
             
             // Monitor connection status
-            const connectedRef = ref(this.db, '.info/connected');
-            onValue(connectedRef, (snap) => {
+            const connectedRef = this.db.ref('.info/connected');
+            connectedRef.on('value', (snap) => {
                 this.connectionStatus = snap.val() ? 'CONNECTED' : 'DISCONNECTED';
                 this.logger.info(`Database connection status: ${this.connectionStatus}`);
             });

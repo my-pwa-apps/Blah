@@ -1,13 +1,5 @@
 import { BaseModule } from '../BaseModule.js';
 import { FIREBASE_CONFIG } from '../../config.js';
-import { initializeApp } from 'firebase/app';
-import { 
-    getAuth, 
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut as firebaseSignOut,
-    onAuthStateChanged 
-} from 'firebase/auth';
 
 export class AuthModule extends BaseModule {
     constructor(app) {
@@ -19,11 +11,11 @@ export class AuthModule extends BaseModule {
 
     async init() {
         try {
-            this.firebase = initializeApp(FIREBASE_CONFIG);
-            this.auth = getAuth(this.firebase);
+            this.firebase = window.firebase.initializeApp(FIREBASE_CONFIG);
+            this.auth = window.firebase.getAuth(this.firebase);
             
             // Set up auth state listener
-            onAuthStateChanged(this.auth, (user) => {
+            this.auth.onAuthStateChanged((user) => {
                 this.currentUser = user;
                 this._notifyAuthStateListeners(user);
             });
@@ -37,7 +29,7 @@ export class AuthModule extends BaseModule {
 
     async signUp(email, password) {
         try {
-            const userCredential = await createUserWithEmailAndPassword(this.auth, email, password);
+            const userCredential = await window.firebase.createUserWithEmailAndPassword(this.auth, email, password);
             return { data: userCredential.user };
         } catch (error) {
             this.logger.error('Sign up failed:', error);
@@ -47,7 +39,7 @@ export class AuthModule extends BaseModule {
 
     async signIn(email, password) {
         try {
-            const userCredential = await signInWithEmailAndPassword(this.auth, email, password);
+            const userCredential = await window.firebase.signInWithEmailAndPassword(this.auth, email, password);
             return { data: userCredential.user };
         } catch (error) {
             this.logger.error('Sign in failed:', error);
@@ -57,7 +49,7 @@ export class AuthModule extends BaseModule {
 
     async signOut() {
         try {
-            await firebaseSignOut(this.auth);
+            await window.firebase.signOut(this.auth);
             return true;
         } catch (error) {
             this.logger.error('Sign out failed:', error);
@@ -66,6 +58,6 @@ export class AuthModule extends BaseModule {
     }
 
     onAuthStateChange(callback) {
-        return onAuthStateChanged(this.auth, callback);
+        return this.auth.onAuthStateChanged(callback);
     }
 }
