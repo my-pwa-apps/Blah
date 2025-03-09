@@ -1,4 +1,5 @@
 import { BaseModule } from '../BaseModule.js';
+import { FIREBASE_CONFIG } from '../../config.js';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, collection, addDoc, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 
@@ -10,17 +11,7 @@ export class FirebaseDataModule extends BaseModule {
     }
 
     async init() {
-        const firebaseConfig = {
-            // Your Firebase configuration
-            apiKey: "YOUR_API_KEY",
-            authDomain: "your-app.firebaseapp.com",
-            projectId: "your-app",
-            storageBucket: "your-app.appspot.com",
-            messagingSenderId: "YOUR_MESSAGING_ID",
-            appId: "YOUR_APP_ID"
-        };
-        
-        this.firebase = initializeApp(firebaseConfig);
+        this.firebase = initializeApp(FIREBASE_CONFIG);
         this.db = getFirestore(this.firebase);
         this.logger.info('Firebase Data module initialized');
     }

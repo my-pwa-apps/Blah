@@ -3,7 +3,7 @@ import { FIREBASE_CONFIG } from '../../config.js';
 import { initializeApp } from 'firebase/app';
 import { 
     getDatabase, 
-    ref as dbRef, 
+    ref, 
     set, 
     get,
     push,
@@ -28,12 +28,11 @@ export class DataModule extends BaseModule {
 
     async init() {
         try {
-            // Initialize Firebase with a unique name to avoid conflicts
-            this.firebase = initializeApp(FIREBASE_CONFIG, 'database');
+            this.firebase = initializeApp(FIREBASE_CONFIG);
             this.db = getDatabase(this.firebase);
             
             // Monitor connection status
-            const connectedRef = dbRef(this.db, '.info/connected');
+            const connectedRef = ref(this.db, '.info/connected');
             onValue(connectedRef, (snap) => {
                 this.connectionStatus = snap.val() ? 'CONNECTED' : 'DISCONNECTED';
                 this.logger.info(`Database connection status: ${this.connectionStatus}`);
@@ -53,7 +52,7 @@ export class DataModule extends BaseModule {
 
     async createUserProfile(profileData) {
         try {
-            const userRef = dbRef(this.db, `profiles/${profileData.id}`);
+            const userRef = ref(this.db, `profiles/${profileData.id}`);
             await set(userRef, {
                 ...profileData,
                 created_at: serverTimestamp(),
@@ -68,7 +67,7 @@ export class DataModule extends BaseModule {
 
     async sendMessage(conversationId, senderId, content, attachments = []) {
         try {
-            const messagesRef = dbRef(this.db, `messages/${conversationId}`);
+            const messagesRef = ref(this.db, `messages/${conversationId}`);
             const newMessageRef = push(messagesRef);
             
             const messageData = {
@@ -83,7 +82,7 @@ export class DataModule extends BaseModule {
             await set(newMessageRef, messageData);
             
             // Update conversation's last message
-            const conversationRef = dbRef(this.db, `conversations/${conversationId}`);
+            const conversationRef = ref(this.db, `conversations/${conversationId}`);
             await update(conversationRef, {
                 last_message: {
                     content: content || 'Attachment',
@@ -101,7 +100,7 @@ export class DataModule extends BaseModule {
 
     subscribeToNewMessages(conversationId, callback) {
         try {
-            const messagesRef = dbRef(this.db, `messages/${conversationId}`);
+            const messagesRef = ref(this.db, `messages/${conversationId}`);
             
             const unsubscribe = onValue(messagesRef, (snapshot) => {
                 if (snapshot.exists()) {

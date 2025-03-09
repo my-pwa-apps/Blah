@@ -1,4 +1,5 @@
 import { BaseModule } from '../../BaseModule.js';
+import { FIREBASE_CONFIG } from '../../../config.js';
 import { initializeApp } from 'firebase/app';
 import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 
@@ -12,18 +13,7 @@ export class FirebaseStorageProvider extends BaseModule {
     
     async init() {
         try {
-            // Your Firebase configuration (store this in a config file)
-            const firebaseConfig = {
-                apiKey: "YOUR_API_KEY",
-                authDomain: "your-app.firebaseapp.com",
-                projectId: "your-app-id",
-                storageBucket: "your-app.appspot.com",
-                messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-                appId: "YOUR_APP_ID"
-            };
-            
-            // Initialize Firebase
-            this.firebaseApp = initializeApp(firebaseConfig, 'storage');
+            this.firebaseApp = initializeApp(FIREBASE_CONFIG, 'storage');
             this.storage = getStorage(this.firebaseApp);
             
             this.logger.info('Firebase Storage provider initialized');

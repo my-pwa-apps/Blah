@@ -1,6 +1,48 @@
 {
   "rules": {
-    ".read": "now < 1744063200000",  // 2025-4-8
-    ".write": "now < 1744063200000",  // 2025-4-8
+    "profiles": {
+      "$uid": {
+        ".read": "auth !== null",
+        ".write": "auth !== null && auth.uid === $uid"
+      }
+    },
+    "messages": {
+      "$conversationId": {
+        ".read": "auth !== null && root.child('conversations').child($conversationId).child('participantIds').child(auth.uid).val() === true",
+        ".write": "auth !== null && root.child('conversations').child($conversationId).child('participantIds').child(auth.uid).val() === true",
+        "$messageId": {
+          ".validate": "newData.hasChildren(['sender_id', 'content', 'created_at'])"
+        }
+      }
+    },
+    "conversations": {
+      "$conversationId": {
+        ".read": "auth !== null && data.child('participantIds').child(auth.uid).exists()",
+        ".write": "auth !== null",
+        "participantIds": {
+          "$uid": {
+            ".validate": "auth !== null && ($uid === auth.uid || root.child('conversations').child($parent.key).child('participantIds').child(auth.uid).exists())"
+          }
+        },
+        "last_message": {
+          ".validate": "newData.hasChildren(['content', 'sender_id', 'created_at'])"
+        }
+      }
+    },
+    "preferences": {
+      "$uid": {
+        ".read": "auth !== null && auth.uid === $uid",
+        ".write": "auth !== null && auth.uid === $uid"
+      }
+    },
+    "attachments": {
+      "$conversationId": {
+        ".read": "auth !== null",
+        ".write": "auth !== null",
+        "$attachmentId": {
+          ".validate": "newData.hasChildren(['url', 'name', 'type'])"
+        }
+      }
+    }
   }
 }
